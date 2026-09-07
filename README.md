@@ -4,7 +4,7 @@
 
 Local troubleshooting toolkit for SAML/SSO, protocol validation, metadata analysis, log files, anonymization, support writing and coding assistance.
 
-**Current version:** `0.10.0`
+**Current version:** `0.10.1`
 
 The project is designed for local-first technical support workflows. Deterministic parsers and validators handle protocol checks and structured extraction; local inference can be used for explanation, report drafting and coding assistance. Web access is isolated in a separate General Chat tab and is never used automatically by the Analyzer or local Assistant.
 
@@ -25,7 +25,8 @@ The project is designed for local-first technical support workflows. Determinist
 - SAML XML Signature profile validation, including the single same-document `Reference URI="#ID"` rule
 - cryptographic XML Signature and digest verification with public X.509 certificates
 - trust comparison against matching SP / IdP metadata signing certificates
-- certificate fingerprints from SAML messages and metadata
+- optional standalone X.509 signing certificate upload (`.pem`, `.crt`, `.cer`; PEM or DER)
+- certificate fingerprints from SAML messages, metadata and supplied certificates
 - protocol/profile validation with structured error codes
 - cross-document checks across Request ↔ Response ↔ Assertion ↔ SP metadata ↔ IdP metadata
 
@@ -42,10 +43,15 @@ XML_NOT_WELL_FORMED
 RESPONSE_SIGNATURE_REFERENCE_URI_INVALID
 RESPONSE_XML_SIGNATURE_INVALID
 RESPONSE_XML_SIGNATURE_VALID
+RESPONSE_XML_SIGNATURE_VALID_SUPPLIED_CERT
 RESPONSE_SIGNING_CERT_MATCHES_METADATA
 ```
 
-XML Signature verification does **not** require a private key. When matching SAML metadata is supplied, the analyzer verifies the signature using the trusted public signing certificate from that metadata. If only a certificate embedded in `ds:KeyInfo` is available, the analyzer can verify the cryptographic signature but explicitly reports that signer trust is not established by metadata.
+XML Signature verification does **not** require a private key. When matching SAML metadata is supplied, the analyzer verifies the signature using the trusted public signing certificate from that metadata. If metadata is unavailable, the Analyze tab accepts an optional standalone X.509 signing certificate and can use it to verify the signature and referenced digest. The report still distinguishes cryptographic validity from metadata-backed signer trust.
+
+A bare `-----BEGIN PUBLIC KEY-----` file is not accepted in this path; upload the corresponding X.509 certificate instead. Private keys are neither required nor accepted for signature verification.
+
+If only a certificate embedded in `ds:KeyInfo` is available, the analyzer can verify the cryptographic signature but explicitly reports that signer trust is not established by metadata.
 
 `EncryptedAssertion` is detected, but decryption is not implemented. Decryption would require the SP private key and is intentionally kept separate from signature verification.
 
@@ -91,7 +97,7 @@ A deliberately separate web-enabled chat. It receives no Analyzer or local Assis
 
 | Area | Local model | Web access | Intended data |
 |---|---:|---:|---|
-| Analyze | Yes | No | Logs, SAML traces, metadata |
+| Analyze | Yes | No | Logs, SAML traces, metadata, public signing certificates |
 | Anonymize log | No model required | No | Sensitive logs |
 | Assistant | Yes | No | Technical/support material |
 | General Chat | Yes | Yes | Non-sensitive public questions |
@@ -123,6 +129,18 @@ Default UI:
 ```text
 http://127.0.0.1:7860
 ```
+
+## Standalone signing certificate
+
+In **Analyze**, use **Signing certificate (optional)** when you have the signing certificate separately from SAML metadata. Supported input:
+
+```text
+.pem   PEM X.509 certificate
+.crt   PEM or DER X.509 certificate
+.cer   PEM or DER X.509 certificate
+```
+
+The certificate is read for the current analysis only. It is not copied into the repository or persisted by the analyzer. Matching metadata remains the preferred trust source when available.
 
 ## Configuration
 
@@ -175,6 +193,7 @@ The tests use synthetic SAML and log data only. Signature tests generate an ephe
 │   ├── logs.py
 │   ├── saml.py
 │   ├── saml_signature.py
+│   ├── saml_supplied_cert.py
 │   └── saml_validation.py
 ├── tests/
 │   ├── test_analyzers.py
@@ -193,4 +212,4 @@ The tests use synthetic SAML and log data only. Signature tests generate an ephe
 
 ## Versioning
 
-The project uses semantic versioning while it is pre-1.0. New functionality increments the minor version (`0.10.0` → `0.11.0`); bug fixes increment the patch version (`0.10.0` → `0.10.1`).
+The project uses semantic versioning while it is pre-1.0. New functionality normally increments the minor version; compatibility fixes and focused improvements to an existing feature increment the patch version (`0.10.0` → `0.10.1`).
