@@ -3,9 +3,8 @@ set -euo pipefail
 cd "$(dirname "$0")"
 if [[ ! -d .venv ]]; then
   python3 -m venv .venv
+  .venv/bin/python -m pip install -r requirements.txt
 fi
-source .venv/bin/activate
-.venv/bin/python -m pip install -r requirements.txt
 if [[ -f .env ]]; then
   set -a
   source .env

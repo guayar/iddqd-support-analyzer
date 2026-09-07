@@ -4,7 +4,7 @@
 
 Local troubleshooting toolkit for SAML/SSO, protocol validation, metadata analysis, log files, anonymization, support writing and coding assistance.
 
-**Current version:** `0.10.5`
+**Current version:** `0.10.6`
 
 The project is designed for local-first technical support workflows. Deterministic parsers and validators handle protocol checks and structured extraction; local inference can be used for explanation, report drafting and coding assistance. Web access is isolated in a separate General Chat tab and is never used automatically by the Analyzer or local Assistant.
 
@@ -252,4 +252,4 @@ The tests use synthetic SAML and log data only. Signature and anonymization test
 
 ## Versioning
 
-The project uses semantic versioning while it is pre-1.0. New functionality normally increments the minor version; compatibility fixes and focused improvements to an existing feature increment the patch version (`0.10.4` → `0.10.5`).
+The project uses semantic versioning while it is pre-1.0. New functionality normally increments the minor version; compatibility fixes and focused improvements to an existing feature increment the patch version (`0.10.5` → `0.10.6`).

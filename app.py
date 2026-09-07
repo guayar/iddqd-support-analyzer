@@ -7,7 +7,7 @@ import gradio as gr
 from actions import analyze as run_analyze
 from actions import anonymize as run_anonymize
 from chats import analysis_chat, assistant_chat, web_chat
-from config import APP_PORT, APP_TITLE, MAX_FILE_MB
+from config import APP_PORT, APP_TITLE, APP_VERSION, MAX_FILE_MB
 from uploads import InputError
 
 CSS = """
@@ -56,6 +56,36 @@ CSS = """
 .psa-shell > div {
     background: transparent;
 }
+footer .app-version {
+    font-size: 13px;
+    opacity: 0.72;
+    margin-right: 0.45em;
+}
+footer .app-version::after {
+    content: " ·";
+    margin-left: 0.35em;
+}
+"""
+
+FOOTER_VERSION_JS = f"""
+() => {{
+  const version = {APP_VERSION!r};
+  const insert = () => {{
+    if (document.querySelector("footer .app-version")) return true;
+    const footer = document.querySelector('footer[aria-label="Gradio footer navigation"]');
+    if (!footer) return false;
+    const el = document.createElement("span");
+    el.className = "app-version";
+    el.textContent = "v" + version;
+    const settings = footer.querySelector("button.settings");
+    if (settings) settings.parentNode.insertBefore(el, settings);
+    else footer.appendChild(el);
+    return true;
+  }};
+  if (insert()) return;
+  const obs = new MutationObserver(() => {{ if (insert()) obs.disconnect(); }});
+  obs.observe(document.documentElement, {{ childList: true, subtree: true }});
+}}
 """
 
 
@@ -225,5 +255,6 @@ if __name__ == "__main__":
         show_error=True,
         footer_links=["settings"],
         css=CSS,
+        js=FOOTER_VERSION_JS,
         max_file_size=f"{MAX_FILE_MB}mb",
     )

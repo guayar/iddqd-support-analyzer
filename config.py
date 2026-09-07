@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 APP_TITLE = "IDDQD Support Analyzer"
+APP_VERSION = (Path(__file__).resolve().parent / "VERSION").read_text(encoding="utf-8").strip()
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3.6:27b")
 ALLOW_REMOTE_LLM = os.getenv("ALLOW_REMOTE_LLM", "false").lower() == "true"

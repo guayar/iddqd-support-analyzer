@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from actions import analyze, anonymize
+from config import APP_VERSION
 from llm import endpoint_is_local
 from reporting import render_anonymize_summary, render_log_report, render_saml_report
 from uploads import InputError
@@ -49,5 +50,8 @@ assert endpoint_is_local("http://127.0.0.1:11434")
 assert endpoint_is_local("http://localhost:11434")
 assert not endpoint_is_local("https://api.openai.com")
 assert not endpoint_is_local("not-a-url")
+
+assert APP_VERSION == Path("VERSION").read_text(encoding="utf-8").strip()
+assert APP_VERSION
 
 print("LAYER TESTS OK")

@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented here.
 
+## [0.10.6] - 2026-09-07
+
+### Added
+
+- application version is shown next to Settings in the Gradio footer
+
+### Fixed
+
+- desktop launcher no longer reinstalls Python packages on every start
+- start script keeps the terminal open after a failure so the error is visible
+
+### Changed
+
+- version bumped to `0.10.6`
+
 ## [0.10.5] - 2026-09-07
 
 ### Changed
