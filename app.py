@@ -10,23 +10,43 @@ from chats import analysis_chat, assistant_chat, web_chat
 from config import APP_PORT, APP_TITLE, APP_VERSION, MAX_FILE_MB
 from uploads import InputError
 
+DROP_HEIGHT = 220
+CHAT_HEIGHT = 480
+CONTROL_HEIGHT = 128
+
 CSS = """
 .gradio-container {
     max-width: 1240px !important;
     margin: 0 auto !important;
     padding: 18px 28px 42px !important;
 }
-#hero {
+.psa-page,
+#hero,
+.psa-shell {
+    width: 100% !important;
     max-width: 1180px !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+}
+#hero {
     margin: 0 auto 8px auto !important;
     padding: 0 !important;
 }
 .psa-shell {
-    width: 100% !important;
-    max-width: 1180px !important;
-    margin: 0 auto !important;
     padding: 0 !important;
     background: transparent !important;
+}
+.psa-shell,
+.psa-shell > div,
+.psa-shell .block,
+.psa-shell .form,
+.psa-shell .panel,
+.psa-shell .group,
+.psa-shell .column,
+.psa-shell .row,
+.psa-chat {
+    width: 100% !important;
+    max-width: 100% !important;
 }
 .psa-note {
     padding: 4px 0 10px 0 !important;
@@ -42,10 +62,22 @@ CSS = """
     border-radius: 8px !important;
     overflow: auto !important;
 }
-#analysis-chat, #assistant-chat, #web-chat {
-    min-height: 500px !important;
+#analysis-chat,
+#assistant-chat,
+#web-chat {
+    height: 480px !important;
+    min-height: 480px !important;
 }
-#anon-preview textarea, #paste-input textarea, #anon-paste textarea {
+#paste-input textarea,
+#anon-paste textarea {
+    height: 198px !important;
+    min-height: 198px !important;
+    resize: none !important;
+    background: white !important;
+}
+#anon-preview textarea {
+    height: 480px !important;
+    min-height: 480px !important;
     background: white !important;
 }
 .psa-shell .form,
@@ -56,35 +88,18 @@ CSS = """
 .psa-shell > div {
     background: transparent;
 }
-footer .app-version {
-    font-size: 13px;
-    opacity: 0.72;
-    margin-right: 0.45em;
+.psa-primary {
+    min-height: 48px !important;
+    width: 100% !important;
 }
-footer .app-version::after {
-    content: " ·";
-    margin-left: 0.35em;
+.psa-control {
+    min-height: 128px !important;
 }
-"""
-
-FOOTER_VERSION_JS = f"""
-() => {{
-  const version = {APP_VERSION!r};
-  const insert = () => {{
-    if (document.querySelector("footer .app-version")) return true;
-    const footer = document.querySelector('footer[aria-label="Gradio footer navigation"]');
-    if (!footer) return false;
-    const el = document.createElement("span");
-    el.className = "app-version";
-    el.textContent = "v" + version;
-    const settings = footer.querySelector("button.settings");
-    if (settings) settings.parentNode.insertBefore(el, settings);
-    else footer.appendChild(el);
-    return true;
-  }};
-  if (insert()) return;
-  const obs = new MutationObserver(() => {{ if (insert()) obs.disconnect(); }});
-  obs.observe(document.documentElement, {{ childList: true, subtree: true }});
+""" + f"""
+footer button.settings::before {{
+    content: "v{APP_VERSION} · ";
+    font-weight: 400;
+    opacity: 0.85;
 }}
 """
 
@@ -105,143 +120,151 @@ def anonymize(file, pasted):
 
 with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
     state = gr.State(None)
-    gr.Markdown(
-        "# IDDQD Support Analyzer\n"
-        "**Local SAML + `*.log` analysis · private local assistant · separate web-enabled general chat · log anonymizer**",
-        elem_id="hero",
-    )
+    with gr.Column(elem_classes=["psa-page"]):
+        gr.Markdown(
+            "# IDDQD Support Analyzer\n"
+            "**Local SAML + `*.log` analysis · private local assistant · separate web-enabled general chat · log anonymizer**",
+            elem_id="hero",
+        )
 
-    with gr.Tabs():
-        with gr.Tab("Analyze"):
-            with gr.Column(elem_classes=["psa-shell"]):
-                with gr.Row(equal_height=True):
-                    files = gr.File(
-                        label="Upload SAML tracer / metadata XML / HAR / *.log",
-                        file_count="multiple",
-                        height=235,
-                        scale=1,
-                    )
-                    pasted = gr.Textbox(
-                        label="or paste SAML / log text",
-                        lines=10,
-                        placeholder="Paste SAML tracer, metadata XML, Base64 SAMLRequest/SAMLResponse, Assertion, stack trace or *.log fragment…",
-                        scale=1,
-                        elem_id="paste-input",
-                    )
+        with gr.Tabs():
+            with gr.Tab("Analyze"):
+                with gr.Column(elem_classes=["psa-shell"]):
+                    with gr.Row(equal_height=True):
+                        files = gr.File(
+                            label="Upload SAML tracer / metadata XML / HAR / *.log",
+                            file_count="multiple",
+                            height=DROP_HEIGHT,
+                            scale=1,
+                        )
+                        pasted = gr.Textbox(
+                            label="or paste SAML / log text",
+                            lines=9,
+                            placeholder="Paste SAML tracer, metadata XML, Base64 SAMLRequest/SAMLResponse, Assertion, stack trace or *.log fragment…",
+                            scale=1,
+                            elem_id="paste-input",
+                        )
 
-                with gr.Row(equal_height=True):
-                    signing_cert = gr.File(
-                        label="Signing certificate (optional) — X.509 .pem / .crt / .cer",
-                        file_count="single",
-                        file_types=[".pem", ".crt", ".cer"],
-                        height=110,
-                        scale=2,
-                    )
-                    mode = gr.Radio(
-                        ["Auto-detect", "SAML", "Log"],
-                        value="Auto-detect",
-                        label="Analyzer",
-                        scale=3,
-                    )
-                    run = gr.Button("Analyze", variant="primary", scale=1, min_width=180)
+                    with gr.Row(equal_height=True):
+                        signing_cert = gr.File(
+                            label="Signing certificate (optional) — X.509 .pem / .crt / .cer",
+                            file_count="single",
+                            file_types=[".pem", ".crt", ".cer"],
+                            height=CONTROL_HEIGHT,
+                            scale=1,
+                            elem_classes=["psa-control"],
+                        )
+                        mode = gr.Radio(
+                            ["Auto-detect", "SAML", "Log"],
+                            value="Auto-detect",
+                            label="Analyzer",
+                            scale=1,
+                            elem_classes=["psa-control"],
+                        )
 
-                gr.Markdown(
-                    "Standalone certificate upload is used only for SAML XML Signature verification. "
-                    "Upload the **public X.509 certificate**; private keys are not required or accepted.",
-                    elem_classes=["psa-note"],
-                )
+                    run = gr.Button("Analyze", variant="primary", elem_classes=["psa-primary"])
 
-                report = gr.Markdown(elem_id="analysis")
-
-                with gr.Accordion("Structured analyzer output (JSON)", open=False):
-                    raw = gr.Code(label="JSON", language="json")
-
-                gr.Markdown(
-                    "### Ask about this analysis\n"
-                    "Examples: **napisz maila do supportu po angielsku**, **zrób raport techniczny**, "
-                    "**który błąd jest root cause?**, **porównaj metadata/ACS/Audience/Destination/Issuer**"
-                )
-                analysis_chatbot = gr.Chatbot(height=500, label="Chat", elem_id="analysis-chat")
-                gr.ChatInterface(
-                    fn=analysis_chat,
-                    chatbot=analysis_chatbot,
-                    additional_inputs=[state],
-                    save_history=False,
-                )
-                run.click(analyze, inputs=[files, pasted, mode, signing_cert], outputs=[report, raw, state])
-
-        with gr.Tab("Anonymize log"):
-            with gr.Column(elem_classes=["psa-shell"]):
-                gr.Markdown(
-                    "### Local log anonymizer\n"
-                    "Creates a shareable pseudonymized copy while preserving timestamps, error codes and stack-trace "
-                    "structure. The mapping stays local and is not embedded in the output file.",
-                    elem_classes=["psa-note"],
-                )
-                with gr.Row(equal_height=True):
-                    anon_file = gr.File(
-                        label="Drop a log/text file",
-                        file_count="single",
-                        height=235,
-                        scale=1,
-                    )
-                    anon_pasted = gr.Textbox(
-                        label="or paste text",
-                        lines=10,
-                        placeholder="Paste a log fragment…",
-                        scale=1,
-                        elem_id="anon-paste",
+                    gr.Markdown(
+                        "Standalone certificate upload is used only for SAML XML Signature verification. "
+                        "Upload the **public X.509 certificate**; private keys are not required or accepted.",
+                        elem_classes=["psa-note"],
                     )
 
-                anon_run = gr.Button("Anonymize", variant="primary")
-                anon_summary = gr.Markdown()
-                anon_preview = gr.Textbox(
-                    label="Anonymized preview",
-                    lines=20,
-                    elem_id="anon-preview",
-                )
-                anon_download = gr.File(label="Download anonymized copy", interactive=False)
+                    report = gr.Markdown(elem_id="analysis")
 
-                with gr.Accordion("Local replacement map — do NOT share this with the anonymized log", open=False):
-                    anon_mapping = gr.Code(label="Mapping JSON", language="json")
+                    with gr.Accordion("Structured analyzer output (JSON)", open=False):
+                        raw = gr.Code(label="JSON", language="json")
 
-                anon_run.click(
-                    anonymize,
-                    inputs=[anon_file, anon_pasted],
-                    outputs=[anon_summary, anon_preview, anon_mapping, anon_download],
-                )
-        with gr.Tab("Assistant"):
-            with gr.Column(elem_classes=["psa-shell"]):
-                gr.Markdown(
-                    "### 🔒 Local Assistant\n"
-                    "Everything in this tab stays between the browser, this application and the local Ollama model. "
-                    "**No web search.** Use it for sensitive analysis, support mail and coding.",
-                    elem_classes=["psa-note"],
-                )
-                assistant_mode = gr.Radio(
-                    ["General", "Support Mail", "Code"],
-                    value="General",
-                    label="Mode",
-                )
-                assistant_chatbot = gr.Chatbot(height=500, label="Chat", elem_id="assistant-chat")
-                gr.ChatInterface(
-                    fn=assistant_chat,
-                    chatbot=assistant_chatbot,
-                    additional_inputs=[assistant_mode],
-                    save_history=False,
-                )
+                    gr.Markdown(
+                        "### Ask about this analysis\n"
+                        "Examples: **draft a support email**, **write a technical report**, "
+                        "**what is the root cause?**, **compare metadata / ACS / Audience / Destination / Issuer**"
+                    )
+                    with gr.Column(elem_classes=["psa-chat"]):
+                        analysis_chatbot = gr.Chatbot(height=CHAT_HEIGHT, label="Chat", elem_id="analysis-chat")
+                        gr.ChatInterface(
+                            fn=analysis_chat,
+                            chatbot=analysis_chatbot,
+                            additional_inputs=[state],
+                            save_history=False,
+                        )
+                    run.click(analyze, inputs=[files, pasted, mode, signing_cert], outputs=[report, raw, state])
 
-        with gr.Tab("General Chat 🌐"):
-            with gr.Column(elem_classes=["psa-shell"]):
-                gr.Markdown(
-                    "### 🌐 Web-enabled General Chat\n"
-                    "This tab is deliberately separate. It may send **search queries** to public search providers. "
-                    "It receives **no Analyzer or Assistant context**. Do not paste customer logs, credentials or other "
-                    "sensitive data here; use **Assistant** for that.",
-                    elem_classes=["psa-note"],
-                )
-                web_chatbot = gr.Chatbot(height=500, label="Chat", elem_id="web-chat")
-                gr.ChatInterface(fn=web_chat, chatbot=web_chatbot, save_history=False)
+            with gr.Tab("Anonymize log"):
+                with gr.Column(elem_classes=["psa-shell"]):
+                    gr.Markdown(
+                        "### Local log anonymizer\n"
+                        "Creates a shareable pseudonymized copy while preserving timestamps, error codes and stack-trace "
+                        "structure. The mapping stays local and is not embedded in the output file.",
+                        elem_classes=["psa-note"],
+                    )
+                    with gr.Row(equal_height=True):
+                        anon_file = gr.File(
+                            label="Drop a log/text file",
+                            file_count="single",
+                            height=DROP_HEIGHT,
+                            scale=1,
+                        )
+                        anon_pasted = gr.Textbox(
+                            label="or paste text",
+                            lines=9,
+                            placeholder="Paste a log fragment…",
+                            scale=1,
+                            elem_id="anon-paste",
+                        )
+
+                    anon_run = gr.Button("Anonymize", variant="primary", elem_classes=["psa-primary"])
+                    anon_summary = gr.Markdown()
+                    anon_preview = gr.Textbox(
+                        label="Anonymized preview",
+                        lines=18,
+                        elem_id="anon-preview",
+                    )
+                    anon_download = gr.File(label="Download anonymized copy", interactive=False)
+
+                    with gr.Accordion("Local replacement map — do NOT share this with the anonymized log", open=False):
+                        anon_mapping = gr.Code(label="Mapping JSON", language="json")
+
+                    anon_run.click(
+                        anonymize,
+                        inputs=[anon_file, anon_pasted],
+                        outputs=[anon_summary, anon_preview, anon_mapping, anon_download],
+                    )
+
+            with gr.Tab("Assistant"):
+                with gr.Column(elem_classes=["psa-shell"]):
+                    gr.Markdown(
+                        "### Local Assistant\n"
+                        "Everything in this tab stays between the browser, this application and the local Ollama model. "
+                        "**No web search.** Use it for sensitive analysis, support mail and coding.",
+                        elem_classes=["psa-note"],
+                    )
+                    assistant_mode = gr.Radio(
+                        ["General", "Support Mail", "Code"],
+                        value="General",
+                        label="Mode",
+                    )
+                    with gr.Column(elem_classes=["psa-chat"]):
+                        assistant_chatbot = gr.Chatbot(height=CHAT_HEIGHT, label="Chat", elem_id="assistant-chat")
+                        gr.ChatInterface(
+                            fn=assistant_chat,
+                            chatbot=assistant_chatbot,
+                            additional_inputs=[assistant_mode],
+                            save_history=False,
+                        )
+
+            with gr.Tab("General Chat"):
+                with gr.Column(elem_classes=["psa-shell"]):
+                    gr.Markdown(
+                        "### Web-enabled General Chat\n"
+                        "This tab is deliberately separate. It may send **search queries** to public search providers. "
+                        "It receives **no Analyzer or Assistant context**. Do not paste customer logs, credentials or other "
+                        "sensitive data here; use **Assistant** for that.",
+                        elem_classes=["psa-note"],
+                    )
+                    with gr.Column(elem_classes=["psa-chat"]):
+                        web_chatbot = gr.Chatbot(height=CHAT_HEIGHT, label="Chat", elem_id="web-chat")
+                        gr.ChatInterface(fn=web_chat, chatbot=web_chatbot, save_history=False)
 
 
 if __name__ == "__main__":
@@ -255,6 +278,5 @@ if __name__ == "__main__":
         show_error=True,
         footer_links=["settings"],
         css=CSS,
-        js=FOOTER_VERSION_JS,
         max_file_size=f"{MAX_FILE_MB}mb",
     )

@@ -26,7 +26,7 @@ Do not invent APIs, command results, files, logs, or execution results.
 """
 
 MAIL_SYSTEM = """You are a senior enterprise technical support writing assistant running LOCALLY.
-Turn rough notes, Polish/English drafts, or technical findings into concise, natural professional English.
+Turn rough notes, drafts, or technical findings into concise, natural professional English.
 Preserve the user's meaning and technical facts. Do not invent completed checks, root causes, customer actions, dates, or results.
 Avoid robotic phrasing and unnecessary corporate filler.
 When useful, structure the message as: context/findings, what was verified, next step/request.
@@ -62,7 +62,7 @@ def _history_messages(history, limit: int, content_limit: int) -> list[dict[str,
 
 def analysis_chat(message, history, analysis_state) -> str:
     if not analysis_state:
-        return "Najpierw wrzuć plik/SAML tracer i kliknij **Analyze**."
+        return "Upload a log or SAML tracer and click **Analyze** first."
     compact = json.dumps(analysis_state, ensure_ascii=False)[:120_000]
     msgs = [{"role": "system", "content": ANALYSIS_SYSTEM + "\n\nANALYZER OUTPUT:\n" + compact}]
     msgs.extend(_history_messages(history, 12, 12000))
@@ -94,7 +94,7 @@ def assistant_chat(message, history, mode) -> str:
 
 def web_chat(message, history) -> str:
     if not (message or "").strip():
-        return "Wpisz pytanie do wyszukania."
+        return "Enter a question to search."
     try:
         results, queries = web_search(message, history)
     except Exception as e:
