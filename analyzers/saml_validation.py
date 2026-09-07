@@ -196,7 +196,8 @@ def _valid_email_addr_spec(value: str | None) -> bool:
 def _bool_lexical_ok(value: Any) -> bool:
     if value is None:
         return True
-    return str(value).lower() in {"true", "false", "1", "0"}
+    # xs:boolean lexical space is case-sensitive: true | false | 1 | 0
+    return str(value) in {"true", "false", "1", "0"}
 
 
 def _nonnegative_int_ok(value: Any) -> bool:
@@ -439,6 +440,37 @@ def _selected_acs(sp_md: dict[str, Any], req: dict[str, Any] | None, resp: dict[
     return endpoints[:1]
 
 
+def _authn_request_for_nameidpolicy(
+    requests: list[dict[str, Any]],
+    resp: dict[str, Any] | None,
+    assertion: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Correlate NameIDPolicy via Response/SubjectConfirmation InResponseTo, not document order."""
+    irt = (resp or {}).get("in_response_to") if resp else None
+    if not irt:
+        for sc in (assertion.get("subject") or {}).get("confirmations") or []:
+            irt = (sc.get("data") or {}).get("InResponseTo")
+            if irt:
+                break
+    if irt:
+        for r in requests:
+            if r.get("id") == irt:
+                return r
+        return None
+    if len(requests) == 1:
+        return requests[0]
+    return None
+
+
+def _relevant_sp_entity_ids(assertion: dict[str, Any], sp_entity_ids: list[str]) -> list[str]:
+    audiences = (assertion.get("conditions") or {}).get("audiences") or []
+    if audiences:
+        return [x for x in sp_entity_ids if x in audiences]
+    if len(sp_entity_ids) == 1:
+        return list(sp_entity_ids)
+    return []
+
+
 def validate_saml(
     *,
     raw_input: str,
@@ -498,11 +530,15 @@ def validate_saml(
         nip = r.get("name_id_policy") or {}
         if nip.get("AllowCreate") is not None and not _bool_lexical_ok(nip.get("AllowCreate")):
             issues.append(_issue("NAMEIDPOLICY_ALLOWCREATE_INVALID", "ERROR", scope, "NameIDPolicy AllowCreate is not a valid XML boolean.", observed=nip.get("AllowCreate"), expected="true/false/1/0", standard="SAML Core 2.0 NameIDPolicyType"))
-        if nip.get("SPNameQualifier") and (not _valid_uri(nip.get("SPNameQualifier")) or len(nip.get("SPNameQualifier")) > 1024):
-            issues.append(_issue("NAMEIDPOLICY_SPNAMEQUALIFIER_INVALID", "ERROR", scope, "NameIDPolicy SPNameQualifier must identify an SP/affiliation with a URI of at most 1024 characters.", observed=nip.get("SPNameQualifier"), expected="entity identifier URI <= 1024", standard="SAML Core 2.0 NameIDPolicyType"))
-        if nip.get("Format") and not _valid_uri(nip.get("Format")):
-            issues.append(_issue("NAMEIDPOLICY_FORMAT_INVALID_URI", "ERROR", scope, "NameIDPolicy Format is not a valid URI.", observed=nip.get("Format"), standard="SAML Core 2.0 §3.4.1.1"))
-        if nip.get("Format") == TRANSIENT_FORMAT and str(nip.get("AllowCreate") or "").lower() in {"true", "1"}:
+        if "SPNameQualifier" in nip:
+            spq = nip.get("SPNameQualifier")
+            if not spq or not str(spq).strip() or not _valid_uri(spq) or len(str(spq)) > 1024:
+                issues.append(_issue("NAMEIDPOLICY_SPNAMEQUALIFIER_INVALID", "ERROR", scope, "NameIDPolicy SPNameQualifier must identify an SP/affiliation with a URI of at most 1024 characters. An empty attribute is not omission.", observed=spq, expected="entity identifier URI <= 1024", standard="SAML Core 2.0 NameIDPolicyType"))
+        if "Format" in nip:
+            nip_fmt = nip.get("Format")
+            if not nip_fmt or not str(nip_fmt).strip() or not _valid_uri(nip_fmt):
+                issues.append(_issue("NAMEIDPOLICY_FORMAT_INVALID_URI", "ERROR", scope, "NameIDPolicy Format is present but is not a valid URI. An empty Format is not equivalent to omitting Format.", observed=nip_fmt, standard="SAML Core 2.0 §3.4.1.1"))
+        if nip.get("Format") == TRANSIENT_FORMAT and str(nip.get("AllowCreate") or "") in {"true", "1"}:
             issues.append(_issue("NAMEIDPOLICY_TRANSIENT_ALLOWCREATE", "ERROR", scope, "AllowCreate must not be used with transient NameID format.", observed=nip, standard="SAML V2.0 Approved Errata"))
         comp = (r.get("requested_authn_context") or {}).get("comparison")
         if comp and comp not in {"exact", "minimum", "maximum", "better"}:
@@ -575,15 +611,38 @@ def validate_saml(
         subject = a.get("subject") or {}
         nameid = subject.get("name_id") or {}
         confirmations = subject.get("confirmations") or []
-        has_subject_content = bool(nameid.get("value") or subject.get("encrypted_id_present") or subject.get("base_id_present") or confirmations)
+        has_subject_content = bool(
+            nameid.get("element_present")
+            or nameid.get("value")
+            or subject.get("encrypted_id_present")
+            or subject.get("base_id_present")
+            or confirmations
+        )
         if resp and not has_subject_content:
             issues.append(_issue("BROWSER_SSO_SUBJECT_MISSING", "ERROR", scope, "Web Browser SSO assertion must contain a Subject with usable subject confirmation.", expected="Subject + bearer SubjectConfirmation", standard="SAML Profiles 2.0 §4.1.4.2"))
 
-        issues.extend(validate_nameid(nameid, scope, idp_entity_ids=idp_entity_ids, sp_entity_ids=sp_entity_ids))
+        if subject.get("nameid_count", 0) > 1:
+            issues.append(_issue("SUBJECT_NAMEID_DUPLICATE", "ERROR", scope, "Subject contains more than one NameID. Schema allows at most one of BaseID, NameID or EncryptedID.", observed=subject.get("nameid_count"), expected="maxOccurs=1", standard="SAML Core 2.0 SubjectType"))
+        choice = subject.get("subject_identifier_choice_count") or 0
+        if choice > 1:
+            issues.append(_issue("SUBJECT_IDENTIFIER_CHOICE_INVALID", "ERROR", scope, "Subject contains more than one of BaseID, NameID and EncryptedID. These identifier forms are mutually exclusive.", observed=choice, expected="exactly one of BaseID | NameID | EncryptedID", standard="SAML Core 2.0 SubjectType"))
+
+        issues.extend(
+            validate_nameid(
+                nameid,
+                scope,
+                idp_entity_ids=idp_entity_ids,
+                sp_entity_ids=_relevant_sp_entity_ids(a, sp_entity_ids),
+                assertion_issuer=(a.get("issuer") or {}).get("value"),
+            )
+        )
         fmt = nameid.get("format")
 
-        if req:
-            nip = req.get("name_id_policy") or {}
+        policy_req = _authn_request_for_nameidpolicy(requests, resp, a)
+        if requests and policy_req is None and len(requests) > 1:
+            issues.append(_issue("NAMEIDPOLICY_REQUEST_NOT_CORRELATED", "INFO", scope, "Multiple AuthnRequest documents are present and none matches this Response/assertion InResponseTo, so NameIDPolicy Format comparison was not performed.", standard="SAML Core 2.0 §3.2.2 InResponseTo"))
+        elif policy_req:
+            nip = policy_req.get("name_id_policy") or {}
             requested_fmt = nip.get("Format")
             if requested_fmt == ENCRYPTED_FORMAT:
                 if not subject.get("encrypted_id_present"):

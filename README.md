@@ -4,7 +4,7 @@
 
 Local troubleshooting toolkit for SAML/SSO, protocol validation, metadata analysis, log files, anonymization, support writing and coding assistance.
 
-**Current version:** `0.10.10`
+**Current version:** `0.10.11`
 
 The project is designed for local-first technical support workflows. Deterministic parsers and validators handle protocol checks and structured extraction; local inference can be used for explanation, report drafting and coding assistance. Web access is isolated in a separate General Chat tab and is never used automatically by the Analyzer or local Assistant.
 
@@ -36,8 +36,12 @@ Examples of validator findings:
 RESPONSE_ID_MISSING
 RESPONSE_STATUS_MISSING
 NAMEID_EMAIL_FORMAT_INVALID
+NAMEID_EMAIL_FORMAT_NOT_FULLY_CHECKED
+NAMEID_ENCRYPTED_FORMAT_PLAINTEXT
 NAMEID_ENTITY_URI_INVALID
+NAMEID_PERSISTENT_NAMEQUALIFIER_NOT_CHECKED
 NAMEIDPOLICY_RETURNED_FORMAT_MISMATCH
+SUBJECT_IDENTIFIER_CHOICE_INVALID
 BEARER_RECIPIENT_ACS_MISMATCH
 AUDIENCE_SP_ENTITYID_MISMATCH
 DUPLICATE_SAML_ID

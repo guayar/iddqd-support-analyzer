@@ -50,6 +50,28 @@ def _attrs(el, keys):
     return {k: el.attrib.get(k) for k in keys if el.attrib.get(k) is not None}
 
 
+def _nameid_from_element(el) -> dict[str, Any] | None:
+    """Extract NameID with attribute-presence flags (empty string ≠ omitted)."""
+    if el is None:
+        return None
+    raw = el.text if el.text is not None else ""
+    stripped = raw.strip()
+    return {
+        "element_present": True,
+        "value": stripped,
+        "raw_value": raw,
+        "empty": not stripped,
+        "format": el.attrib.get("Format"),
+        "format_present": "Format" in el.attrib,
+        "name_qualifier": el.attrib.get("NameQualifier"),
+        "name_qualifier_present": "NameQualifier" in el.attrib,
+        "sp_name_qualifier": el.attrib.get("SPNameQualifier"),
+        "sp_name_qualifier_present": "SPNameQualifier" in el.attrib,
+        "sp_provided_id": el.attrib.get("SPProvidedID"),
+        "sp_provided_id_present": "SPProvidedID" in el.attrib,
+    }
+
+
 def _issuer(el) -> dict[str, Any] | None:
     if el is None:
         return None
@@ -351,7 +373,10 @@ def _extract_request(root) -> dict[str, Any]:
 
 def _extract_assertion(assertion) -> dict[str, Any]:
     ass_issuer = assertion.find("saml:Issuer", NS)
-    nameid = assertion.find("saml:Subject/saml:NameID", NS)
+    nameid_els = assertion.findall("saml:Subject/saml:NameID", NS)
+    nameid = nameid_els[0] if nameid_els else None
+    encrypted_id = assertion.find("saml:Subject/saml:EncryptedID", NS)
+    base_id = assertion.find("saml:Subject/saml:BaseID", NS)
     subject_confirmations = []
     for sc in assertion.findall("saml:Subject/saml:SubjectConfirmation", NS):
         scd = sc.find("saml:SubjectConfirmationData", NS)
@@ -407,16 +432,29 @@ def _extract_assertion(assertion) -> dict[str, Any]:
         "issuer": _issuer(ass_issuer),
         "signature": _signature_details(assertion),
         "subject": {
-            "name_id": {
-                "value": _text(nameid),
-                "format": nameid.attrib.get("Format") if nameid is not None else None,
-                "name_qualifier": nameid.attrib.get("NameQualifier") if nameid is not None else None,
-                "sp_name_qualifier": nameid.attrib.get("SPNameQualifier") if nameid is not None else None,
-                "sp_provided_id": nameid.attrib.get("SPProvidedID") if nameid is not None else None,
+            "name_id": _nameid_from_element(nameid) or {
+                "element_present": False,
+                "value": None,
+                "raw_value": None,
+                "empty": False,
+                "format": None,
+                "format_present": False,
+                "name_qualifier": None,
+                "name_qualifier_present": False,
+                "sp_name_qualifier": None,
+                "sp_name_qualifier_present": False,
+                "sp_provided_id": None,
+                "sp_provided_id_present": False,
             },
+            "nameid_count": len(nameid_els),
             "confirmations": subject_confirmations,
-            "encrypted_id_present": assertion.find("saml:Subject/saml:EncryptedID", NS) is not None,
-            "base_id_present": assertion.find("saml:Subject/saml:BaseID", NS) is not None,
+            "encrypted_id_present": encrypted_id is not None,
+            "base_id_present": base_id is not None,
+            "subject_identifier_choice_count": (
+                (1 if nameid_els else 0)
+                + (1 if encrypted_id is not None else 0)
+                + (1 if base_id is not None else 0)
+            ),
         },
         "conditions": {
             **_attrs(conditions, ["NotBefore", "NotOnOrAfter"]),

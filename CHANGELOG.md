@@ -2,6 +2,26 @@
 
 All notable changes to this project are documented here.
 
+## [0.10.11] - 2026-09-07
+
+### Fixed
+
+- plaintext `NameID` with `Format=encrypted` is `ERROR` (`NAMEID_ENCRYPTED_FORMAT_PLAINTEXT`); EncryptedID is not interchangeable with that Format (Approved Errata E6/E15)
+- explicit empty `Format=""` is an invalid URI, not unspecified omission
+- empty or whitespace-only NameID content is `NAMEID_EMPTY` even when the parser would strip it
+- entity NameID forbids qualifiers even when the attributes are present but empty
+- persistent/transient `NameQualifier` / `SPNameQualifier` no longer `ERROR` against the current Issuer/SP entityID (original generator and affiliations are not provable from one paste)
+- NameIDPolicy Format comparison uses the AuthnRequest correlated by `InResponseTo`, not the last request in the paste
+- `Subject` `NameID`+`EncryptedID`/`BaseID` combinations are reported as schema `ERROR`
+- quoted RFC 2822 addr-spec forms are no longer false `ERROR`s of the reduced email checker
+- Windows DQN no longer rejects spaces that SAML Core does not forbid
+- transient non-`xs:ID` syntax is `WARNING`, not a proven `ERROR`
+- `AllowCreate="TRUE"` is rejected as invalid `xs:boolean`
+
+### Changed
+
+- version bumped to `0.10.11`
+
 ## [0.10.10] - 2026-09-07
 
 ### Added
