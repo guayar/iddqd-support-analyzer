@@ -75,6 +75,15 @@ def _read_files(files) -> tuple[str, list[str]]:
     return "\n".join(chunks), names
 
 
+def _read_signing_certificate(file) -> bytes | None:
+    if not file:
+        return None
+    p = Path(getattr(file, "name", file))
+    if p.stat().st_size > 5 * 1024 * 1024:
+        raise gr.Error(f"{p.name}: signing certificate file exceeds 5 MB limit")
+    return p.read_bytes()
+
+
 def _looks_saml(text: str) -> bool:
     return looks_like_saml_input(text)
 
@@ -103,6 +112,14 @@ def _md_signature(sig: dict[str, Any] | None, indent: int = 0) -> list[str]:
         out.append(_bullet("Digest method(s)", sig.get("digest_methods"), indent))
         out.append(_bullet("Reference URI(s)", sig.get("reference_uris"), indent))
         out.append(_bullet("X509 SHA-256 fingerprint(s)", sig.get("x509_sha256_fingerprints"), indent))
+        if sig.get("crypto_verification"):
+            out.append(_bullet("Cryptographic verification", sig.get("crypto_verification"), indent))
+        if sig.get("verified_signing_cert_fingerprint"):
+            out.append(_bullet("Verified signing certificate", sig.get("verified_signing_cert_fingerprint"), indent))
+        if sig.get("metadata_signing_cert_fingerprints"):
+            out.append(_bullet("Metadata signing certificate(s)", sig.get("metadata_signing_cert_fingerprints"), indent))
+        if sig.get("supplied_signing_cert_fingerprints"):
+            out.append(_bullet("Supplied signing certificate(s)", sig.get("supplied_signing_cert_fingerprints"), indent))
     return out
 
 
@@ -270,6 +287,17 @@ def _md_saml(result: dict[str, Any]) -> str:
         f"**Cross-checks:** ✅ {summary.get('matches', 0)} · ❌ {summary.get('mismatches', 0)} · ⚪ {summary.get('unknown_checks', 0)}",
     ]
 
+    if result.get("supplied_signing_certificates"):
+        out.append("\n## Supplied signing certificate")
+        for cert in result["supplied_signing_certificates"]:
+            out += [
+                _bullet("SHA-256 fingerprint", cert.get("fingerprint")),
+                _bullet("Subject", cert.get("subject")),
+                _bullet("Issuer", cert.get("issuer")),
+                _bullet("Valid from", cert.get("not_valid_before")),
+                _bullet("Valid until", cert.get("not_valid_after")),
+            ]
+
     if result.get("detected_sources"):
         out.append("\n## Input decoding / detection")
         for src in result["detected_sources"]:
@@ -397,7 +425,7 @@ def _md_log(result: dict[str, Any]) -> str:
     return "\n".join(out)
 
 
-def analyze(files, pasted, mode):
+def analyze(files, pasted, mode, signing_cert_file=None):
     file_text, names = _read_files(files)
     text = (file_text + "\n" + (pasted or "")).strip()
     if not text:
@@ -406,7 +434,8 @@ def analyze(files, pasted, mode):
     if mode == "Auto-detect":
         chosen = "SAML" if _looks_saml(text) else "Log"
     if chosen == "SAML":
-        result = analyze_saml_input(text)
+        cert_data = _read_signing_certificate(signing_cert_file)
+        result = analyze_saml_input(text, signing_cert=cert_data)
         md = _md_saml(result)
     else:
         result = analyze_log_text(text, filename=", ".join(names) if names else None)
@@ -740,13 +769,26 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                     )
 
                 with gr.Row(equal_height=True):
+                    signing_cert = gr.File(
+                        label="Signing certificate (optional) — X.509 .pem / .crt / .cer",
+                        file_count="single",
+                        file_types=[".pem", ".crt", ".cer"],
+                        height=110,
+                        scale=2,
+                    )
                     mode = gr.Radio(
                         ["Auto-detect", "SAML", "Log"],
                         value="Auto-detect",
                         label="Analyzer",
-                        scale=4,
+                        scale=3,
                     )
                     run = gr.Button("Analyze", variant="primary", scale=1, min_width=180)
+
+                gr.Markdown(
+                    "Standalone certificate upload is used only for SAML XML Signature verification. "
+                    "Upload the **public X.509 certificate**; private keys are not required or accepted.",
+                    elem_classes=["psa-note"],
+                )
 
                 report = gr.Markdown(elem_id="analysis")
 
@@ -765,7 +807,7 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                     additional_inputs=[state],
                     save_history=False,
                 )
-                run.click(analyze, inputs=[files, pasted, mode], outputs=[report, raw, state])
+                run.click(analyze, inputs=[files, pasted, mode, signing_cert], outputs=[report, raw, state])
 
         with gr.Tab("Anonymize log"):
             with gr.Column(elem_classes=["psa-shell"]):

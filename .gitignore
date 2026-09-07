@@ -18,6 +18,9 @@ env/
 .env.*
 !config.example.env
 *.pem
+*.crt
+*.cer
+*.der
 *.key
 *.p12
 *.pfx

@@ -10,8 +10,9 @@ Input
   ├─ SAML / metadata ──> decode ──> XML parse ──> extract ──> validate ──> report
   │                                      │
   │                                      └─ XMLDSig ──> Reference profile checks
-  │                                                   └─ public-cert verification
-  │                                                   └─ metadata trust comparison
+  │                                                   ├─ metadata public-cert verification
+  │                                                   ├─ optional supplied X.509 certificate
+  │                                                   └─ metadata / embedded-cert comparison
   │
   ├─ *.log ───────> parse ──> group errors / codes / stacks ─────────> report
   │
@@ -30,7 +31,8 @@ General Chat
 - General Chat does not inherit Analyzer or Assistant context.
 - Model endpoints are restricted to loopback by default.
 - `.env`, local logs, generated mappings and credential material are excluded from version control.
-- Private-key formats (`*.pem`, `*.key`, `*.p12`, `*.pfx`, keystores) are excluded from version control.
+- Local certificate/key formats (`*.pem`, `*.crt`, `*.cer`, `*.der`, `*.key`, `*.p12`, `*.pfx`, keystores) are excluded from version control.
+- The standalone signing-certificate input accepts public X.509 certificates only; private keys are rejected.
 - The anonymizer is pattern-based and should not be treated as a certified DLP control.
 
 ## SAML validation model
@@ -46,7 +48,9 @@ Validation is separated into four layers:
 
 A private key is not required to verify an XML Signature. Verification uses the signer's public X.509 certificate.
 
-When matching metadata is supplied, its `KeyDescriptor` entries with `use="signing"` (or unspecified use) are treated as the trust source. The analyzer verifies the signature and referenced digest against those certificates. A certificate embedded in `ds:KeyInfo` is compared with metadata but is not automatically trusted merely because it is embedded in the signed message.
+When matching metadata is supplied, its `KeyDescriptor` entries with `use="signing"` (or unspecified use) are treated as the preferred trust source. The analyzer verifies the signature and referenced digest against those certificates. A certificate embedded in `ds:KeyInfo` is compared with metadata but is not automatically trusted merely because it is embedded in the signed message.
+
+An operator may also supply a standalone X.509 signing certificate in PEM or DER form. If it verifies the XML Signature, the analyzer reports cryptographic validity and the certificate fingerprint, while keeping identity/provenance distinct from metadata-backed trust. If both metadata and a standalone certificate are available, metadata remains the primary trust source and the supplied certificate is compared against it. Differences are surfaced as troubleshooting evidence, including certificate-rollover scenarios.
 
 If metadata is unavailable but an embedded certificate is present, the analyzer may prove that the signature is cryptographically self-consistent with that certificate, while reporting that signer trust is not established.
 

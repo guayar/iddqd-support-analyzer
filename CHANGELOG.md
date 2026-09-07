@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented here.
 
+## [0.10.1] - 2026-09-07
+
+### Added
+
+- optional standalone X.509 signing certificate upload in the Analyze tab
+- PEM and DER certificate parsing for `.pem`, `.crt` and `.cer` inputs
+- cryptographic signature verification with an explicitly supplied certificate when trusted metadata is unavailable
+- supplied-certificate fingerprint, subject, issuer and validity reporting
+- diagnostics for supplied certificates that differ from metadata or embedded `ds:KeyInfo` certificates
+- explicit rejection of bare public keys and private keys in the certificate upload path
+- regression tests for standalone PEM, DER and bundled certificate verification
+
+### Changed
+
+- signature reports now show cryptographic verification state and the certificate fingerprint used for verification
+- version bumped to `0.10.1`
+
 ## [0.10.0] - 2026-09-07
 
 ### Added
