@@ -4,7 +4,7 @@
 
 Local troubleshooting toolkit for SAML/SSO, protocol validation, metadata analysis, log files, anonymization, support writing and coding assistance.
 
-**Current version:** `0.10.6`
+**Current version:** `0.10.7`
 
 The project is designed for local-first technical support workflows. Deterministic parsers and validators handle protocol checks and structured extraction; local inference can be used for explanation, report drafting and coding assistance. Web access is isolated in a separate General Chat tab and is never used automatically by the Analyzer or local Assistant.
 
@@ -149,7 +149,9 @@ The application binds to `127.0.0.1` by default and blocks non-local model endpo
 - Ubuntu / Linux
 - Python 3.12+
 - Ollama
-- a locally installed text model (default configuration: `qwen3.6:27b`)
+- a locally installed **Qwen** model (`OLLAMA_MODEL`, default `qwen3.6:27b`)
+
+The Analyzer and validators do not require a GPU. Local chat uses whichever Qwen tag you pull in Ollama. Development and local inference were tested with `qwen3.6:27b` on an **AMD Radeon AI PRO R9700** dedicated to the model (desktop graphics on the iGPU).
 
 ## Quick start
 
@@ -193,6 +195,8 @@ ALLOW_REMOTE_LLM=false
 APP_PORT=7860
 MAX_FILE_MB=150
 ```
+
+`OLLAMA_MODEL` is a Qwen tag. The default is `qwen3.6:27b`; that is also the tag used for local testing on an AMD Radeon AI PRO R9700. Any other locally installed Qwen model can be selected with the same variable.
 
 Web-enabled General Chat settings:
 
