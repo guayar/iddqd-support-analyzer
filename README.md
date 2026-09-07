@@ -107,6 +107,8 @@ cp config.example.env .env
 
 `run.sh` creates a local `.venv`, installs dependencies there and starts the application.
 
+For desktop use, `start-analyzer.sh` opens the local UI in the browser and keeps the application attached to the terminal. To update an existing checkout safely, run `./update.sh`; it performs a fast-forward-only pull and refreshes dependencies when a local virtual environment exists.
+
 Default UI:
 
 ```text
@@ -136,6 +138,15 @@ WEB_SEARCH_REGION=wt-wt
 
 Optional basic authentication can be enabled with `BASIC_AUTH_USER` and `BASIC_AUTH_PASS`.
 
+## Updating
+
+```bash
+cd ~/Praca/iddqd-support-analyzer
+./update.sh
+```
+
+The update script refuses to overwrite tracked local changes. Commit or stash them first if you intentionally modify project files locally.
+
 ## Running tests
 
 ```bash
@@ -162,6 +173,8 @@ The tests use synthetic SAML and log data only.
 ├── config.example.env
 ├── requirements.txt
 ├── run.sh
+├── start-analyzer.sh
+├── update.sh
 ├── CHANGELOG.md
 └── VERSION
 ```
