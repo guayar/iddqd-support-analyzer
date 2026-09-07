@@ -5,6 +5,14 @@
 The core Analyzer is deterministic first. Protocol parsing, required-field checks, identifier comparisons, timestamps, endpoint mappings and validation findings are produced by code rather than delegated to the language model.
 
 ```text
+Gradio UI (app.py)
+  │
+  ├─ actions.py ──> analyzers/* ──> reporting.py ──> markdown + JSON
+  │
+  ├─ chats.py (analysis / assistant) ──> llm.py ──> local Ollama
+  │
+  └─ chats.py (General Chat) ──> websearch.py ──> public search ──> llm.py
+
 Input
   │
   ├─ SAML / metadata ──> decode ──> XML parse ──> extract ──> validate ──> report
@@ -17,12 +25,6 @@ Input
   ├─ *.log ───────> parse ──> group errors / codes / stacks ─────────> report
   │
   └─ log anonymizer ──> deterministic pseudonymization ───────────────────> output
-
-Optional local model
-  └─ consumes deterministic analyzer output for explanation/report drafting
-
-General Chat
-  └─ separate path with explicit public web search
 ```
 
 ## Security boundaries

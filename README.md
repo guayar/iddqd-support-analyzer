@@ -4,7 +4,7 @@
 
 Local troubleshooting toolkit for SAML/SSO, protocol validation, metadata analysis, log files, anonymization, support writing and coding assistance.
 
-**Current version:** `0.10.4`
+**Current version:** `0.10.5`
 
 The project is designed for local-first technical support workflows. Deterministic parsers and validators handle protocol checks and structured extraction; local inference can be used for explanation, report drafting and coding assistance. Web access is isolated in a separate General Chat tab and is never used automatically by the Analyzer or local Assistant.
 
@@ -222,6 +222,7 @@ PYTHONPATH=. python tests/test_analyzers.py
 PYTHONPATH=. python tests/test_signature_validation.py
 PYTHONPATH=. python tests/test_anonymizer_saml.py
 PYTHONPATH=. python tests/test_saml_anonymizer.py
+PYTHONPATH=. python tests/test_layers.py
 ```
 
 The tests use synthetic SAML and log data only. Signature and anonymization tests generate ephemeral synthetic keys/certificates at runtime; no private key material is stored in the repository.
@@ -230,22 +231,16 @@ The tests use synthetic SAML and log data only. Signature and anonymization test
 
 ```text
 .
-├── analyzers/
-│   ├── anonymizer.py
-│   ├── anonymizer_engine.py
-│   ├── logs.py
-│   ├── saml.py
-│   ├── saml_signature.py
-│   ├── saml_supplied_cert.py
-│   └── saml_validation.py
+├── analyzers/          # deterministic SAML, log and anonymizer engines
 ├── tests/
-│   ├── test_analyzers.py
-│   ├── test_anonymizer_saml.py
-│   ├── test_saml_anonymizer.py
-│   └── test_signature_validation.py
-├── .github/workflows/
-│   └── tests.yml
-├── app.py
+├── actions.py          # Analyze / Anonymize use-cases (no Gradio)
+├── reporting.py        # markdown reports from analyzer JSON
+├── llm.py              # local Ollama client and endpoint policy
+├── chats.py            # Assistant / analysis / web chat
+├── websearch.py        # General Chat search/fetch
+├── uploads.py          # file size limits and text reads
+├── config.py           # environment settings
+├── app.py              # Gradio UI only
 ├── config.example.env
 ├── requirements.txt
 ├── run.sh
@@ -257,4 +252,4 @@ The tests use synthetic SAML and log data only. Signature and anonymization test
 
 ## Versioning
 
-The project uses semantic versioning while it is pre-1.0. New functionality normally increments the minor version; compatibility fixes and focused improvements to an existing feature increment the patch version (`0.10.3` → `0.10.4`).
+The project uses semantic versioning while it is pre-1.0. New functionality normally increments the minor version; compatibility fixes and focused improvements to an existing feature increment the patch version (`0.10.4` → `0.10.5`).

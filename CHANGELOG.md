@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## [0.10.5] - 2026-09-07
+
+### Changed
+
+- Gradio UI, analyzer actions, markdown reports, Ollama client and web search are split into separate modules; Analyze / Anonymize behavior is unchanged
+- version bumped to `0.10.5`
+
 ## [0.10.4] - 2026-09-07
 
 ### Fixed

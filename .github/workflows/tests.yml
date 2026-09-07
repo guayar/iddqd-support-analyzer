@@ -24,7 +24,7 @@ jobs:
           python -m pip install -r requirements.txt
 
       - name: Compile
-        run: python -m py_compile app.py analyzers/*.py tests/test_analyzers.py tests/test_signature_validation.py tests/test_anonymizer_saml.py tests/test_saml_anonymizer.py
+        run: python -m py_compile app.py actions.py chats.py config.py llm.py reporting.py uploads.py websearch.py analyzers/*.py tests/*.py
 
       - name: Run analyzer tests
         run: |
@@ -32,3 +32,4 @@ jobs:
           PYTHONPATH=. python tests/test_signature_validation.py
           PYTHONPATH=. python tests/test_anonymizer_saml.py
           PYTHONPATH=. python tests/test_saml_anonymizer.py
+          PYTHONPATH=. python tests/test_layers.py
