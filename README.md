@@ -4,7 +4,7 @@
 
 Local troubleshooting toolkit for SAML/SSO, protocol validation, metadata analysis, log files, anonymization, support writing and coding assistance.
 
-**Current version:** `0.10.2`
+**Current version:** `0.10.3`
 
 The project is designed for local-first technical support workflows. Deterministic parsers and validators handle protocol checks and structured extraction; local inference can be used for explanation, report drafting and coding assistance. Web access is isolated in a separate General Chat tab and is never used automatically by the Analyzer or local Assistant.
 
@@ -66,7 +66,7 @@ If only a certificate embedded in `ds:KeyInfo` is available, the analyzer can ve
 
 ### Anonymization
 
-Pattern-based local pseudonymization for common sensitive values, including:
+Local deterministic pseudonymization for logs and SAML traces, including:
 
 - IPv4 / IPv6
 - hostnames and domains
@@ -75,9 +75,10 @@ Pattern-based local pseudonymization for common sensitive values, including:
 - UUIDs
 - JWTs and Authorization headers
 - passwords, tokens, API keys and session identifiers
-- sensitive URL query parameters
+- sensitive URL query parameters and RelayState
 - Base64-encoded SAMLRequest / SAMLResponse payloads
 - HTTP-Redirect SAMLRequest payloads using URL-encoded Base64 + raw DEFLATE
+- raw standalone SAML XML
 
 For encoded SAML, the anonymizer follows the transport rather than treating Base64 as opaque text:
 
@@ -86,18 +87,37 @@ Base64 / Redirect SAML
         ↓
 decode (+ DEFLATE when required)
         ↓
-anonymize the XML with the same per-run mapping
+parse SAML XML safely
+        ↓
+structure-aware anonymization
         ↓
 recompress when required
         ↓
 Base64 / URL encode again
 ```
 
+SAML is anonymized structurally rather than by applying generic domain regexes to the XML. This means standard protocol identifiers remain intact, including SAML URNs, XML namespaces, XML Schema URLs, XMLDSig namespaces, algorithms, bindings, NameID formats and AuthnContext values.
+
+The SAML-aware layer pseudonymizes values such as:
+
+- Request / Response / Assertion `ID`
+- `InResponseTo` and same-document `ds:Reference URI="#..."` values using the same mapping
+- Issuer, Audience, Destination, Recipient and metadata endpoints
+- NameID and NameID qualifiers
+- AttributeValue contents
+- SessionIndex
+- SubjectLocality Address
+- selected metadata organization/contact fields
+
+Embedded X.509 certificates are replaced with valid synthetic certificates so the anonymized XML remains structurally parseable without exposing certificate subject/issuer information. `SignatureValue` and `DigestValue` are also replaced with harmless Base64 placeholders.
+
+Pre-existing SAML inconsistencies are preserved. For example, if a Signature references the wrong Assertion ID before anonymization, the anonymized copy still references the corresponding wrong pseudonymized ID rather than silently repairing the trace.
+
 Unrelated Base64 blobs are left unchanged unless they decode to recognizable SAML XML. Stable pseudonyms are used within a single run so repeated values remain correlatable across plaintext logs and decoded SAML.
 
-Anonymizing fields inside signed SAML changes the signed bytes and therefore invalidates the original `DigestValue` / XML Signature. This is expected for a shareable anonymized copy; do not use the anonymized copy to verify the original signature.
+Anonymizing fields inside signed SAML changes the signed bytes and therefore invalidates the original XML Signature. This is expected for a shareable anonymized copy; do not use the anonymized copy to verify the original signature.
 
-The anonymizer is not a certified DLP product; generated output should still be reviewed before external sharing.
+The anonymizer is not a certified DLP product; generated output should still be reviewed before external sharing, especially when custom SAML extension elements contain free-form business data.
 
 ### Local Assistant
 
@@ -201,9 +221,10 @@ source .venv/bin/activate
 PYTHONPATH=. python tests/test_analyzers.py
 PYTHONPATH=. python tests/test_signature_validation.py
 PYTHONPATH=. python tests/test_anonymizer_saml.py
+PYTHONPATH=. python tests/test_saml_anonymizer.py
 ```
 
-The tests use synthetic SAML and log data only. Signature tests generate an ephemeral synthetic key and certificate at runtime; no private key material is stored in the repository.
+The tests use synthetic SAML and log data only. Signature and anonymization tests generate ephemeral synthetic keys/certificates at runtime; no private key material is stored in the repository.
 
 ## Project structure
 
@@ -211,6 +232,7 @@ The tests use synthetic SAML and log data only. Signature tests generate an ephe
 .
 ├── analyzers/
 │   ├── anonymizer.py
+│   ├── anonymizer_engine.py
 │   ├── logs.py
 │   ├── saml.py
 │   ├── saml_signature.py
@@ -219,6 +241,7 @@ The tests use synthetic SAML and log data only. Signature tests generate an ephe
 ├── tests/
 │   ├── test_analyzers.py
 │   ├── test_anonymizer_saml.py
+│   ├── test_saml_anonymizer.py
 │   └── test_signature_validation.py
 ├── .github/workflows/
 │   └── tests.yml
@@ -234,4 +257,4 @@ The tests use synthetic SAML and log data only. Signature tests generate an ephe
 
 ## Versioning
 
-The project uses semantic versioning while it is pre-1.0. New functionality normally increments the minor version; compatibility fixes and focused improvements to an existing feature increment the patch version (`0.10.1` → `0.10.2`).
+The project uses semantic versioning while it is pre-1.0. New functionality normally increments the minor version; compatibility fixes and focused improvements to an existing feature increment the patch version (`0.10.2` → `0.10.3`).
