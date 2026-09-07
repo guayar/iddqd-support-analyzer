@@ -24,7 +24,9 @@ jobs:
           python -m pip install -r requirements.txt
 
       - name: Compile
-        run: python -m py_compile app.py analyzers/*.py tests/test_analyzers.py
+        run: python -m py_compile app.py analyzers/*.py tests/test_analyzers.py tests/test_signature_validation.py
 
       - name: Run analyzer tests
-        run: PYTHONPATH=. python tests/test_analyzers.py
+        run: |
+          PYTHONPATH=. python tests/test_analyzers.py
+          PYTHONPATH=. python tests/test_signature_validation.py

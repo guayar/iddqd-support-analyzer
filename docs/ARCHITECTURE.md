@@ -8,6 +8,10 @@ The core Analyzer is deterministic first. Protocol parsing, required-field check
 Input
   │
   ├─ SAML / metadata ──> decode ──> XML parse ──> extract ──> validate ──> report
+  │                                      │
+  │                                      └─ XMLDSig ──> Reference profile checks
+  │                                                   └─ public-cert verification
+  │                                                   └─ metadata trust comparison
   │
   ├─ *.log ───────> parse ──> group errors / codes / stacks ─────────> report
   │
@@ -26,14 +30,26 @@ General Chat
 - General Chat does not inherit Analyzer or Assistant context.
 - Model endpoints are restricted to loopback by default.
 - `.env`, local logs, generated mappings and credential material are excluded from version control.
+- Private-key formats (`*.pem`, `*.key`, `*.p12`, `*.pfx`, keystores) are excluded from version control.
 - The anonymizer is pattern-based and should not be treated as a certified DLP control.
 
 ## SAML validation model
 
-Validation is separated into three layers:
+Validation is separated into four layers:
 
 1. **Transport decoding** — raw XML, Base64, URL encoding and Redirect-binding DEFLATE.
 2. **Document and protocol structure** — well-formed XML, document type, required fields and profile rules.
-3. **Cross-document consistency** — comparisons between Request, Response, Assertion and supplied SP/IdP metadata.
+3. **Signature and trust validation** — SAML XML Signature profile checks, same-document Reference validation, cryptographic signature/digest verification with public X.509 certificates, and comparison with matching metadata signing certificates.
+4. **Cross-document consistency** — comparisons between Request, Response, Assertion and supplied SP/IdP metadata.
 
-Signature verification is currently limited to presence and XML Signature structure checks. Cryptographic trust validation is planned separately.
+### XML Signature trust model
+
+A private key is not required to verify an XML Signature. Verification uses the signer's public X.509 certificate.
+
+When matching metadata is supplied, its `KeyDescriptor` entries with `use="signing"` (or unspecified use) are treated as the trust source. The analyzer verifies the signature and referenced digest against those certificates. A certificate embedded in `ds:KeyInfo` is compared with metadata but is not automatically trusted merely because it is embedded in the signed message.
+
+If metadata is unavailable but an embedded certificate is present, the analyzer may prove that the signature is cryptographically self-consistent with that certificate, while reporting that signer trust is not established.
+
+For SAML assertions and protocol messages, SAML Core 2.0 §5.4.2 is applied strictly: the signature must contain exactly one `ds:Reference`, and its URI must be the same-document fragment `#<ID>` of the signed SAML root element.
+
+Encrypted SAML content is a separate concern. `EncryptedAssertion` is detected, but decryption is not performed. Decryption would require the SP private key and is intentionally outside the signature-verification path.

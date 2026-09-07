@@ -4,7 +4,7 @@
 
 Local troubleshooting toolkit for SAML/SSO, protocol validation, metadata analysis, log files, anonymization, support writing and coding assistance.
 
-**Current version:** `0.9.0`
+**Current version:** `0.10.0`
 
 The project is designed for local-first technical support workflows. Deterministic parsers and validators handle protocol checks and structured extraction; local inference can be used for explanation, report drafting and coding assistance. Web access is isolated in a separate General Chat tab and is never used automatically by the Analyzer or local Assistant.
 
@@ -21,8 +21,11 @@ The project is designed for local-first technical support workflows. Determinist
 - AudienceRestriction and Conditions analysis
 - AuthnStatement, session and AuthnContext extraction
 - attribute extraction, including multi-valued attributes
-- signature presence and XML Signature structure inspection
-- certificate fingerprints from SAML metadata
+- XML Signature structure inspection
+- SAML XML Signature profile validation, including the single same-document `Reference URI="#ID"` rule
+- cryptographic XML Signature and digest verification with public X.509 certificates
+- trust comparison against matching SP / IdP metadata signing certificates
+- certificate fingerprints from SAML messages and metadata
 - protocol/profile validation with structured error codes
 - cross-document checks across Request ↔ Response ↔ Assertion ↔ SP metadata ↔ IdP metadata
 
@@ -30,15 +33,21 @@ Examples of validator findings:
 
 ```text
 RESPONSE_ID_MISSING
-STATUS_MISSING
+RESPONSE_STATUS_MISSING
 NAMEID_EMAIL_FORMAT_INVALID
 BEARER_RECIPIENT_ACS_MISMATCH
 AUDIENCE_SP_ENTITYID_MISMATCH
 DUPLICATE_SAML_ID
 XML_NOT_WELL_FORMED
+RESPONSE_SIGNATURE_REFERENCE_URI_INVALID
+RESPONSE_XML_SIGNATURE_INVALID
+RESPONSE_XML_SIGNATURE_VALID
+RESPONSE_SIGNING_CERT_MATCHES_METADATA
 ```
 
-Cryptographic XML Signature verification against trusted metadata certificates is not implemented yet. The current validator inspects signature presence and structure only.
+XML Signature verification does **not** require a private key. When matching SAML metadata is supplied, the analyzer verifies the signature using the trusted public signing certificate from that metadata. If only a certificate embedded in `ds:KeyInfo` is available, the analyzer can verify the cryptographic signature but explicitly reports that signer trust is not established by metadata.
+
+`EncryptedAssertion` is detected, but decryption is not implemented. Decryption would require the SP private key and is intentionally kept separate from signature verification.
 
 ### Log analysis
 
@@ -152,9 +161,10 @@ The update script refuses to overwrite tracked local changes. Commit or stash th
 ```bash
 source .venv/bin/activate
 PYTHONPATH=. python tests/test_analyzers.py
+PYTHONPATH=. python tests/test_signature_validation.py
 ```
 
-The tests use synthetic SAML and log data only.
+The tests use synthetic SAML and log data only. Signature tests generate an ephemeral synthetic key and certificate at runtime; no private key material is stored in the repository.
 
 ## Project structure
 
@@ -164,9 +174,11 @@ The tests use synthetic SAML and log data only.
 │   ├── anonymizer.py
 │   ├── logs.py
 │   ├── saml.py
+│   ├── saml_signature.py
 │   └── saml_validation.py
 ├── tests/
-│   └── test_analyzers.py
+│   ├── test_analyzers.py
+│   └── test_signature_validation.py
 ├── .github/workflows/
 │   └── tests.yml
 ├── app.py
@@ -181,4 +193,4 @@ The tests use synthetic SAML and log data only.
 
 ## Versioning
 
-The project uses semantic versioning while it is pre-1.0. New functionality increments the minor version (`0.9.0` → `0.10.0`); bug fixes increment the patch version (`0.9.0` → `0.9.1`).
+The project uses semantic versioning while it is pre-1.0. New functionality increments the minor version (`0.10.0` → `0.11.0`); bug fixes increment the patch version (`0.10.0` → `0.10.1`).
