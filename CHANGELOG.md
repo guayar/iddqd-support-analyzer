@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## [0.10.10] - 2026-09-07
+
+### Added
+
+- format-aware SAML NameID validation for all Core §8.3 formats, including unspecified, emailAddress, X509SubjectName, Windows DQN, Kerberos, entity, persistent, transient and custom URI formats
+
+### Changed
+
+- version bumped to `0.10.10`
+
 ## [0.10.9] - 2026-09-07
 
 ### Fixed

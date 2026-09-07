@@ -6,6 +6,8 @@ import urllib.parse
 from datetime import datetime, timezone
 from typing import Any
 
+from .saml_nameid import validate_nameid
+
 SAML2_PROTOCOL = "urn:oasis:names:tc:SAML:2.0:protocol"
 ENTITY_FORMAT = "urn:oasis:names:tc:SAML:2.0:nameid-format:entity"
 EMAIL_FORMAT = "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress"
@@ -461,6 +463,8 @@ def validate_saml(
     assertions = response_assertions or standalone_assertions
     sp_metadata = [m for m in metadata if "SP" in (m.get("roles") or [])]
     idp_metadata = [m for m in metadata if "IdP" in (m.get("roles") or [])]
+    sp_entity_ids = [m.get("entity_id") for m in sp_metadata if m.get("entity_id")]
+    idp_entity_ids = [m.get("entity_id") for m in idp_metadata if m.get("entity_id")]
 
     # -------- AuthnRequest: Core + Web Browser SSO profile --------
     for i, r in enumerate(requests, 1):
@@ -575,17 +579,8 @@ def validate_saml(
         if resp and not has_subject_content:
             issues.append(_issue("BROWSER_SSO_SUBJECT_MISSING", "ERROR", scope, "Web Browser SSO assertion must contain a Subject with usable subject confirmation.", expected="Subject + bearer SubjectConfirmation", standard="SAML Profiles 2.0 §4.1.4.2"))
 
-        if nameid.get("value") is not None and nameid.get("value") == "":
-            issues.append(_issue("NAMEID_EMPTY", "ERROR", scope, "NameID is present but empty.", standard="SAML NameIDType"))
+        issues.extend(validate_nameid(nameid, scope, idp_entity_ids=idp_entity_ids, sp_entity_ids=sp_entity_ids))
         fmt = nameid.get("format")
-        if fmt and not _valid_uri(fmt):
-            issues.append(_issue("NAMEID_FORMAT_INVALID_URI", "ERROR", scope, "NameID Format is not a valid URI.", observed=fmt, standard="SAML Core 2.0 §8.3"))
-        if fmt == EMAIL_FORMAT and not _valid_email_addr_spec(nameid.get("value")):
-            issues.append(_issue("NAMEID_EMAIL_FORMAT_INVALID", "ERROR", scope, "NameID declares emailAddress format but the value is not an RFC 2822 addr-spec (local-part@domain).", observed=nameid.get("value"), expected="local-part@domain", standard="SAML Core 2.0 §8.3.2"))
-        if fmt == ENTITY_FORMAT:
-            issues.extend(_entity_identifier_issues(nameid.get("value"), nameid, scope, "NAMEID"))
-        if fmt in {PERSISTENT_FORMAT, TRANSIENT_FORMAT} and nameid.get("value") and len(nameid.get("value")) > 256:
-            issues.append(_issue("NAMEID_LENGTH_EXCEEDED", "ERROR", scope, "Persistent/transient NameID exceeds the 256 character limit.", observed=len(nameid.get("value")), expected="<= 256", standard="SAML Core 2.0 §8.3.7/§8.3.8"))
 
         if req:
             nip = req.get("name_id_policy") or {}
@@ -594,8 +589,8 @@ def validate_saml(
                 if not subject.get("encrypted_id_present"):
                     issues.append(_issue("NAMEIDPOLICY_ENCRYPTED_NOT_SATISFIED", "ERROR", scope, "AuthnRequest requested encrypted NameID but Assertion does not contain EncryptedID.", expected="EncryptedID", standard="SAML Approved Errata E15"))
             elif requested_fmt and requested_fmt not in {UNSPECIFIED_FORMAT} and nameid.get("value"):
-                if fmt != requested_fmt:
-                    issues.append(_issue("NAMEIDPOLICY_FORMAT_MISMATCH", "ERROR", scope, "Returned NameID Format does not match AuthnRequest NameIDPolicy.", observed=fmt, expected=requested_fmt, standard="SAML Approved Errata E15"))
+                if (fmt or UNSPECIFIED_FORMAT) != requested_fmt:
+                    issues.append(_issue("NAMEIDPOLICY_RETURNED_FORMAT_MISMATCH", "ERROR", scope, "Returned NameID Format does not match AuthnRequest NameIDPolicy.", observed=fmt or UNSPECIFIED_FORMAT, expected=requested_fmt, standard="SAML Core 2.0 NameIDPolicy + Approved Errata E15"))
                 requested_spq = nip.get("SPNameQualifier")
                 if requested_spq and nameid.get("sp_name_qualifier") != requested_spq:
                     issues.append(_issue("NAMEIDPOLICY_SPNAMEQUALIFIER_MISMATCH", "ERROR", scope, "Returned NameID SPNameQualifier does not match AuthnRequest NameIDPolicy.", observed=nameid.get("sp_name_qualifier"), expected=requested_spq, standard="SAML Approved Errata E15"))
