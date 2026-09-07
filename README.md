@@ -4,7 +4,7 @@
 
 Local troubleshooting toolkit for SAML/SSO, protocol validation, metadata analysis, log files, anonymization, support writing and coding assistance.
 
-**Current version:** `0.10.1`
+**Current version:** `0.10.2`
 
 The project is designed for local-first technical support workflows. Deterministic parsers and validators handle protocol checks and structured extraction; local inference can be used for explanation, report drafting and coding assistance. Web access is isolated in a separate General Chat tab and is never used automatically by the Analyzer or local Assistant.
 
@@ -76,8 +76,28 @@ Pattern-based local pseudonymization for common sensitive values, including:
 - JWTs and Authorization headers
 - passwords, tokens, API keys and session identifiers
 - sensitive URL query parameters
+- Base64-encoded SAMLRequest / SAMLResponse payloads
+- HTTP-Redirect SAMLRequest payloads using URL-encoded Base64 + raw DEFLATE
 
-Stable pseudonyms are used within a single run so repeated values remain correlatable. The anonymizer is not a certified DLP product; generated output should still be reviewed before external sharing.
+For encoded SAML, the anonymizer follows the transport rather than treating Base64 as opaque text:
+
+```text
+Base64 / Redirect SAML
+        ↓
+decode (+ DEFLATE when required)
+        ↓
+anonymize the XML with the same per-run mapping
+        ↓
+recompress when required
+        ↓
+Base64 / URL encode again
+```
+
+Unrelated Base64 blobs are left unchanged unless they decode to recognizable SAML XML. Stable pseudonyms are used within a single run so repeated values remain correlatable across plaintext logs and decoded SAML.
+
+Anonymizing fields inside signed SAML changes the signed bytes and therefore invalidates the original `DigestValue` / XML Signature. This is expected for a shareable anonymized copy; do not use the anonymized copy to verify the original signature.
+
+The anonymizer is not a certified DLP product; generated output should still be reviewed before external sharing.
 
 ### Local Assistant
 
@@ -98,7 +118,7 @@ A deliberately separate web-enabled chat. It receives no Analyzer or local Assis
 | Area | Local model | Web access | Intended data |
 |---|---:|---:|---|
 | Analyze | Yes | No | Logs, SAML traces, metadata, public signing certificates |
-| Anonymize log | No model required | No | Sensitive logs |
+| Anonymize log | No model required | No | Sensitive logs and SAML traces |
 | Assistant | Yes | No | Technical/support material |
 | General Chat | Yes | Yes | Non-sensitive public questions |
 
@@ -180,6 +200,7 @@ The update script refuses to overwrite tracked local changes. Commit or stash th
 source .venv/bin/activate
 PYTHONPATH=. python tests/test_analyzers.py
 PYTHONPATH=. python tests/test_signature_validation.py
+PYTHONPATH=. python tests/test_anonymizer_saml.py
 ```
 
 The tests use synthetic SAML and log data only. Signature tests generate an ephemeral synthetic key and certificate at runtime; no private key material is stored in the repository.
@@ -197,6 +218,7 @@ The tests use synthetic SAML and log data only. Signature tests generate an ephe
 │   └── saml_validation.py
 ├── tests/
 │   ├── test_analyzers.py
+│   ├── test_anonymizer_saml.py
 │   └── test_signature_validation.py
 ├── .github/workflows/
 │   └── tests.yml
@@ -212,4 +234,4 @@ The tests use synthetic SAML and log data only. Signature tests generate an ephe
 
 ## Versioning
 
-The project uses semantic versioning while it is pre-1.0. New functionality normally increments the minor version; compatibility fixes and focused improvements to an existing feature increment the patch version (`0.10.0` → `0.10.1`).
+The project uses semantic versioning while it is pre-1.0. New functionality normally increments the minor version; compatibility fixes and focused improvements to an existing feature increment the patch version (`0.10.1` → `0.10.2`).

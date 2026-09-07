@@ -2,6 +2,25 @@
 
 All notable changes to this project are documented here.
 
+## [0.10.2] - 2026-09-07
+
+### Fixed
+
+- Base64-encoded `SAMLResponse` and `SAMLRequest` values are now decoded, anonymized as XML, and encoded again
+- HTTP-Redirect SAML payloads using URL-encoded Base64 + raw DEFLATE are decompressed, anonymized, recompressed and re-encoded
+- unrelated Base64 blobs are left unchanged unless they decode to recognizable SAML XML
+- anonymization remains deterministic across plaintext and encoded SAML content in the same run
+
+### Added
+
+- encoded SAML transport diagnostics in anonymizer output
+- explicit warning that anonymizing signed SAML content invalidates the original XML Signature/DigestValue
+- regression coverage for standalone Base64 SAMLResponse, URL/form SAMLResponse and Redirect-binding SAMLRequest
+
+### Changed
+
+- version bumped to `0.10.2`
+
 ## [0.10.1] - 2026-09-07
 
 ### Added
