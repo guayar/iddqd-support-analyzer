@@ -149,8 +149,43 @@ case_cross_document = analyze_saml_input('\n'.join([REQUEST, bad_cross_response,
 codes = {f['code'] for f in case_cross_document['findings']}
 assert 'RESPONSE_DESTINATION_REQUEST_ACS_MISMATCH' in codes
 assert 'RESPONSE_DESTINATION_SP_ACS_MISMATCH' in codes
+assert 'RESPONSE_DESTINATION_MISMATCH' in codes
 assert 'AUDIENCE_SP_ENTITYID_MISMATCH' in codes
 assert 'BEARER_RECIPIENT_ACS_MISMATCH' in codes
+
+# Destination omitted vs empty vs match vs mismatch must not collapse.
+resp_omitted = RESPONSE.replace(' Destination="https://sp.example/acs"', '', 1)
+codes_omitted = {f['code'] for f in analyze_saml_input('\n'.join([REQUEST, resp_omitted, SP_METADATA]))['findings']}
+assert 'RESPONSE_DESTINATION_EMPTY' not in codes_omitted
+assert 'RESPONSE_DESTINATION_MISMATCH' not in codes_omitted
+assert 'RESPONSE_DESTINATION_NOT_CHECKED' in codes_omitted
+
+resp_empty = RESPONSE.replace('Destination="https://sp.example/acs"', 'Destination=""', 1)
+codes_empty = {f['code'] for f in analyze_saml_input('\n'.join([REQUEST, resp_empty, SP_METADATA]))['findings']}
+assert 'RESPONSE_DESTINATION_EMPTY' in codes_empty
+assert 'RESPONSE_DESTINATION_MATCH' not in codes_empty
+assert 'RESPONSE_DESTINATION_MISMATCH' not in codes_empty
+
+codes_match = {f['code'] for f in analyze_saml_input('\n'.join([REQUEST, RESPONSE, SP_METADATA]))['findings']}
+assert 'RESPONSE_DESTINATION_MATCH' in codes_match
+assert 'RESPONSE_DESTINATION_EMPTY' not in codes_match
+assert 'RESPONSE_DESTINATION_MISMATCH' not in codes_match
+
+# Empty Destination with a Recipient ACS is still an empty-Destination error, not a match.
+legacy_empty = RESPONSE.replace('Destination="https://sp.example/acs"', 'Destination=""', 1)
+legacy_empty = legacy_empty.replace(
+    'alice@example.com',
+    '492882615acf31c8096b627245d76ae53036c090',
+)
+legacy_empty = legacy_empty.replace(
+    'Recipient="https://sp.example/acs"',
+    'Recipient="https://pitbulk.no-ip.org/newonelogin/demo1/index.php?acs"',
+)
+legacy_result = analyze_saml_input(legacy_empty)
+legacy_codes = {f['code'] for f in legacy_result['findings']}
+assert 'RESPONSE_DESTINATION_EMPTY' in legacy_codes
+assert 'NAMEID_EMAIL_FORMAT_INVALID' in legacy_codes
+assert 'RESPONSE_DESTINATION_MATCH' not in legacy_codes
 
 # ID must not merely exist; it must be valid xs:ID/NCName syntax.
 bad_id = RESPONSE.replace('ID="_resp1"', 'ID="123 bad:id"', 1)

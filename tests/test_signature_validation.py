@@ -192,5 +192,8 @@ assert "RESPONSE_XML_SIGNATURE_VALID" in nested_codes
 assert "ASSERTION_XML_SIGNATURE_VALID" in nested_codes
 assert "ASSERTION_SIGNATURE_ALGORITHM_WEAK" in nested_codes
 assert "ASSERTION_DIGEST_ALGORITHM_WEAK" in nested_codes
+assert "RESPONSE_DESTINATION_EMPTY" in nested_codes
+assert "RESPONSE_XML_SIGNATURE_VALID" in nested_codes
+assert "ASSERTION_XML_SIGNATURE_VALID" in nested_codes
 
 print("SIGNATURE VALIDATION TESTS OK")

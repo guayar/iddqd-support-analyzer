@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## [0.10.9] - 2026-09-07
+
+### Fixed
+
+- `Destination=""` is reported as `RESPONSE_DESTINATION_EMPTY` instead of being treated as an absent optional attribute
+
+### Changed
+
+- version bumped to `0.10.9`
+
 ## [0.10.8] - 2026-09-07
 
 ### Fixed

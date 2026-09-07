@@ -84,6 +84,95 @@ def _valid_uri(value: str | None) -> bool:
         return False
 
 
+def _expected_response_acs(req, sp_acs_locations: list[str]) -> list[str]:
+    """ACS endpoints that can be used to verify Response Destination when present.
+
+    SubjectConfirmation Recipient is not treated as ACS configuration.
+    """
+    out: list[str] = []
+    for value in list(sp_acs_locations) + ([req.get("acs_url")] if req and req.get("acs_url") else []):
+        if value and value not in out:
+            out.append(value)
+    return out
+
+
+def _validate_response_destination(r: dict[str, Any], scope: str, expected_acs: list[str]) -> list[dict[str, Any]]:
+    """SAML Core §3.2.2: Destination is optional, but if present it must be the delivery location."""
+    dest = r.get("destination")
+    standard = "SAML Core 2.0 §3.2.2 Destination"
+    if dest is None:
+        return [
+            _issue(
+                "RESPONSE_DESTINATION_NOT_CHECKED",
+                "INFO",
+                scope,
+                "Response Destination attribute is absent. SAML Core treats Destination as optional, so delivery-location verification was not performed.",
+                expected=expected_acs or "receiving ACS endpoint if Destination is present",
+                standard=standard,
+            )
+        ]
+    if not str(dest).strip():
+        return [
+            _issue(
+                "RESPONSE_DESTINATION_EMPTY",
+                "ERROR",
+                scope,
+                "Response Destination attribute is present but empty.",
+                observed="",
+                expected="receiving ACS endpoint",
+                standard=standard,
+            )
+        ]
+    if not _valid_uri(dest):
+        return [
+            _issue(
+                "RESPONSE_DESTINATION_INVALID",
+                "ERROR",
+                scope,
+                "Destination is not a valid URI.",
+                observed=dest,
+                expected="receiving ACS endpoint URI",
+                standard=standard,
+            )
+        ]
+    if not expected_acs:
+        return [
+            _issue(
+                "RESPONSE_DESTINATION_NOT_CHECKED",
+                "INFO",
+                scope,
+                "Response Destination is present, but this run has no ACS/receiving-endpoint context to compare it against.",
+                observed=dest,
+                expected="SP ACS or AuthnRequest AssertionConsumerServiceURL",
+                standard=standard,
+                note="Recipient in SubjectConfirmationData is not used as ACS configuration.",
+            )
+        ]
+    if dest in expected_acs:
+        return [
+            _issue(
+                "RESPONSE_DESTINATION_MATCH",
+                "INFO",
+                scope,
+                "Response Destination matches the expected receiving ACS endpoint.",
+                observed=dest,
+                expected=expected_acs,
+                standard=standard,
+            )
+        ]
+    return [
+        _issue(
+            "RESPONSE_DESTINATION_MISMATCH",
+            "ERROR",
+            scope,
+            "Response Destination does not match the expected receiving ACS endpoint.",
+            observed=dest,
+            expected=expected_acs,
+            standard=standard,
+        )
+    ]
+
+
 def _valid_xs_id(value: str | None) -> bool:
     if not value or ":" in value or any(ch.isspace() for ch in value):
         return False
@@ -445,8 +534,6 @@ def validate_saml(
             else:
                 if not (r.get("assertions") or []) and not r.get("encrypted_assertion_count"):
                     issues.append(_issue("SUCCESS_RESPONSE_NO_ASSERTION", "ERROR", scope, "Successful Web Browser SSO Response must contain at least one Assertion.", expected=">= 1 Assertion", standard="SAML Profiles 2.0 §4.1.4.2"))
-        if r.get("destination") and not _valid_uri(r.get("destination")):
-            issues.append(_issue("RESPONSE_DESTINATION_INVALID", "ERROR", scope, "Destination is not a valid URI.", observed=r.get("destination"), standard="SAML Core 2.0 §3.2.2"))
         if r.get("consent") and not _valid_uri(r.get("consent")):
             issues.append(_issue("RESPONSE_CONSENT_INVALID", "ERROR", scope, "Consent is not a valid URI.", observed=r.get("consent"), standard="SAML Core 2.0 §3.2.2 / §8.4"))
         for nested_code in (r.get("status_codes") or [])[1:]:
@@ -845,6 +932,9 @@ def validate_saml(
         issues.append(_issue("RESPONSE_DESTINATION_REQUEST_ACS_MISMATCH", "ERROR", "Response", "Response Destination does not match the ACS URL requested by the AuthnRequest.", observed=resp.get("destination"), expected=req.get("acs_url"), standard="SAML destination/recipient validation for Web Browser SSO"))
 
     if resp:
+        expected_acs = _expected_response_acs(req, sp_acs_locations)
+        for ri, r in enumerate(responses, 1):
+            issues.extend(_validate_response_destination(r, f"Response #{ri}", expected_acs))
         if sp_acs_locations and resp.get("destination") and resp.get("destination") not in sp_acs_locations:
             issues.append(_issue("RESPONSE_DESTINATION_SP_ACS_MISMATCH", "ERROR", "Response", "Response Destination is not one of the ACS endpoints registered in supplied SP metadata.", observed=resp.get("destination"), expected=sp_acs_locations, standard="SAML Core Destination processing + SAML Metadata 2.0"))
         response_issuer = _issuer_value(resp.get("issuer"))
