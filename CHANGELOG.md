@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented here.
 
+## [0.10.3] - 2026-09-07
+
+### Fixed
+
+- decoded SAML is now anonymized as an XML tree instead of by generic URL/domain regexes
+- standard XML, SAML and XMLDSig namespace/algorithm URIs such as `www.w3.org` are preserved
+- SAML `ID`, `InResponseTo` and XMLDSig same-document `Reference URI="#..."` values are pseudonymized consistently without repairing pre-existing mismatches
+- `NameID`, `AttributeValue`, endpoints, `SessionIndex` and `SubjectLocality` values are anonymized structurally
+- identifying X.509 certificates embedded in SAML are replaced with parseable synthetic certificates rather than being leaked or replaced by invalid text
+- `SignatureValue` and `DigestValue` are replaced in the anonymized copy because modification of signed SAML invalidates the original signature by design
+
+### Added
+
+- structure-aware anonymization for raw standalone SAML XML as well as Base64/Redirect payloads
+- RelayState pseudonymization
+- regression tests covering standard URI preservation, SAML ID/reference correlation, attributes, certificates, signature/digest values and raw/Base64 SAML
+
+### Changed
+
+- direct `lxml` and `cryptography` dependencies are declared explicitly because the anonymizer now parses XML safely and generates synthetic X.509 certificates
+- version bumped to `0.10.3`
+
 ## [0.10.2] - 2026-09-07
 
 ### Fixed
