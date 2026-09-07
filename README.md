@@ -4,7 +4,7 @@
 
 Local troubleshooting toolkit for SAML/SSO, protocol validation, metadata analysis, log files, anonymization, support writing and coding assistance.
 
-**Current version:** `0.10.7`
+**Current version:** `0.10.8`
 
 The project is designed for local-first technical support workflows. Deterministic parsers and validators handle protocol checks and structured extraction; local inference can be used for explanation, report drafting and coding assistance. Web access is isolated in a separate General Chat tab and is never used automatically by the Analyzer or local Assistant.
 
@@ -44,6 +44,8 @@ RESPONSE_SIGNATURE_REFERENCE_URI_INVALID
 RESPONSE_XML_SIGNATURE_INVALID
 RESPONSE_XML_SIGNATURE_VALID
 RESPONSE_XML_SIGNATURE_VALID_SUPPLIED_CERT
+ASSERTION_SIGNATURE_ALGORITHM_WEAK
+ASSERTION_DIGEST_ALGORITHM_WEAK
 RESPONSE_SIGNING_CERT_MATCHES_METADATA
 ```
 

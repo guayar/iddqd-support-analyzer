@@ -5,7 +5,7 @@ import hashlib
 import re
 from typing import Any
 
-from .saml import NS, _extract_candidates
+from .saml import NS, _extract_candidates, _skip_xml_prologue
 
 DS_NS = "http://www.w3.org/2000/09/xmldsig#"
 MD_NS = "urn:oasis:names:tc:SAML:2.0:metadata"
@@ -158,7 +158,7 @@ def _parse_lxml_documents(text: str):
         start = candidate.find("<")
         if start < 0:
             continue
-        xml = candidate[start:].strip()
+        xml = _skip_xml_prologue(candidate[start:].strip())
         try:
             root = etree.fromstring(xml.encode("utf-8"))
         except Exception:
@@ -237,9 +237,81 @@ def _embedded_certs(element: Any) -> list[dict[str, str]]:
     return out
 
 
+def _is_sha1_algorithm(uri: str | None) -> bool:
+    if not uri:
+        return False
+    return "sha1" in uri.lower()
+
+
+def _algorithm_quality_findings(obj: dict[str, Any], scope: str, prefix: str) -> list[dict[str, Any]]:
+    """Warn about weak algorithms without treating them as cryptographic failure."""
+    findings: list[dict[str, Any]] = []
+    sig = obj.get("signature") or {}
+    method = sig.get("signature_method")
+    if _is_sha1_algorithm(method):
+        findings.append(
+            _issue(
+                f"{prefix}_SIGNATURE_ALGORITHM_WEAK",
+                "WARNING",
+                scope,
+                "SHA-1 based signature algorithms are deprecated/weak for modern deployments.",
+                observed=method,
+                expected="rsa-sha256 or stronger",
+                standard="Security hardening (not a cryptographic signature failure)",
+                note="This does not mean the SignatureValue failed verification.",
+            )
+        )
+    for digest in sig.get("digest_methods") or []:
+        if _is_sha1_algorithm(digest):
+            findings.append(
+                _issue(
+                    f"{prefix}_DIGEST_ALGORITHM_WEAK",
+                    "WARNING",
+                    scope,
+                    "SHA-1 digest algorithms are deprecated/weak for modern deployments.",
+                    observed=digest,
+                    expected="sha256 or stronger",
+                    standard="Security hardening (not a cryptographic signature failure)",
+                    note="This does not mean the DigestValue failed verification.",
+                )
+            )
+            break
+    return findings
+
+
+def _signature_config_for_crypto_check():
+    """Permit observed legacy SHA-1 only so cryptographic validity can be measured.
+
+    SignXML's default SignatureConfiguration rejects SHA-1. That is a policy
+    decision, not a proof that SignatureValue/DigestValue are wrong.
+    """
+    from signxml import DigestAlgorithm, SignatureConfiguration, SignatureMethod
+
+    default = SignatureConfiguration()
+    sha1_methods = frozenset(method for method in SignatureMethod if "SHA1" in method.name)
+    sha1_digests = frozenset(digest for digest in DigestAlgorithm if "SHA1" in digest.name)
+    return SignatureConfiguration(
+        require_x509=True,
+        location="./",
+        expect_references=1,
+        signature_methods=default.signature_methods | sha1_methods,
+        digest_algorithms=default.digest_algorithms | sha1_digests,
+        ignore_ambiguous_key_info=default.ignore_ambiguous_key_info,
+        default_reference_c14n_method=default.default_reference_c14n_method,
+    )
+
+
+def _is_algorithm_policy_error(exc: BaseException) -> bool:
+    message = str(exc).lower()
+    return (
+        "forbidden by configuration" in message
+        or "sha1-based algorithms are not supported" in message
+    )
+
+
 def _verify_with_cert(element: Any, cert_pem: str) -> tuple[bool, str | None]:
     try:
-        from signxml import XMLVerifier
+        from signxml import InvalidDigest, InvalidSignature, XMLVerifier
     except Exception as exc:
         return False, f"signxml unavailable: {exc}"
 
@@ -249,9 +321,14 @@ def _verify_with_cert(element: Any, cert_pem: str) -> tuple[bool, str | None]:
             x509_cert=cert_pem,
             id_attribute="ID",
             validate_schema=False,
+            expect_config=_signature_config_for_crypto_check(),
         )
         return True, None
+    except (InvalidSignature, InvalidDigest) as exc:
+        return False, str(exc)
     except Exception as exc:
+        if _is_algorithm_policy_error(exc):
+            return False, f"algorithm_policy: {exc}"
         return False, str(exc)
 
 
@@ -296,6 +373,7 @@ def _crypto_findings(text: str, result: dict[str, Any]) -> list[dict[str, Any]]:
         sig["metadata_signing_cert_fingerprints"] = trusted_fps
         sig["embedded_signing_cert_fingerprints"] = embedded_fps
         sig["crypto_verification"] = "NOT_CHECKED"
+        findings.extend(_algorithm_quality_findings(obj, scope, prefix))
 
         if element is None:
             findings.append(
@@ -360,18 +438,32 @@ def _crypto_findings(text: str, result: dict[str, Any]) -> list[dict[str, Any]]:
                             )
                         )
             else:
-                sig["crypto_verification"] = "INVALID_TRUSTED_METADATA"
-                findings.append(
-                    _issue(
-                        f"{prefix}_XML_SIGNATURE_INVALID",
-                        "ERROR",
-                        scope,
-                        "XML Signature could not be verified with any signing certificate from matching SAML metadata.",
-                        observed=last_error,
-                        expected=trusted_fps,
-                        standard="SAML Core 2.0 §5 + XML Signature",
+                policy_blocked = str(last_error or "").startswith("algorithm_policy:")
+                if policy_blocked:
+                    sig["crypto_verification"] = "NOT_CHECKED_ALGORITHM_POLICY"
+                    findings.append(
+                        _issue(
+                            f"{prefix}_SIGNATURE_CRYPTO_NOT_CHECKED_ALGORITHM_UNSUPPORTED",
+                            "WARNING",
+                            scope,
+                            "Cryptographic verification was not completed because the signature uses an algorithm the verifier cannot evaluate. This is not classified as a cryptographic signature failure.",
+                            observed=last_error,
+                            standard="XML Signature validation",
+                        )
                     )
-                )
+                else:
+                    sig["crypto_verification"] = "INVALID_TRUSTED_METADATA"
+                    findings.append(
+                        _issue(
+                            f"{prefix}_XML_SIGNATURE_INVALID",
+                            "ERROR",
+                            scope,
+                            "XML Signature could not be verified with any signing certificate from matching SAML metadata.",
+                            observed=last_error,
+                            expected=trusted_fps,
+                            standard="SAML Core 2.0 §5 + XML Signature",
+                        )
+                    )
             continue
 
         if embedded:
@@ -400,18 +492,32 @@ def _crypto_findings(text: str, result: dict[str, Any]) -> list[dict[str, Any]]:
                     )
                 )
             else:
-                sig["crypto_verification"] = "INVALID_EMBEDDED_CERT"
-                findings.append(
-                    _issue(
-                        f"{prefix}_XML_SIGNATURE_INVALID",
-                        "ERROR",
-                        scope,
-                        "XML Signature could not be verified with the certificate embedded in ds:KeyInfo.",
-                        observed=last_error,
-                        expected=embedded_fps,
-                        standard="XML Signature",
+                policy_blocked = str(last_error or "").startswith("algorithm_policy:")
+                if policy_blocked:
+                    sig["crypto_verification"] = "NOT_CHECKED_ALGORITHM_POLICY"
+                    findings.append(
+                        _issue(
+                            f"{prefix}_SIGNATURE_CRYPTO_NOT_CHECKED_ALGORITHM_UNSUPPORTED",
+                            "WARNING",
+                            scope,
+                            "Cryptographic verification was not completed because the signature uses an algorithm the verifier cannot evaluate. This is not classified as a cryptographic signature failure.",
+                            observed=last_error,
+                            standard="XML Signature validation",
+                        )
                     )
-                )
+                else:
+                    sig["crypto_verification"] = "INVALID_EMBEDDED_CERT"
+                    findings.append(
+                        _issue(
+                            f"{prefix}_XML_SIGNATURE_INVALID",
+                            "ERROR",
+                            scope,
+                            "XML Signature could not be verified with the certificate embedded in ds:KeyInfo.",
+                            observed=last_error,
+                            expected=embedded_fps,
+                            standard="XML Signature",
+                        )
+                    )
             continue
 
         # Keep the base SIGNATURE_NOT_CRYPTO_VERIFIED warning in this case.

@@ -239,14 +239,6 @@ def _validate_signature_shape(sig: dict[str, Any] | None, scope: str, prefix: st
             standard="SAML XML Signature profile",
             note="This is a structural signature check only, not cryptographic validation.",
         ))
-    algorithms = [sig.get("signature_method")] + list(sig.get("digest_methods") or [])
-    if any(a and "sha1" in a.lower() for a in algorithms):
-        out.append(_issue(
-            f"{prefix}_WEAK_SHA1", "WARNING", scope,
-            "SHA-1 is used by the XML signature/digest and is obsolete for modern deployments.",
-            observed=[a for a in algorithms if a], expected="modern SHA-256 or stronger deployment policy",
-            standard="Security hardening (not a SAML schema violation)",
-        ))
     if "unparseable certificate" in (sig.get("x509_sha256_fingerprints") or []):
         out.append(_issue(f"{prefix}_X509_MALFORMED", "ERROR", scope, "Embedded X509Certificate could not be Base64/DER parsed.", standard="XML Signature / X.509 data integrity"))
     return out

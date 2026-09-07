@@ -2,6 +2,26 @@
 
 All notable changes to this project are documented here.
 
+## [0.10.8] - 2026-09-07
+
+### Fixed
+
+- cryptographically valid legacy RSA-SHA1 / SHA-1 XML Signatures are no longer reported as `XML_SIGNATURE_INVALID`; they verify as valid and emit separate weak-algorithm warnings
+
+### Changed
+
+- version bumped to `0.10.8`
+
+## [0.10.7] - 2026-09-07
+
+### Fixed
+
+- Auto-detect no longer treats Base64 SAML with an XML declaration as a log file
+
+### Changed
+
+- version bumped to `0.10.7`
+
 ## [0.10.6] - 2026-09-07
 
 ### Added

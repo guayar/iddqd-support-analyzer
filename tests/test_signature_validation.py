@@ -112,4 +112,85 @@ tampered_result = analyze_saml_input(tampered + "\n" + metadata)
 tampered_codes = {f["code"] for f in tampered_result["findings"]}
 assert "RESPONSE_XML_SIGNATURE_INVALID" in tampered_codes
 
+
+class LegacySha1Signer(XMLSigner):
+    def check_deprecated_methods(self):
+        return
+
+
+def sign_sha1(root, key, cert, reference_uri):
+    return LegacySha1Signer(
+        method=methods.enveloped,
+        signature_algorithm="rsa-sha1",
+        digest_algorithm="sha1",
+        c14n_algorithm="http://www.w3.org/2001/10/xml-exc-c14n#",
+    ).sign(
+        root,
+        key=key,
+        cert=cert.public_bytes(serialization.Encoding.PEM),
+        reference_uri=reference_uri,
+    )
+
+
+# Cryptographically valid RSA-SHA1 / SHA-1 must not be reported as INVALID.
+sha1_key, sha1_cert = make_cert()
+sha1_root = etree.fromstring(SAML_RESPONSE.encode())
+sha1_signed = etree.tostring(sign_sha1(sha1_root, sha1_key, sha1_cert, "#_resp-signed"), encoding="unicode")
+sha1_signed = '<?xml version="1.0"?>\r\n' + sha1_signed
+sha1_metadata = metadata_for(sha1_cert)
+
+sha1_trusted = analyze_saml_input(sha1_signed + "\n" + sha1_metadata)
+sha1_trusted_codes = {f["code"] for f in sha1_trusted["findings"]}
+assert "RESPONSE_XML_SIGNATURE_INVALID" not in sha1_trusted_codes
+assert "RESPONSE_XML_SIGNATURE_VALID" in sha1_trusted_codes
+assert "RESPONSE_SIGNATURE_ALGORITHM_WEAK" in sha1_trusted_codes
+assert "RESPONSE_DIGEST_ALGORITHM_WEAK" in sha1_trusted_codes
+assert "RESPONSE_WEAK_SHA1" not in sha1_trusted_codes
+sha1_trusted_resp = next(d for d in sha1_trusted["documents"] if d["type"] == "Response")
+assert sha1_trusted_resp["signature"]["crypto_verification"] == "VALID_TRUSTED_METADATA"
+
+sha1_embedded = analyze_saml_input(sha1_signed)
+sha1_embedded_codes = {f["code"] for f in sha1_embedded["findings"]}
+assert "RESPONSE_XML_SIGNATURE_INVALID" not in sha1_embedded_codes
+assert "RESPONSE_XML_SIGNATURE_VALID_EMBEDDED_CERT_ONLY" in sha1_embedded_codes
+assert "RESPONSE_SIGNATURE_ALGORITHM_WEAK" in sha1_embedded_codes
+assert "RESPONSE_DIGEST_ALGORITHM_WEAK" in sha1_embedded_codes
+sha1_embedded_resp = next(d for d in sha1_embedded["documents"] if d["type"] == "Response")
+assert sha1_embedded_resp["signature"]["crypto_verification"] == "VALID_EMBEDDED_CERT_UNTRUSTED"
+
+# Nested Response + Assertion signatures, both legacy SHA-1.
+SAML_ASSERTION = (
+    '<saml:Assertion xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_a-signed" Version="2.0" '
+    'IssueInstant="2026-09-07T08:00:01Z"><saml:Issuer>https://idp.example/entity</saml:Issuer>'
+    '<saml:Subject><saml:NameID Format="urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress">alice@example.com</saml:NameID>'
+    '<saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer">'
+    '<saml:SubjectConfirmationData Recipient="https://sp.example/acs" NotOnOrAfter="2099-09-07T08:05:00Z"/>'
+    '</saml:SubjectConfirmation></saml:Subject>'
+    '<saml:Conditions NotBefore="2026-09-07T07:59:00Z" NotOnOrAfter="2099-09-07T08:05:00Z">'
+    '<saml:AudienceRestriction><saml:Audience>https://sp.example/entity</saml:Audience></saml:AudienceRestriction>'
+    '</saml:Conditions></saml:Assertion>'
+)
+nested_key, nested_cert = make_cert()
+signed_assertion = sign_sha1(etree.fromstring(SAML_ASSERTION.encode()), nested_key, nested_cert, "#_a-signed")
+response_with_assertion = etree.fromstring(
+    '<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" '
+    'ID="_resp-nested" Version="2.0" Destination="" IssueInstant="2026-09-07T08:00:01Z">'
+    '<saml:Issuer>https://idp.example/entity</saml:Issuer>'
+    '<samlp:Status><samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></samlp:Status>'
+    '</samlp:Response>'
+)
+response_with_assertion.append(signed_assertion)
+signed_nested = etree.tostring(
+    sign_sha1(response_with_assertion, nested_key, nested_cert, "#_resp-nested"),
+    encoding="unicode",
+)
+nested_result = analyze_saml_input(signed_nested + "\n" + metadata_for(nested_cert))
+nested_codes = {f["code"] for f in nested_result["findings"]}
+assert "RESPONSE_XML_SIGNATURE_INVALID" not in nested_codes
+assert "ASSERTION_XML_SIGNATURE_INVALID" not in nested_codes
+assert "RESPONSE_XML_SIGNATURE_VALID" in nested_codes
+assert "ASSERTION_XML_SIGNATURE_VALID" in nested_codes
+assert "ASSERTION_SIGNATURE_ALGORITHM_WEAK" in nested_codes
+assert "ASSERTION_DIGEST_ALGORITHM_WEAK" in nested_codes
+
 print("SIGNATURE VALIDATION TESTS OK")
