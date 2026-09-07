@@ -95,6 +95,83 @@ CSS = """
 .psa-control {
     min-height: 128px !important;
 }
+#analyzer-mode {
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+}
+#analyzer-mode .label-wrap,
+#analyzer-mode .label-wrap > * {
+    justify-content: center !important;
+    text-align: center !important;
+    width: 100% !important;
+}
+#analyzer-mode .wrap {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    align-items: stretch !important;
+    justify-content: center !important;
+}
+#analyzer-mode label {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 8px !important;
+    flex: 0 0 auto !important;
+    min-height: 42px !important;
+    margin: 0 !important;
+    padding: 8px 12px !important;
+    border: 1px solid var(--border-color-primary) !important;
+    border-radius: 8px !important;
+    background: white !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    line-height: 1.2 !important;
+    box-shadow: none !important;
+    transform: none !important;
+}
+#analyzer-mode label > :where(*) + :where(*) {
+    margin: 0 !important;
+}
+#analyzer-mode label.selected {
+    background: var(--color-accent-soft, #fff4eb) !important;
+    border-color: var(--color-accent) !important;
+    color: inherit !important;
+}
+#analyzer-mode input[type="radio"] {
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    width: 16px !important;
+    height: 16px !important;
+    min-width: 16px !important;
+    min-height: 16px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    flex-shrink: 0 !important;
+    border: 2px solid #9ca3af !important;
+    border-radius: 50% !important;
+    background: white !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    position: relative !important;
+}
+#analyzer-mode input[type="radio"]:checked {
+    border-color: var(--color-accent) !important;
+    background-color: white !important;
+    background-image: none !important;
+}
+#analyzer-mode input[type="radio"]:checked::after {
+    content: "" !important;
+    width: 8px !important;
+    height: 8px !important;
+    border-radius: 50% !important;
+    background: var(--color-accent) !important;
+    position: absolute !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+}
 """ + f"""
 footer button.settings::before {{
     content: "v{APP_VERSION} · ";
@@ -159,6 +236,7 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                             value="Auto-detect",
                             label="Analyzer",
                             scale=1,
+                            elem_id="analyzer-mode",
                             elem_classes=["psa-control"],
                         )
 
