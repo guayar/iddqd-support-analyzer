@@ -1,0 +1,5 @@
+gradio>=6.0,<7
+requests>=2.32,<3
+defusedxml>=0.7,<1
+python-dateutil>=2.9,<3
+ddgs>=9.16,<10
