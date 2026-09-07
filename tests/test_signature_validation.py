@@ -56,7 +56,7 @@ key, cert = make_cert()
 signed_xml = sign_response(key, cert)
 metadata = metadata_for(cert)
 
-# Public-key verification: no private key is supplied to the analyzer.
+# Metadata-backed verification: no private key is supplied to the analyzer.
 valid = analyze_saml_input(signed_xml + "\n" + metadata)
 codes = {f["code"] for f in valid["findings"]}
 assert "RESPONSE_SIGNATURE_REFERENCE_URI_VALID" in codes
@@ -65,6 +65,32 @@ assert "RESPONSE_SIGNING_CERT_MATCHES_METADATA" in codes
 assert "RESPONSE_SIGNATURE_NOT_CRYPTO_VERIFIED" not in codes
 response = next(d for d in valid["documents"] if d["type"] == "Response")
 assert response["signature"]["crypto_verification"] == "VALID_TRUSTED_METADATA"
+
+# Standalone PEM certificate verification works without metadata.
+pem_cert = cert.public_bytes(serialization.Encoding.PEM)
+standalone = analyze_saml_input(signed_xml, signing_cert=pem_cert)
+standalone_codes = {f["code"] for f in standalone["findings"]}
+assert "RESPONSE_XML_SIGNATURE_VALID_SUPPLIED_CERT" in standalone_codes
+standalone_response = next(d for d in standalone["documents"] if d["type"] == "Response")
+assert standalone_response["signature"]["crypto_verification"] == "VALID_SUPPLIED_CERT"
+assert standalone["supplied_signing_certificates"]
+
+# DER .cer/.crt certificate bytes are supported as well.
+der_cert = cert.public_bytes(serialization.Encoding.DER)
+standalone_der = analyze_saml_input(signed_xml, signing_cert=der_cert)
+assert "RESPONSE_XML_SIGNATURE_VALID_SUPPLIED_CERT" in {f["code"] for f in standalone_der["findings"]}
+
+# A PEM certificate dropped into the normal Analyze file bundle is auto-detected.
+bundled = analyze_saml_input(signed_xml + "\n" + pem_cert.decode("ascii"))
+assert "RESPONSE_XML_SIGNATURE_VALID_SUPPLIED_CERT" in {f["code"] for f in bundled["findings"]}
+
+# Bare public keys are rejected with a useful diagnostic; use an X.509 cert instead.
+public_key_pem = key.public_key().public_bytes(
+    serialization.Encoding.PEM,
+    serialization.PublicFormat.SubjectPublicKeyInfo,
+)
+bare_key = analyze_saml_input(signed_xml, signing_cert=public_key_pem)
+assert "SUPPLIED_SIGNING_CERTIFICATE_INVALID" in {f["code"] for f in bare_key["findings"]}
 
 # SAML Core §5.4.2 requires URI="#<root-ID>", not a full URL.
 bad_reference = signed_xml.replace(
