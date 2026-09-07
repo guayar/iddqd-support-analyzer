@@ -4,7 +4,7 @@
 
 Local troubleshooting toolkit for SAML/SSO, protocol validation, metadata analysis, log files, anonymization, support writing and coding assistance.
 
-**Current version:** `0.10.3`
+**Current version:** `0.10.4`
 
 The project is designed for local-first technical support workflows. Deterministic parsers and validators handle protocol checks and structured extraction; local inference can be used for explanation, report drafting and coding assistance. Web access is isolated in a separate General Chat tab and is never used automatically by the Analyzer or local Assistant.
 
@@ -78,7 +78,7 @@ Local deterministic pseudonymization for logs and SAML traces, including:
 - sensitive URL query parameters and RelayState
 - Base64-encoded SAMLRequest / SAMLResponse payloads
 - HTTP-Redirect SAMLRequest payloads using URL-encoded Base64 + raw DEFLATE
-- raw standalone SAML XML
+- raw standalone SAML XML, tracer bundles and SAML XML embedded in logs
 
 For encoded SAML, the anonymizer follows the transport rather than treating Base64 as opaque text:
 
@@ -257,4 +257,4 @@ The tests use synthetic SAML and log data only. Signature and anonymization test
 
 ## Versioning
 
-The project uses semantic versioning while it is pre-1.0. New functionality normally increments the minor version; compatibility fixes and focused improvements to an existing feature increment the patch version (`0.10.2` → `0.10.3`).
+The project uses semantic versioning while it is pre-1.0. New functionality normally increments the minor version; compatibility fixes and focused improvements to an existing feature increment the patch version (`0.10.3` → `0.10.4`).

@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## [0.10.4] - 2026-09-07
+
+### Fixed
+
+- SAML tracer bundles and SAML XML embedded in logs are anonymized structurally even when the whole paste is not one well-formed XML document
+- SAML `ID` / `InResponseTo` values in those pastes are no longer left in clear text after a failed whole-input XML parse
+
+### Changed
+
+- version bumped to `0.10.4`
+
 ## [0.10.3] - 2026-09-07
 
 ### Fixed

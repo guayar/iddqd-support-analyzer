@@ -156,4 +156,24 @@ assert "http://www.w3.org/2001/XMLSchema" in log_result
 assert "private.customer.example" not in log_result
 assert "10.1.2.3" not in log_result
 
+# A SAML-tracer paste is several XML documents, not one well-formed tree. Structural
+# anonymization must still run, or identifiers inside the XML leak.
+from tests.test_anonymizer_saml import REQUEST as AUTH_REQUEST, RESPONSE as AUTH_RESPONSE
+
+bundle = AUTH_REQUEST + "\n" + AUTH_RESPONSE.replace('ID="_resp1"', 'ID="_resp1" InResponseTo="_req1"', 1)
+bundle_result = anonymize_text(bundle)
+assert bundle_result["structured_saml_payloads_anonymized"] == 2
+assert 'ID="_req1"' not in bundle_result["text"]
+assert 'ID="_resp1"' not in bundle_result["text"]
+assert "alice.smith@customer.example.com" not in bundle_result["text"]
+assert 'InResponseTo="SAML_ID_001"' in bundle_result["text"]
+assert bundle_result["text"].count("SAML_ID_001") >= 2
+
+wrapped = "2026-09-07 ERROR login failed\n" + AUTH_RESPONSE + "\nINFO done"
+wrapped_result = anonymize_text(wrapped)
+assert wrapped_result["structured_saml_payloads_anonymized"] == 1
+assert 'ID="_resp1"' not in wrapped_result["text"]
+assert "alice.smith@customer.example.com" not in wrapped_result["text"]
+assert "2026-09-07 ERROR login failed" in wrapped_result["text"]
+
 print("SAML ANONYMIZER TESTS OK")

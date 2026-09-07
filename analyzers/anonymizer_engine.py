@@ -95,6 +95,15 @@ SAML_ASSERTION_NS = "urn:oasis:names:tc:SAML:2.0:assertion"
 SAML_PROTOCOL_NS = "urn:oasis:names:tc:SAML:2.0:protocol"
 SAML_METADATA_NS = "urn:oasis:names:tc:SAML:2.0:metadata"
 DS_NS = "http://www.w3.org/2000/09/xmldsig#"
+SAML_DOCUMENT_NAMES = (
+    "EntitiesDescriptor",
+    "EntityDescriptor",
+    "AuthnRequest",
+    "LogoutRequest",
+    "LogoutResponse",
+    "Response",
+    "Assertion",
+)
 
 
 @dataclass
@@ -510,6 +519,47 @@ def _anonymize_saml_xml(xml: str, mapper: _Mapper) -> tuple[str, bool, dict[str,
     return output, True, stats
 
 
+def _embedded_saml_spans(text: str) -> list[tuple[int, int]]:
+    """Return non-nested spans of complete SAML XML documents inside mixed text."""
+    found: list[tuple[int, int]] = []
+    for name in SAML_DOCUMENT_NAMES:
+        pattern = re.compile(
+            rf"<(?:[A-Za-z_][\w.-]*:)?{name}\b.*?</(?:[A-Za-z_][\w.-]*:)?{name}>",
+            re.I | re.S,
+        )
+        found.extend((match.start(), match.end()) for match in pattern.finditer(text))
+    found.sort(key=lambda span: (span[0], -(span[1] - span[0])))
+    outer: list[tuple[int, int]] = []
+    for start, end in found:
+        if any(os <= start and end <= oe for os, oe in outer):
+            continue
+        outer.append((start, end))
+    return sorted(outer)
+
+
+def _anonymize_embedded_saml_xml(text: str, mapper: _Mapper) -> tuple[str, int]:
+    """Structurally anonymize SAML XML documents embedded in logs or multi-doc pastes.
+
+    A tracer bundle is not one well-formed XML document, so a whole-input parse fails.
+    Nested Assertion fragments inside a Response are left to the outer document.
+    """
+    spans = _embedded_saml_spans(text)
+    if not spans:
+        return text, 0
+    pieces: list[str] = []
+    last = 0
+    structured_count = 0
+    for start, end in spans:
+        pieces.append(text[last:start])
+        anonymized, structured, _stats = _anonymize_saml_xml(text[start:end], mapper)
+        pieces.append(anonymized)
+        if structured:
+            structured_count += 1
+        last = end
+    pieces.append(text[last:])
+    return "".join(pieces), structured_count
+
+
 def _anonymize_encoded_saml(text: str, mapper: _Mapper) -> tuple[str, int, set[str], int]:
     changed = 0
     transports: set[str] = set()
@@ -561,7 +611,7 @@ def anonymize_text(text: str) -> dict[str, Any]:
 
     SAML-aware behavior:
     - Base64/Redirect SAML is decoded, structurally anonymized, and re-encoded.
-    - raw standalone SAML XML is parsed and anonymized structurally.
+    - raw standalone SAML XML, tracer bundles and SAML XML embedded in logs are parsed and anonymized structurally.
     - standard SAML/XML/XMLDSig namespace and algorithm URIs are preserved.
     - IDs and their references are pseudonymized consistently.
     - NameID, AttributeValue, endpoints, SessionIndex, SubjectLocality and metadata contacts are anonymized.
@@ -569,29 +619,33 @@ def anonymize_text(text: str) -> dict[str, Any]:
     - SignatureValue/DigestValue are replaced because modifying signed XML invalidates the original signature anyway.
     """
     mapper = _Mapper()
+    encoded_saml_count = 0
+    structured_encoded_count = 0
+    saml_transports: set[str] = set()
+    structured_count = 0
+    attempted_raw_saml = False
 
     stripped = text.strip()
-    raw_saml_structured = False
-    raw_saml_count = 0
     if _looks_like_saml_xml(stripped) and stripped.startswith("<"):
+        attempted_raw_saml = True
         saml_out, structured, _stats = _anonymize_saml_xml(stripped, mapper)
         if structured:
             left = text[: len(text) - len(text.lstrip())]
             right = text[len(text.rstrip()):]
             out = left + saml_out + right
-            raw_saml_structured = True
-            raw_saml_count = 1
+            structured_count = 1
         else:
             out = text
     else:
         out = text
 
-    if raw_saml_structured:
-        encoded_saml_count = 0
-        saml_transports: set[str] = set()
-        structured_encoded_count = 0
-    else:
+    if structured_count == 0:
         out, encoded_saml_count, saml_transports, structured_encoded_count = _anonymize_encoded_saml(out, mapper)
+        structured_count += structured_encoded_count
+        out, embedded_count = _anonymize_embedded_saml_xml(out, mapper)
+        structured_count += embedded_count
+        if embedded_count:
+            attempted_raw_saml = True
         out = _anonymize_patterns(out, mapper)
 
     limitations = [
@@ -599,11 +653,13 @@ def anonymize_text(text: str) -> dict[str, Any]:
         "SAML/XML protocol, namespace, binding, NameID-format, AuthnContext and XMLDSig algorithm URIs are preserved rather than treated as customer domains.",
         "Review the anonymized preview before external sharing; arbitrary extension elements or free-form business data may require additional rules.",
     ]
-    if encoded_saml_count or raw_saml_count:
+    if encoded_saml_count or structured_count:
         limitations.append(
             "SAML content was modified for privacy. Any original XML Signature/DigestValue is no longer cryptographically valid; signature/digest values and identifying X.509 certificates are replaced in the anonymized copy."
         )
-    if (encoded_saml_count and structured_encoded_count < encoded_saml_count) or (raw_saml_count and not raw_saml_structured):
+    if (encoded_saml_count and structured_encoded_count < encoded_saml_count) or (
+        attempted_raw_saml and structured_count == 0
+    ):
         limitations.append(
             "At least one SAML payload could not be parsed structurally and received fallback pattern-based anonymization; review it manually before sharing."
         )
@@ -615,6 +671,6 @@ def anonymize_text(text: str) -> dict[str, Any]:
         "replacements": sum(mapper.counts().values()),
         "encoded_saml_payloads_anonymized": encoded_saml_count,
         "encoded_saml_transports": sorted(saml_transports),
-        "structured_saml_payloads_anonymized": raw_saml_count + structured_encoded_count,
+        "structured_saml_payloads_anonymized": structured_count,
         "limitations": limitations,
     }
