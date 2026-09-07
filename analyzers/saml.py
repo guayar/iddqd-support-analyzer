@@ -23,6 +23,10 @@ NS = {
 }
 
 SAMLISH_ROOTS = {"AuthnRequest", "Response", "Assertion", "EntityDescriptor", "EntitiesDescriptor"}
+_SAML_ROOT_RE = re.compile(
+    r"<(?:[A-Za-z_][\w.-]*:)?(?:AuthnRequest|Response|Assertion|EntityDescriptor|EntitiesDescriptor)\b",
+    re.I,
+)
 
 
 def _local(tag: str) -> str:
@@ -237,6 +241,27 @@ def _extract_candidates(text: str) -> list[tuple[str, str]]:
     return out
 
 
+def _skip_xml_prologue(xml: str) -> str:
+    """Drop BOM, XML declaration and comments so the SAML root can be recognized."""
+    body = xml.lstrip("\ufeff \t\r\n")
+    for _ in range(8):
+        body = body.lstrip("\ufeff \t\r\n")
+        if body.startswith("<?"):
+            end = body.find("?>")
+            if end < 0:
+                break
+            body = body[end + 2 :]
+            continue
+        if body.startswith("<!--"):
+            end = body.find("-->")
+            if end < 0:
+                break
+            body = body[end + 3 :]
+            continue
+        break
+    return body.lstrip("\ufeff \t\r\n")
+
+
 def _parse_xml_detailed(candidate: str):
     start = candidate.find("<")
     if start < 0:
@@ -244,7 +269,8 @@ def _parse_xml_detailed(candidate: str):
     xml = candidate[start:]
     # Only classify parse errors as SAML/XML errors when the candidate actually
     # starts with a SAML document root. Generic tracer text may contain unrelated XML.
-    if not re.match(r"<(?:[A-Za-z_][\w.-]*:)?(?:AuthnRequest|Response|Assertion|EntityDescriptor|EntitiesDescriptor)\b", xml, re.I):
+    # HTTP-POST Base64 payloads often decode to `<?xml ...?><samlp:Response>`.
+    if not _SAML_ROOT_RE.match(_skip_xml_prologue(xml)):
         return None, None
     try:
         return ET.fromstring(xml), None
@@ -664,7 +690,7 @@ def analyze_saml_input(text: str) -> dict[str, Any]:
             if parse_error:
                 # A pasted bundle of several complete XML documents is expected to
                 # fail as one XML document; embedded documents are extracted below.
-                roots = re.findall(r"<(?:[A-Za-z_][\w.-]*:)?(?:AuthnRequest|Response|Assertion|EntityDescriptor|EntitiesDescriptor)\b", candidate, re.I)
+                roots = _SAML_ROOT_RE.findall(candidate)
                 if not (source == "input" and len(roots) > 1):
                     item = {"source": source, "error": parse_error}
                     if item not in parse_failures:

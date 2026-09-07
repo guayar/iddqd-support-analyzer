@@ -95,25 +95,28 @@ CSS = """
 .psa-control {
     min-height: 128px !important;
 }
-#analyzer-mode {
+.psa-mode {
     display: flex !important;
     flex-direction: column !important;
-    justify-content: center !important;
-}
-#analyzer-mode .label-wrap,
-#analyzer-mode .label-wrap > * {
+    align-items: center !important;
     justify-content: center !important;
     text-align: center !important;
-    width: 100% !important;
 }
-#analyzer-mode .wrap {
+.psa-mode [data-testid="block-info"] {
+    display: block !important;
+    width: 100% !important;
+    text-align: center !important;
+    margin: 0 0 8px 0 !important;
+}
+.psa-mode .wrap {
     display: flex !important;
     flex-wrap: wrap !important;
     gap: 8px !important;
     align-items: stretch !important;
     justify-content: center !important;
+    width: 100% !important;
 }
-#analyzer-mode label {
+.psa-mode label {
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
@@ -131,15 +134,15 @@ CSS = """
     box-shadow: none !important;
     transform: none !important;
 }
-#analyzer-mode label > :where(*) + :where(*) {
+.psa-mode label > :where(*) + :where(*) {
     margin: 0 !important;
 }
-#analyzer-mode label.selected {
+.psa-mode label.selected {
     background: var(--color-accent-soft, #fff4eb) !important;
     border-color: var(--color-accent) !important;
     color: inherit !important;
 }
-#analyzer-mode input[type="radio"] {
+.psa-mode input[type="radio"] {
     appearance: none !important;
     -webkit-appearance: none !important;
     width: 16px !important;
@@ -156,12 +159,12 @@ CSS = """
     box-shadow: none !important;
     position: relative !important;
 }
-#analyzer-mode input[type="radio"]:checked {
+.psa-mode input[type="radio"]:checked {
     border-color: var(--color-accent) !important;
     background-color: white !important;
     background-image: none !important;
 }
-#analyzer-mode input[type="radio"]:checked::after {
+.psa-mode input[type="radio"]:checked::after {
     content: "" !important;
     width: 8px !important;
     height: 8px !important;
@@ -236,8 +239,7 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                             value="Auto-detect",
                             label="Analyzer",
                             scale=1,
-                            elem_id="analyzer-mode",
-                            elem_classes=["psa-control"],
+                            elem_classes=["psa-control", "psa-mode"],
                         )
 
                     run = gr.Button("Analyze", variant="primary", elem_classes=["psa-primary"])

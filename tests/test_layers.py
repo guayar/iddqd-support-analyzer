@@ -1,4 +1,5 @@
 from pathlib import Path
+import base64
 
 from actions import analyze, anonymize
 from config import APP_VERSION
@@ -24,6 +25,12 @@ assert "# SAML / SSO analysis" in md
 assert "## AuthnRequest" in md
 assert result["summary"]["authn_requests"] == 1
 assert render_saml_report(result).startswith("# SAML / SSO analysis")
+
+declared_resp = '<?xml version="1.0"?>\r\n<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_resp1" Version="2.0" IssueInstant="2026-09-07T08:00:01Z"><saml:Issuer>https://idp.example/entity</saml:Issuer><samlp:Status><samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></samlp:Status></samlp:Response>'
+md, _raw, result = analyze(None, base64.b64encode(declared_resp.encode()).decode(), "Auto-detect")
+assert result["kind"] == "saml"
+assert result["summary"]["responses"] == 1
+assert "# SAML / SSO analysis" in md
 
 log_report = render_log_report({
     "filename": "app.log",

@@ -54,6 +54,13 @@ assert s2['summary']['responses'] == 1
 assert s2['documents'][0]['type'] == 'Response'
 assert 'Base64' in s2['documents'][0]['source']
 
+# Same payload with XML declaration and CRLF, as copied from many IdPs / tracers.
+declared = '<?xml version="1.0"?>\r\n' + RESPONSE
+b64_declared = base64.b64encode(declared.encode()).decode()
+assert looks_like_saml_input(b64_declared)
+s2b = analyze_saml_input(b64_declared)
+assert s2b['summary']['responses'] == 1
+
 # HTTP-Redirect style URL-encoded Base64 raw-DEFLATE AuthnRequest.
 compressor = zlib.compressobj(wbits=-15)
 deflated = compressor.compress(REQUEST.encode()) + compressor.flush()
