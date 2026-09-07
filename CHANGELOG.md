@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented here.
 
+## [0.10.0] - 2026-09-07
+
+### Added
+
+- cryptographic SAML XML Signature verification using public X.509 certificates
+- signature verification against matching SP / IdP metadata signing certificates
+- fallback cryptographic verification with an embedded `ds:KeyInfo` certificate, explicitly marked as untrusted when metadata is unavailable
+- strict SAML Core §5.4.2 `ds:Reference` validation: exactly one Reference and `URI="#<signed-root-ID>"`
+- certificate fingerprint comparison between signed messages and SAML metadata
+- synthetic signature, tampering and Reference URI regression tests
+
+### Changed
+
+- signature presence is no longer treated as equivalent to successful verification
+- version bumped to `0.10.0`
+
 ## [0.9.0] - 2026-09-07
 
 ### Added
