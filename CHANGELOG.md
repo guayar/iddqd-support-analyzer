@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## [0.11.15] - 2026-09-08
+
+### Fixed
+
+- log timestamps inside brackets, two-digit years, and extra tokens after the clock (for example `[09/01/26 14:04:46 healthCheck]`) are recognized as record boundaries; `time_range` is filled only when day/month order is unambiguous
+- Assistant and General Chat prompt stay in the viewport instead of sitting below a fixed 480px transcript
+
+### Changed
+
+- version bumped to `0.11.15`
+
 ## [0.11.14] - 2026-09-08
 
 ### Fixed

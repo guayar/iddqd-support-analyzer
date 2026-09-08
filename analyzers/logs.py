@@ -3,16 +3,20 @@ from __future__ import annotations
 import collections
 import re
 from datetime import datetime
-from typing import Any
+from typing import Any, NamedTuple
 
-from dateutil import parser as dateparser
-
-TS_PATTERNS = [
-    re.compile(r"(?P<ts>\d{4}-\d{2}-\d{2}[T ][0-2]\d:[0-5]\d:[0-5]\d(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?)"),
-    re.compile(r"(?P<ts>\d{4}/\d{2}/\d{2}[ T][0-2]\d:[0-5]\d:[0-5]\d(?:[.,]\d+)?)"),
-    re.compile(r"(?P<ts>\d{2}/\d{2}/\d{4}[ T][0-2]\d:[0-5]\d:[0-5]\d(?:[.,]\d+)?)"),
-    re.compile(r"(?P<ts>\d{2}-[A-Za-z]{3}-\d{4}[ T][0-2]\d:[0-5]\d:[0-5]\d(?:[.,]\d+)?)"),
-]
+_TIME = r"[0-2]\d:[0-5]\d:[0-5]\d(?:[.,]\d+)?"
+_TZ = r"(?:Z|[+-]\d{2}:?\d{2})?"
+_MON = r"Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec"
+_MONTH_NUM = {name.lower(): i for i, name in enumerate(_MON.split("|"), 1)}
+TS_TOKEN_RE = re.compile(
+    rf"(?P<iso>\d{{4}}-\d{{2}}-\d{{2}}[T ]{_TIME}{_TZ})"
+    rf"|(?P<ymd_slash>\d{{4}}/\d{{2}}/\d{{2}}[ T]{_TIME})"
+    rf"|(?P<dmy_mon>\d{{2}}-(?:{_MON})-\d{{4}}[ T]{_TIME})"
+    rf"|(?P<slash>\d{{2}}/\d{{2}}/(?:\d{{4}}|\d{{2}})[ T]{_TIME})"
+    rf"|(?P<syslog>(?:{_MON}) +\d{{1,2}}[ T]{_TIME})",
+    re.I,
+)
 LEVEL_NAMES = r"TRACE|DEBUG|INFO|WARN(?:ING)?|ERROR|FATAL|SEVERE|CRITICAL"
 ERROR_LEVELS = {"ERROR", "FATAL", "SEVERE", "CRITICAL"}
 BRACKET_RE = re.compile(rf"^\[(?P<level>{LEVEL_NAMES})\](?P<rest>.*)$", re.I)
@@ -49,17 +53,170 @@ INLINE_EXC_RE = re.compile(
 )
 
 
-def _parse_ts(line: str) -> datetime | None:
-    for pat in TS_PATTERNS:
-        m = pat.search(line)
-        if not m:
-            continue
-        raw = m.group("ts").replace(",", ".")
-        try:
-            return dateparser.parse(raw)
-        except Exception:
-            continue
+class _TsPolicy(NamedTuple):
+    dayfirst: bool | None
+    unamb: frozenset[tuple[int, int, int]]
+
+
+class _PrefixSpan:
+    def __init__(self, end: int):
+        self._end = end
+
+    def end(self, *_args) -> int:
+        return self._end
+
+
+def _expand_year(year: int) -> int:
+    if year >= 100:
+        return year
+    return 2000 + year if year < 70 else 1900 + year
+
+
+def _clock(raw: str) -> tuple[int, int, int, int]:
+    raw = raw.replace(",", ".")
+    raw = re.sub(r"(Z|[+-]\d{2}:?\d{2})$", "", raw, flags=re.I)
+    parts = raw.split(":")
+    hour, minute = int(parts[0]), int(parts[1])
+    sec = float(parts[2]) if len(parts) > 2 else 0.0
+    second = int(sec)
+    micro = int(round((sec - second) * 1_000_000))
+    if micro == 1_000_000:
+        second += 1
+        micro = 0
+    return hour, minute, second, micro
+
+
+def _combine(year: int, month: int, day: int, time_raw: str) -> datetime | None:
+    try:
+        hour, minute, second, micro = _clock(time_raw)
+        return datetime(year, month, day, hour, minute, second, micro)
+    except ValueError:
+        return None
+
+
+def _split_date_time(raw: str) -> tuple[str, str]:
+    raw = raw.strip()
+    if len(raw) > 10 and raw[10] == "T":
+        raw = raw.replace("T", " ", 1)
+    return raw.split(" ", 1)
+
+
+def _from_iso(raw: str) -> datetime | None:
+    s = raw.replace(",", ".")
+    if s.endswith(("Z", "z")):
+        s = s[:-1] + "+00:00"
+    s = re.sub(r"([+-]\d{2})(\d{2})$", r"\1:\2", s)
+    try:
+        return datetime.fromisoformat(s)
+    except ValueError:
+        return None
+
+
+def _datetime_from_match(m: re.Match[str], policy: _TsPolicy) -> datetime | None:
+    if m.group("iso"):
+        return _from_iso(m.group("iso"))
+    if m.group("ymd_slash"):
+        date, time = _split_date_time(m.group("ymd_slash"))
+        year, month, day = (int(x) for x in date.split("/"))
+        return _combine(year, month, day, time)
+    if m.group("dmy_mon"):
+        date, time = _split_date_time(m.group("dmy_mon"))
+        day_s, mon_s, year_s = date.split("-")
+        return _combine(int(year_s), _MONTH_NUM[mon_s[:3].lower()], int(day_s), time)
+    if m.group("syslog"):
+        return None
+    raw = m.group("slash")
+    if not raw:
+        return None
+    date, time = _split_date_time(raw)
+    a_s, b_s, y_s = date.split("/")
+    a, b, year = int(a_s), int(b_s), _expand_year(int(y_s))
+    if a < 1 or b < 1 or a > 31 or b > 31:
+        return None
+    if a > 12 and b > 12:
+        return None
+    if a > 12:
+        return _combine(year, b, a, time)
+    if b > 12:
+        return _combine(year, a, b, time)
+    dmy = _combine(year, b, a, time)
+    mdy = _combine(year, a, b, time)
+    if policy.dayfirst is True:
+        return dmy
+    if policy.dayfirst is False:
+        return mdy
+    in_dmy = dmy is not None and (dmy.year, dmy.month, dmy.day) in policy.unamb
+    in_mdy = mdy is not None and (mdy.year, mdy.month, mdy.day) in policy.unamb
+    if in_dmy and not in_mdy:
+        return dmy
+    if in_mdy and not in_dmy:
+        return mdy
     return None
+
+
+def _forced_slash_order(m: re.Match[str]) -> bool | None:
+    raw = m.group("slash")
+    if not raw:
+        return None
+    a_s, b_s, _y = _split_date_time(raw)[0].split("/")
+    a, b = int(a_s), int(b_s)
+    if a > 12 and b <= 12:
+        return True
+    if b > 12 and a <= 12:
+        return False
+    return None
+
+
+def _ts_policy(lines: list[str]) -> _TsPolicy:
+    unamb: set[tuple[int, int, int]] = set()
+    saw_dmy = False
+    saw_mdy = False
+    empty = _TsPolicy(None, frozenset())
+    for line in lines:
+        for m in TS_TOKEN_RE.finditer(line):
+            forced = _forced_slash_order(m)
+            if forced is True:
+                saw_dmy = True
+            elif forced is False:
+                saw_mdy = True
+            dt = _datetime_from_match(m, empty)
+            if dt is not None:
+                unamb.add((dt.year, dt.month, dt.day))
+    dayfirst: bool | None
+    if saw_dmy and not saw_mdy:
+        dayfirst = True
+    elif saw_mdy and not saw_dmy:
+        dayfirst = False
+    else:
+        dayfirst = None
+    return _TsPolicy(dayfirst, frozenset(unamb))
+
+
+def _parse_ts(line: str, policy: _TsPolicy | None = None) -> datetime | None:
+    pol = policy or _TsPolicy(None, frozenset())
+    for m in TS_TOKEN_RE.finditer(line):
+        dt = _datetime_from_match(m, pol)
+        if dt is None:
+            continue
+        if dt.tzinfo is not None:
+            dt = dt.replace(tzinfo=None)
+        return dt
+    return None
+
+
+def _timestamp_at_start(line: str) -> _PrefixSpan | None:
+    s = line.lstrip()
+    if s.startswith("["):
+        inner = s[1:]
+        m = TS_TOKEN_RE.match(inner)
+        if not m:
+            return None
+        close = inner.find("]")
+        if close < m.end():
+            return None
+        return _PrefixSpan(close + 2)
+    m = TS_TOKEN_RE.match(s)
+    return _PrefixSpan(m.end()) if m else None
 
 
 def _normalize_level(level: str) -> str:
@@ -72,15 +229,6 @@ def _code_list(text: str) -> list[str]:
     for pat in CODE_PATTERNS:
         found.extend(m.group(1).strip() for m in pat.finditer(text))
     return list(dict.fromkeys(found))
-
-
-def _timestamp_at_start(line: str) -> re.Match | None:
-    s = line.lstrip()
-    for pat in TS_PATTERNS:
-        m = pat.match(s)
-        if m:
-            return m
-    return None
 
 
 def log_record_prefix(line: str) -> dict[str, Any] | None:
@@ -292,8 +440,9 @@ def analyze_log_text(text: str, filename: str | None = None) -> dict[str, Any]:
     levels = collections.Counter()
     codes = collections.Counter()
 
+    policy = _ts_policy(lines)
     for line in lines:
-        ts = _parse_ts(line)
+        ts = _parse_ts(line, policy)
         if ts:
             timestamps.append(ts)
         rec = log_record_prefix(line)
@@ -357,6 +506,7 @@ def analyze_log_text(text: str, filename: str | None = None) -> dict[str, Any]:
         "incidents": groups[:100],
         "limitations": [
             "The analyzer groups multiline ERROR/FATAL/SEVERE/CRITICAL records, Java exception chains and Maven [ERROR] blocks using generic log heuristics.",
+            "Numeric dates such as 09/01/26 are treated as record boundaries; time_range is filled only when day/month order is unambiguous in this log.",
             "Product-specific message IDs can be added as optional profiles when representative log samples are available.",
         ],
     }

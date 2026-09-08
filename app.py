@@ -80,10 +80,15 @@ CSS = """
     border-radius: 8px !important;
     overflow: auto !important;
 }
+.psa-chat {
+    display: flex !important;
+    flex-direction: column !important;
+}
 #assistant-chat,
 #web-chat {
-    height: 480px !important;
-    min-height: 480px !important;
+    height: calc(100dvh - 28rem) !important;
+    min-height: 8rem !important;
+    max-height: calc(100dvh - 28rem) !important;
 }
 #paste-input textarea,
 #anon-paste textarea {

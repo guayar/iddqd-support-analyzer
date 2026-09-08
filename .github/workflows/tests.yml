@@ -29,6 +29,7 @@ jobs:
       - name: Run analyzer tests
         run: |
           PYTHONPATH=. python tests/test_log_incidents.py
+          PYTHONPATH=. python tests/test_log_timestamps.py
           PYTHONPATH=. python tests/test_analyzers.py
           PYTHONPATH=. python tests/test_signature_validation.py
           PYTHONPATH=. python tests/test_anonymizer_residual.py
