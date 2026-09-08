@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## [0.11.9] - 2026-09-08
+
+### Added
+
+- anonymizer maps customer Java packages (`com.` / `net.` that are not known vendors), Windows project roots, Spring Boot `started by` / `[AppName]` / `Starting ClassName`, and Maven artifact / `Building` names
+
+### Changed
+
+- domain matching uses an allowlisted TLD set so logger names like `org.springframework.boot` are not treated as hostnames
+- version bumped to `0.11.9`
+
 ## [0.11.8] - 2026-09-08
 
 ### Fixed

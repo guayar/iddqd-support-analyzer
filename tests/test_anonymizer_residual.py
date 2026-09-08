@@ -53,6 +53,32 @@ assert not any(
 )
 assert "api.customer.example.com" not in anonymize_text("https://api.customer.example.com/login")["text"]
 
+# Maven/Spring customer identifiers are mapped; stack frames stay readable.
+boot = r"""[INFO] -----------------< com.crt:customer-record-tailoring >------------------
+[INFO] Building CRT Backend 1.0.0
+>>> spring-boot:3.2.0:run (default-cli) > test-compile @ customer-record-tailoring >>>
+2026-06-16T13:34:06.336+05:30  INFO 29224 --- [CRT-Backend] [           main] com.crt.CrtApplication                   : Starting CrtApplication using Java 17.0.12 with PID 29224 (E:\CRT\target\classes started by Riya Vatyani in E:\CRT)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:323)
+	at com.crt.CrtApplication.main(CrtApplication.java:9)
+[ERROR] Failed to execute goal ... on project customer-record-tailoring: Process terminated
+"""
+anon = anonymize_text(boot)
+text = anon["text"]
+assert "org.springframework.boot.SpringApplication.run(SpringApplication.java:323)" in text
+assert "com.crt" not in text
+assert "customer-record-tailoring" not in text
+assert "CRT Backend" not in text
+assert "CRT-Backend" not in text
+assert "Riya Vatyani" not in text
+assert r"E:\CRT" not in text
+assert "PACKAGE_" in text
+assert "USER_" in text
+assert "PATH_" in text
+assert "APP_" in text
+assert any(row["type"] == "PACKAGE" and row["original"] == "com.crt" for row in anon["mapping"])
+assert any(row["type"] == "USER" and row["original"] == "Riya Vatyani" for row in anon["mapping"])
+assert "java.net.ConnectException" in anonymize_text("Caused by: java.net.ConnectException: Connection refused")["text"]
+
 # Residual scanner itself ignores placeholders and OASIS/W3C URIs.
 hits = scan_residual_leaks("EMAIL_001 and https://www.w3.org/2000/09/xmldsig# and java.lang.RuntimeException")
 assert hits == []

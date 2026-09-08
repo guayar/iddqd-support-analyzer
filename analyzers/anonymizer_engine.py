@@ -46,9 +46,48 @@ RELAYSTATE_RE = re.compile(
 )
 
 PACKAGE_PREFIXES = (
-    "java.", "javax.", "jakarta.", "org.", "com.", "net.", "io.", "sun.", "jdk.",
-    "python.", "urllib.", "requests.", "gradio.", "xml.", "saml.", "samlp.",
+    "java.", "javax.", "jakarta.", "sun.", "jdk.",
+    "org.springframework.", "org.apache.", "org.hibernate.", "org.slf4j.",
+    "org.eclipse.", "org.junit.", "org.w3c.", "org.xml.", "org.omg.",
+    "org.bouncycastle.", "org.yaml.",
+    "com.sun.", "com.fasterxml.", "com.google.", "com.mysql.", "com.zaxxer.",
+    "com.oracle.", "com.ibm.",
+    "io.netty.", "io.micrometer.", "io.undertow.", "io.lettuce.",
+    "net.bytebuddy.", "ch.qos.logback.",
+    "python.", "urllib.", "requests.", "gradio.",
+    "xml.", "saml.", "samlp.",
 )
+DNS_TLDS = {
+    "com", "org", "net", "io", "co", "us", "uk", "eu", "de", "fr", "nl", "pl",
+    "info", "biz", "app", "dev", "cloud", "xyz", "edu", "gov",
+    "local", "internal", "lan", "corp", "home", "test",
+}
+CUSTOMER_PACKAGE_RE = re.compile(
+    r"(?<!java\.)(?<!javax\.)\b(?P<pkg>(?:com|net)\.(?!sun\.|fasterxml\.|google\.|mysql\.|oracle\.|zaxxer\.|ibm\.|apple\.|microsoft\.|bytebuddy\.)"
+    r"[a-z][a-z0-9]{1,32})\b",
+    re.I,
+)
+STARTED_BY_RE = re.compile(
+    r"(?P<prefix>started by )(?P<name>.+?)(?P<mid> in )(?P<dir>\S+?)(?P<suffix>\))",
+    re.I,
+)
+WIN_ROOT_RE = re.compile(
+    r"(?P<root>[A-Za-z]:\\(?!(?:Windows|Program Files(?: \(x86\))?|ProgramData|Users)\\)[^\\\s\]]+)",
+    re.I,
+)
+SPRING_APP_RE = re.compile(r"(?P<prefix> --- \[)(?P<app>[^\]]+)(?P<suffix>\] \[)")
+MAVEN_ARTIFACT_RE = re.compile(
+    r"(?P<prefix>(?:on project |@ |:))(?P<art>[A-Za-z][A-Za-z0-9-]{2,})(?P<suffix>(?:\s|$|>|:|---|>>>|<<<))",
+)
+MAVEN_BUILDING_RE = re.compile(r"(?P<prefix>Building )(?P<name>.+?)(?P<suffix> \d+(?:\.\d+)+)")
+STARTING_CLASS_RE = re.compile(r"(?P<prefix>Starting )(?P<cls>[A-Z][A-Za-z0-9]+)(?P<suffix> using )")
+MAVEN_SKIP_ARTIFACTS = {
+    "run", "compile", "jar", "war", "ear", "test", "resources", "install", "package",
+    "deploy", "clean", "validate", "site", "help", "exec", "start", "test-compile",
+    "default-cli", "default-compile", "default-testcompile", "default-resources",
+    "testresources", "default-testresources", "pom", "info",
+}
+SPRING_THREAD_NAMES = {"main", "background", "system"}
 
 HOST_FIELD_RE = re.compile(
     r"(?P<prefix>\b(?:host(?:name)?|server|node|machine|gateway|gw|mx)\s*[:=]\s*)(?P<value>[A-Z0-9][A-Z0-9._-]{1,252})",
@@ -106,7 +145,7 @@ CODE_LAST_LABELS = {
 }
 
 PLACEHOLDER_RE = re.compile(
-    r"(?:DOMAIN|IP|EMAIL|HOST|SECRET|UUID|MAC|USER|URL|ENTITY|NAMEID|ATTR_VALUE|SAML_ID|SESSION|RELAYSTATE|ADDRESS|X509_CERT|SIGNATURE|DIGEST)_\d{3}",
+    r"(?:DOMAIN|IP|EMAIL|HOST|SECRET|UUID|MAC|USER|URL|ENTITY|NAMEID|ATTR_VALUE|SAML_ID|SESSION|RELAYSTATE|ADDRESS|X509_CERT|SIGNATURE|DIGEST|PACKAGE|PATH|APP)_\d{3}",
     re.I,
 )
 TEMPLATE_PLACEHOLDER_RE = re.compile(r"^\{[A-Za-z0-9_.:-]+\}$")
@@ -159,6 +198,11 @@ def _is_well_known_public_host(host: str) -> bool:
     return any(low.endswith(suffix) for suffix in PUBLIC_INFRA_HOST_SUFFIXES)
 
 
+def _is_vendor_package_root(pkg: str) -> bool:
+    low = (pkg or "").lower() + "."
+    return any(low.startswith(prefix) or prefix.startswith(low) for prefix in PACKAGE_PREFIXES)
+
+
 def _is_placeholder(value: str) -> bool:
     value = (value or "").strip()
     return bool(PLACEHOLDER_RE.fullmatch(value) or TEMPLATE_PLACEHOLDER_RE.fullmatch(value))
@@ -177,9 +221,8 @@ def _looks_like_dns_hostname(value: str) -> bool:
     tld = labels[-1].lower()
     if tld in CODE_LAST_LABELS:
         return False
-    if tld not in {"local", "internal", "lan", "corp", "home", "test"}:
-        if not (2 <= len(tld) <= 24 and tld.isalpha()):
-            return False
+    if tld not in DNS_TLDS:
+        return False
     if sum(1 for lab in labels if len(lab) == 1) >= 2:
         return False
     for lab in labels:
@@ -293,6 +336,71 @@ def _anonymize_patterns(text: str, mapper: _Mapper) -> str:
         return mapper.map("DOMAIN", value)
 
     out = DOMAIN_RE.sub(domain_repl, out)
+
+    def pkg_repl(m: re.Match[str]) -> str:
+        pkg = m.group("pkg")
+        if _is_placeholder(pkg) or _is_vendor_package_root(pkg):
+            return m.group(0)
+        return mapper.map("PACKAGE", pkg)
+
+    out = CUSTOMER_PACKAGE_RE.sub(pkg_repl, out)
+    for original, replacement in list(mapper.values.get("PACKAGE", {}).items()):
+        for sep in ("\\", "/"):
+            out = re.sub(re.escape(original.replace(".", sep)), replacement, out, flags=re.I)
+
+    def started_repl(m: re.Match[str]) -> str:
+        name = m.group("name")
+        directory = m.group("dir")
+        if not _is_placeholder(name):
+            name = mapper.map("USER", name)
+        if not _is_placeholder(directory):
+            directory = mapper.map("PATH", directory.rstrip("\\/"))
+        return m.group("prefix") + name + m.group("mid") + directory + m.group("suffix")
+
+    out = STARTED_BY_RE.sub(started_repl, out)
+
+    def win_root_repl(m: re.Match[str]) -> str:
+        root = m.group("root")
+        if _is_placeholder(root):
+            return m.group(0)
+        return mapper.map("PATH", root)
+
+    out = WIN_ROOT_RE.sub(win_root_repl, out)
+
+    def spring_app_repl(m: re.Match[str]) -> str:
+        app = m.group("app").strip()
+        low = app.lower()
+        if _is_placeholder(app) or low in SPRING_THREAD_NAMES:
+            return m.group(0)
+        if re.search(r"exec-\d+|nio-|scheduling-|http-nio", low):
+            return m.group(0)
+        return m.group("prefix") + mapper.map("APP", app) + m.group("suffix")
+
+    out = SPRING_APP_RE.sub(spring_app_repl, out)
+
+    def maven_art_repl(m: re.Match[str]) -> str:
+        art = m.group("art")
+        if _is_placeholder(art) or art.lower() in MAVEN_SKIP_ARTIFACTS:
+            return m.group(0)
+        return m.group("prefix") + mapper.map("APP", art) + m.group("suffix")
+
+    out = MAVEN_ARTIFACT_RE.sub(maven_art_repl, out)
+
+    def maven_building_repl(m: re.Match[str]) -> str:
+        name = m.group("name").strip()
+        if _is_placeholder(name) or not name:
+            return m.group(0)
+        return m.group("prefix") + mapper.map("APP", name) + m.group("suffix")
+
+    out = MAVEN_BUILDING_RE.sub(maven_building_repl, out)
+
+    def starting_class_repl(m: re.Match[str]) -> str:
+        cls = m.group("cls")
+        if _is_placeholder(cls):
+            return m.group(0)
+        return m.group("prefix") + mapper.map("APP", cls) + m.group("suffix")
+
+    out = STARTING_CLASS_RE.sub(starting_class_repl, out)
 
     def host_repl(m: re.Match[str]) -> str:
         value = m.group("value")

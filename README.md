@@ -4,7 +4,7 @@
 
 Local troubleshooting toolkit for SAML/SSO and log analysis. Optional anonymizer and local LLM chats.
 
-**Current version:** `0.11.8`
+**Current version:** `0.11.9`
 
 The core product is a local, deterministic SAML and log analyzer. It does not require Ollama. Optional modules (Anonymize, Assistant + General Chat) are enabled from the **Config** tab and load after a restart.
 
@@ -128,7 +128,7 @@ Unrelated Base64 blobs are left unchanged unless they decode to recognizable SAM
 
 Anonymizing fields inside signed SAML changes the signed bytes and therefore invalidates the original XML Signature. This is expected for a shareable anonymized copy; do not use the anonymized copy to verify the original signature.
 
-The anonymizer is not a certified DLP product; generated output should still be reviewed before external sharing, especially when custom SAML extension elements contain free-form business data. After each run a **residual leak scan** lists leftover emails, IPs, tokens, domains and user home paths that the first pass did not replace.
+The anonymizer is not a certified DLP product; generated output should still be reviewed before external sharing, especially when custom SAML extension elements contain free-form business data. After each run a **residual leak scan** lists leftover emails, IPs, tokens, domains and user home paths that the first pass did not replace. Java/Maven logs also replace customer packages, project roots, process user names, Spring app names and Maven artifact names; stack frames from Spring/Apache and `*.java` / `*.jar` names stay intact.
 
 ### Local Assistant (optional LLM module)
 
