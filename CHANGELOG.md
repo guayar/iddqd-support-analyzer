@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented here.
 
+## [0.11.0] - 2026-09-08
+
+### Added
+
+- optional Anonymize and LLM modules enabled from the Config tab (default is Analyze only)
+- Restart application control after module changes; refresh the browser after the UI disconnects
+- Assistant reads the current Analyze report automatically, with Clear analysis context; General Chat never receives that report
+
+### Removed
+
+- Analyze-tab chat ("Ask about this analysis")
+
+### Changed
+
+- version bumped to `0.11.0`
+
 ## [0.10.11] - 2026-09-07
 
 ### Fixed

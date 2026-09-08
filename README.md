@@ -2,11 +2,11 @@
 
 [![Tests](https://github.com/guayar/iddqd-support-analyzer/actions/workflows/tests.yml/badge.svg)](https://github.com/guayar/iddqd-support-analyzer/actions/workflows/tests.yml)
 
-Local troubleshooting toolkit for SAML/SSO, protocol validation, metadata analysis, log files, anonymization, support writing and coding assistance.
+Local troubleshooting toolkit for SAML/SSO and log analysis. Optional anonymizer and local LLM chats.
 
-**Current version:** `0.10.11`
+**Current version:** `0.11.0`
 
-The project is designed for local-first technical support workflows. Deterministic parsers and validators handle protocol checks and structured extraction; local inference can be used for explanation, report drafting and coding assistance. Web access is isolated in a separate General Chat tab and is never used automatically by the Analyzer or local Assistant.
+The core product is a local, deterministic SAML and log analyzer. It does not require Ollama. Optional modules (Anonymize, Assistant + General Chat) are enabled from the **Config** tab and load after a restart.
 
 ## Features
 
@@ -75,9 +75,9 @@ If only a certificate embedded in `ds:KeyInfo` is available, the analyzer can ve
 - `Caused by` chain extraction
 - first occurrence and representative samples
 
-### Anonymization
+### Anonymization (optional module)
 
-Local deterministic pseudonymization for logs and SAML traces, including:
+Enable **Anonymize** on the Config tab, then restart. Local deterministic pseudonymization for logs and SAML traces, including:
 
 - IPv4 / IPv6
 - hostnames and domains
@@ -130,7 +130,9 @@ Anonymizing fields inside signed SAML changes the signed bytes and therefore inv
 
 The anonymizer is not a certified DLP product; generated output should still be reviewed before external sharing, especially when custom SAML extension elements contain free-form business data.
 
-### Local Assistant
+### Local Assistant (optional LLM module)
+
+Enable **Assistant and General Chat** on the Config tab, then restart. Requires local Ollama.
 
 Separate local modes for:
 
@@ -138,31 +140,34 @@ Separate local modes for:
 - enterprise support mail drafting
 - Java / TypeScript / Python / Playwright coding help
 
-The Assistant has no web-search path.
+The Assistant has no web-search path. It automatically receives the current Analyze report. Use **Clear analysis context** on the Assistant tab to chat without that report.
 
-### General Chat
+### General Chat (same optional LLM module)
 
-A deliberately separate web-enabled chat. It receives no Analyzer or local Assistant context. Search queries are generated locally, sent to public search providers through `ddgs`, and the returned pages are summarized by the local model.
+A deliberately separate web-enabled chat. It receives **no** Analyzer or Assistant context, including the Analyze report. Search queries are generated locally, sent to public search providers through `ddgs`, and the returned pages are summarized by the local model.
 
 ## Privacy model
 
 | Area | Local model | Web access | Intended data |
 |---|---:|---:|---|
-| Analyze | Yes | No | Logs, SAML traces, metadata, public signing certificates |
-| Anonymize log | No model required | No | Sensitive logs and SAML traces |
-| Assistant | Yes | No | Technical/support material |
-| General Chat | Yes | Yes | Non-sensitive public questions |
+| Analyze | No | No | Logs, SAML traces, metadata, public signing certificates |
+| Anonymize (optional) | No | No | Sensitive logs and SAML traces |
+| Assistant (optional) | Yes | No | Technical/support material plus the current Analyze report unless cleared |
+| General Chat (optional) | Yes | Yes | Non-sensitive public questions only |
+| Config | No | No | Which optional modules to load after restart |
 
 The application binds to `127.0.0.1` by default and blocks non-local model endpoints unless explicitly enabled.
+
+Default UI is **Analyze** and **Config** only. Optional tabs appear only after they are enabled and the application is restarted.
 
 ## Requirements
 
 - Ubuntu / Linux
 - Python 3.12+
-- Ollama
-- a locally installed **Qwen** model (`OLLAMA_MODEL`, default `qwen3.6:27b`)
 
-The Analyzer and validators do not require a GPU. Local chat uses whichever Qwen tag you pull in Ollama. Development and local inference were tested with `qwen3.6:27b` on an **AMD Radeon AI PRO R9700** dedicated to the model (desktop graphics on the iGPU).
+Ollama and a locally installed **Qwen** model (`OLLAMA_MODEL`, default `qwen3.6:27b`) are required only if the Assistant / General Chat module is enabled.
+
+The Analyzer and validators do not require a GPU or Ollama. Local chat uses whichever Qwen tag you pull in Ollama. Development and local inference were tested with `qwen3.6:27b` on an **AMD Radeon AI PRO R9700** dedicated to the model (desktop graphics on the iGPU).
 
 ## Quick start
 
@@ -197,6 +202,8 @@ The certificate is read for the current analysis only. It is not copied into the
 
 ## Configuration
 
+Use the **Config** tab to enable optional modules. Changes are saved immediately to a local `.iddqd-modules.json` file (gitignored). A red notice appears until you click **Restart application** and refresh the browser.
+
 `config.example.env` contains the supported environment variables. Common settings:
 
 ```text
@@ -207,9 +214,9 @@ APP_PORT=7860
 MAX_FILE_MB=150
 ```
 
-`OLLAMA_MODEL` is a Qwen tag. The default is `qwen3.6:27b`; that is also the tag used for local testing on an AMD Radeon AI PRO R9700. Any other locally installed Qwen model can be selected with the same variable.
+`OLLAMA_*` settings apply only when the LLM module is enabled. `OLLAMA_MODEL` is a Qwen tag (default `qwen3.6:27b`).
 
-Web-enabled General Chat settings:
+Web-enabled General Chat settings (LLM module):
 
 ```text
 WEB_SEARCH_RESULTS=6
@@ -238,6 +245,8 @@ PYTHONPATH=. python tests/test_signature_validation.py
 PYTHONPATH=. python tests/test_anonymizer_saml.py
 PYTHONPATH=. python tests/test_saml_anonymizer.py
 PYTHONPATH=. python tests/test_layers.py
+PYTHONPATH=. python tests/test_nameid.py
+PYTHONPATH=. python tests/test_modules.py
 ```
 
 The tests use synthetic SAML and log data only. Signature and anonymization tests generate ephemeral synthetic keys/certificates at runtime; no private key material is stored in the repository.
@@ -246,16 +255,17 @@ The tests use synthetic SAML and log data only. Signature and anonymization test
 
 ```text
 .
-├── analyzers/          # deterministic SAML, log and anonymizer engines
+├── analyzers/          # deterministic SAML and log engines; anonymizer is optional
 ├── tests/
-├── actions.py          # Analyze / Anonymize use-cases (no Gradio)
+├── actions.py          # Analyze use-case; Anonymize imported lazily
 ├── reporting.py        # markdown reports from analyzer JSON
-├── llm.py              # local Ollama client and endpoint policy
-├── chats.py            # Assistant / analysis / web chat
-├── websearch.py        # General Chat search/fetch
+├── modules.py          # optional-module registry and restart
+├── llm.py              # local Ollama client and endpoint policy (LLM module)
+├── chats.py            # Assistant / General Chat (LLM module)
+├── websearch.py        # General Chat search/fetch only
 ├── uploads.py          # file size limits and text reads
 ├── config.py           # environment settings
-├── app.py              # Gradio UI only
+├── app.py              # Gradio UI shell
 ├── config.example.env
 ├── requirements.txt
 ├── run.sh

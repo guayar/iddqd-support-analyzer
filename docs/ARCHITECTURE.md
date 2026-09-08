@@ -7,11 +7,17 @@ The core Analyzer is deterministic first. Protocol parsing, required-field check
 ```text
 Gradio UI (app.py)
   │
-  ├─ actions.py ──> analyzers/* ──> reporting.py ──> markdown + JSON
+  ├─ Analyze (always) ──> actions.analyze ──> analyzers/saml,logs ──> reporting
   │
-  ├─ chats.py (analysis / assistant) ──> llm.py ──> local Ollama
+  ├─ Anonymize (optional module) ──> actions.anonymize (lazy) ──> analyzers/anonymizer
   │
-  └─ chats.py (General Chat) ──> websearch.py ──> public search ──> llm.py
+  ├─ Assistant (optional LLM module) ──> chats.assistant_chat ──> llm.py
+  │         └── receives Analyze state unless cleared; no websearch
+  │
+  ├─ General Chat (optional LLM module) ──> chats.web_chat ──> websearch.py ──> llm.py
+  │         └── never receives Analyze or Assistant context
+  │
+  └─ Config (always) ──> modules.py ──> .iddqd-modules.json + process restart
 
 Input
   │
@@ -29,8 +35,10 @@ Input
 
 ## Security boundaries
 
-- Analyzer and Assistant do not invoke web search.
-- General Chat does not inherit Analyzer or Assistant context.
+- Analyzer does not invoke web search or require Ollama.
+- Assistant (optional) does not invoke web search. It may use the current Analyze report unless the user clears that context.
+- General Chat (optional) does not inherit Analyzer or Assistant context.
+- Optional modules are off by default. Enabling them in Config requires a process restart.
 - Model endpoints are restricted to loopback by default.
 - `.env`, local logs, generated mappings and credential material are excluded from version control.
 - Local certificate/key formats (`*.pem`, `*.crt`, `*.cer`, `*.der`, `*.key`, `*.p12`, `*.pfx`, keystores) are excluded from version control.

@@ -5,14 +5,29 @@ import os
 import gradio as gr
 
 from actions import analyze as run_analyze
-from actions import anonymize as run_anonymize
-from chats import analysis_chat, assistant_chat, web_chat
 from config import APP_PORT, APP_TITLE, APP_VERSION, MAX_FILE_MB
+from modules import (
+    PLUGIN_ANONYMIZE,
+    PLUGIN_LLM,
+    RUNNING_PLUGINS,
+    plugin_enabled,
+    read_saved_plugins,
+    restart_application,
+    write_saved_plugins,
+)
 from uploads import InputError
 
 DROP_HEIGHT = 220
 CHAT_HEIGHT = 480
 CONTROL_HEIGHT = 128
+
+ANONYMIZE_ON = plugin_enabled(PLUGIN_ANONYMIZE)
+LLM_ON = plugin_enabled(PLUGIN_LLM)
+
+RESTART_HTML = (
+    "<p class='psa-restart-warn'>Restart required for module changes to take effect.</p>"
+    "<p>After restart the UI will disconnect — refresh the page.</p>"
+)
 
 CSS = """
 .gradio-container {
@@ -62,7 +77,6 @@ CSS = """
     border-radius: 8px !important;
     overflow: auto !important;
 }
-#analysis-chat,
 #assistant-chat,
 #web-chat {
     height: 480px !important;
@@ -175,6 +189,10 @@ CSS = """
     left: 50% !important;
     transform: translate(-50%, -50%) !important;
 }
+.psa-restart-warn {
+    color: #b91c1c !important;
+    font-weight: 600 !important;
+}
 """ + f"""
 footer button.settings::before {{
     content: "v{APP_VERSION} · ";
@@ -184,28 +202,71 @@ footer button.settings::before {{
 """
 
 
+def _hero_text() -> str:
+    extras = []
+    if ANONYMIZE_ON:
+        extras.append("optional log anonymizer")
+    if LLM_ON:
+        extras.append("optional local assistant")
+        extras.append("separate web-enabled general chat")
+    extra = (" · " + " · ".join(extras)) if extras else ""
+    return (
+        "# IDDQD Support Analyzer\n"
+        f"**Local SAML + `*.log` analysis{extra}**"
+    )
+
+
+def _context_badge(result, detached: bool) -> str:
+    if result and not detached:
+        return "Analysis context attached"
+    return "No analysis context attached"
+
+
+def _restart_notice(saved: tuple[str, ...]) -> str:
+    if set(saved) == set(RUNNING_PLUGINS):
+        return ""
+    return RESTART_HTML
+
+
 def analyze(files, pasted, mode, signing_cert_file=None):
     try:
-        return run_analyze(files, pasted, mode, signing_cert_file)
+        md, raw, result = run_analyze(files, pasted, mode, signing_cert_file)
     except InputError as e:
         raise gr.Error(str(e)) from e
+    if LLM_ON:
+        return md, raw, result, False, _context_badge(result, False)
+    return md, raw, result
 
 
 def anonymize(file, pasted):
+    from actions import anonymize as run_anonymize
+
     try:
         return run_anonymize(file, pasted)
     except InputError as e:
         raise gr.Error(str(e)) from e
 
 
+def save_modules(anonymize_on: bool, llm_on: bool):
+    saved = write_saved_plugins(
+        ([PLUGIN_ANONYMIZE] if anonymize_on else []) + ([PLUGIN_LLM] if llm_on else [])
+    )
+    return _restart_notice(saved)
+
+
+def restart_clicked():
+    restart_application()
+
+
+def clear_assistant_context(analysis_state):
+    return True, _context_badge(analysis_state, True)
+
+
 with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
-    state = gr.State(None)
+    analysis_state = gr.State(None)
+    assistant_detached = gr.State(False)
     with gr.Column(elem_classes=["psa-page"]):
-        gr.Markdown(
-            "# IDDQD Support Analyzer\n"
-            "**Local SAML + `*.log` analysis · private local assistant · separate web-enabled general chat · log anonymizer**",
-            elem_id="hero",
-        )
+        gr.Markdown(_hero_text(), elem_id="hero")
 
         with gr.Tabs():
             with gr.Tab("Analyze"):
@@ -255,96 +316,122 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                     with gr.Accordion("Structured analyzer output (JSON)", open=False):
                         raw = gr.Code(label="JSON", language="json")
 
-                    gr.Markdown(
-                        "### Ask about this analysis\n"
-                        "Examples: **draft a support email**, **write a technical report**, "
-                        "**what is the root cause?**, **compare metadata / ACS / Audience / Destination / Issuer**"
-                    )
-                    with gr.Column(elem_classes=["psa-chat"]):
-                        analysis_chatbot = gr.Chatbot(height=CHAT_HEIGHT, label="Chat", elem_id="analysis-chat")
-                        gr.ChatInterface(
-                            fn=analysis_chat,
-                            chatbot=analysis_chatbot,
-                            additional_inputs=[state],
-                            save_history=False,
-                        )
-                    run.click(analyze, inputs=[files, pasted, mode, signing_cert], outputs=[report, raw, state])
+                    if not LLM_ON:
+                        run.click(analyze, inputs=[files, pasted, mode, signing_cert], outputs=[report, raw, analysis_state])
 
-            with gr.Tab("Anonymize log"):
+            if ANONYMIZE_ON:
+                with gr.Tab("Anonymize log"):
+                    with gr.Column(elem_classes=["psa-shell"]):
+                        gr.Markdown(
+                            "### Local log anonymizer\n"
+                            "Creates a shareable pseudonymized copy while preserving timestamps, error codes and stack-trace "
+                            "structure. The mapping stays local and is not embedded in the output file.",
+                            elem_classes=["psa-note"],
+                        )
+                        with gr.Row(equal_height=True):
+                            anon_file = gr.File(
+                                label="Drop a log/text file",
+                                file_count="single",
+                                height=DROP_HEIGHT,
+                                scale=1,
+                            )
+                            anon_pasted = gr.Textbox(
+                                label="or paste text",
+                                lines=9,
+                                placeholder="Paste a log fragment…",
+                                scale=1,
+                                elem_id="anon-paste",
+                            )
+
+                        anon_run = gr.Button("Anonymize", variant="primary", elem_classes=["psa-primary"])
+                        anon_summary = gr.Markdown()
+                        anon_preview = gr.Textbox(
+                            label="Anonymized preview",
+                            lines=18,
+                            elem_id="anon-preview",
+                        )
+                        anon_download = gr.File(label="Download anonymized copy", interactive=False)
+
+                        with gr.Accordion("Local replacement map — do NOT share this with the anonymized log", open=False):
+                            anon_mapping = gr.Code(label="Mapping JSON", language="json")
+
+                        anon_run.click(
+                            anonymize,
+                            inputs=[anon_file, anon_pasted],
+                            outputs=[anon_summary, anon_preview, anon_mapping, anon_download],
+                        )
+
+            if LLM_ON:
+                from chats import assistant_chat, web_chat
+
+                with gr.Tab("Assistant"):
+                    with gr.Column(elem_classes=["psa-shell"]):
+                        gr.Markdown(
+                            "### Local Assistant\n"
+                            "Everything in this tab stays between the browser, this application and the local Ollama model. "
+                            "**No web search.** The current Analyze report is attached automatically; use **Clear analysis context** "
+                            "to chat without it. Do not paste secrets into General Chat.",
+                            elem_classes=["psa-note"],
+                        )
+                        assistant_mode = gr.Radio(
+                            ["General", "Support Mail", "Code"],
+                            value="General",
+                            label="Mode",
+                        )
+                        context_badge = gr.Markdown(_context_badge(None, False))
+                        clear_ctx = gr.Button("Clear analysis context")
+                        with gr.Column(elem_classes=["psa-chat"]):
+                            assistant_chatbot = gr.Chatbot(height=CHAT_HEIGHT, label="Chat", elem_id="assistant-chat")
+                            gr.ChatInterface(
+                                fn=assistant_chat,
+                                chatbot=assistant_chatbot,
+                                additional_inputs=[assistant_mode, analysis_state, assistant_detached],
+                                save_history=False,
+                            )
+                        clear_ctx.click(clear_assistant_context, inputs=[analysis_state], outputs=[assistant_detached, context_badge])
+                        run.click(
+                            analyze,
+                            inputs=[files, pasted, mode, signing_cert],
+                            outputs=[report, raw, analysis_state, assistant_detached, context_badge],
+                        )
+
+                with gr.Tab("General Chat"):
+                    with gr.Column(elem_classes=["psa-shell"]):
+                        gr.Markdown(
+                            "### Web-enabled General Chat\n"
+                            "This tab is deliberately separate. It may send **search queries** to public search providers. "
+                            "It receives **no Analyzer or Assistant context**. Do not paste customer logs, credentials or other "
+                            "sensitive data here; use **Assistant** for that.",
+                            elem_classes=["psa-note"],
+                        )
+                        with gr.Column(elem_classes=["psa-chat"]):
+                            web_chatbot = gr.Chatbot(height=CHAT_HEIGHT, label="Chat", elem_id="web-chat")
+                            gr.ChatInterface(fn=web_chat, chatbot=web_chatbot, save_history=False)
+
+            with gr.Tab("Config"):
                 with gr.Column(elem_classes=["psa-shell"]):
                     gr.Markdown(
-                        "### Local log anonymizer\n"
-                        "Creates a shareable pseudonymized copy while preserving timestamps, error codes and stack-trace "
-                        "structure. The mapping stays local and is not embedded in the output file.",
+                        "### Modules\n"
+                        "Analyze is always available. Optional modules load only after **Restart application** and a browser refresh. "
+                        "Default is Analyze only.",
                         elem_classes=["psa-note"],
                     )
-                    with gr.Row(equal_height=True):
-                        anon_file = gr.File(
-                            label="Drop a log/text file",
-                            file_count="single",
-                            height=DROP_HEIGHT,
-                            scale=1,
-                        )
-                        anon_pasted = gr.Textbox(
-                            label="or paste text",
-                            lines=9,
-                            placeholder="Paste a log fragment…",
-                            scale=1,
-                            elem_id="anon-paste",
-                        )
-
-                    anon_run = gr.Button("Anonymize", variant="primary", elem_classes=["psa-primary"])
-                    anon_summary = gr.Markdown()
-                    anon_preview = gr.Textbox(
-                        label="Anonymized preview",
-                        lines=18,
-                        elem_id="anon-preview",
+                    saved = read_saved_plugins()
+                    anon_box = gr.Checkbox(
+                        label="Anonymize",
+                        info="Local log and SAML pseudonymization. No language model.",
+                        value=PLUGIN_ANONYMIZE in saved,
                     )
-                    anon_download = gr.File(label="Download anonymized copy", interactive=False)
-
-                    with gr.Accordion("Local replacement map — do NOT share this with the anonymized log", open=False):
-                        anon_mapping = gr.Code(label="Mapping JSON", language="json")
-
-                    anon_run.click(
-                        anonymize,
-                        inputs=[anon_file, anon_pasted],
-                        outputs=[anon_summary, anon_preview, anon_mapping, anon_download],
+                    llm_box = gr.Checkbox(
+                        label="Assistant and General Chat",
+                        info="Requires local Ollama. Assistant can read the Analyze report. General Chat can use the web and never receives that report.",
+                        value=PLUGIN_LLM in saved,
                     )
-
-            with gr.Tab("Assistant"):
-                with gr.Column(elem_classes=["psa-shell"]):
-                    gr.Markdown(
-                        "### Local Assistant\n"
-                        "Everything in this tab stays between the browser, this application and the local Ollama model. "
-                        "**No web search.** Use it for sensitive analysis, support mail and coding.",
-                        elem_classes=["psa-note"],
-                    )
-                    assistant_mode = gr.Radio(
-                        ["General", "Support Mail", "Code"],
-                        value="General",
-                        label="Mode",
-                    )
-                    with gr.Column(elem_classes=["psa-chat"]):
-                        assistant_chatbot = gr.Chatbot(height=CHAT_HEIGHT, label="Chat", elem_id="assistant-chat")
-                        gr.ChatInterface(
-                            fn=assistant_chat,
-                            chatbot=assistant_chatbot,
-                            additional_inputs=[assistant_mode],
-                            save_history=False,
-                        )
-
-            with gr.Tab("General Chat"):
-                with gr.Column(elem_classes=["psa-shell"]):
-                    gr.Markdown(
-                        "### Web-enabled General Chat\n"
-                        "This tab is deliberately separate. It may send **search queries** to public search providers. "
-                        "It receives **no Analyzer or Assistant context**. Do not paste customer logs, credentials or other "
-                        "sensitive data here; use **Assistant** for that.",
-                        elem_classes=["psa-note"],
-                    )
-                    with gr.Column(elem_classes=["psa-chat"]):
-                        web_chatbot = gr.Chatbot(height=CHAT_HEIGHT, label="Chat", elem_id="web-chat")
-                        gr.ChatInterface(fn=web_chat, chatbot=web_chatbot, save_history=False)
+                    restart_md = gr.Markdown(_restart_notice(saved))
+                    restart_btn = gr.Button("Restart application", variant="primary", elem_classes=["psa-primary"])
+                    anon_box.change(save_modules, inputs=[anon_box, llm_box], outputs=[restart_md])
+                    llm_box.change(save_modules, inputs=[anon_box, llm_box], outputs=[restart_md])
+                    restart_btn.click(restart_clicked)
 
 
 if __name__ == "__main__":

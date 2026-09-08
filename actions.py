@@ -5,9 +5,9 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from analyzers import analyze_log_text, analyze_saml_input, anonymize_text
+from analyzers import analyze_log_text, analyze_saml_input
 from analyzers.saml import looks_like_saml_input
-from reporting import render_anonymize_summary, render_log_report, render_saml_report
+from reporting import render_log_report, render_saml_report
 from uploads import InputError, read_signing_certificate, read_text_file_and_paste, read_text_files
 
 
@@ -30,6 +30,9 @@ def analyze(files, pasted, mode, signing_cert_file=None) -> tuple[str, str, dict
 
 
 def anonymize(file, pasted) -> tuple[str, str, str, str]:
+    from analyzers.anonymizer import anonymize_text
+    from reporting import render_anonymize_summary
+
     text, filename = read_text_file_and_paste(file, pasted)
     if not text.strip():
         raise InputError("Upload a log or paste text first.")

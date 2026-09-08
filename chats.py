@@ -6,7 +6,6 @@ from datetime import date
 import requests
 
 from llm import complete, llm_unavailable
-from websearch import source_footer, web_context, web_search
 
 ANALYSIS_SYSTEM = """You are a senior enterprise support/escalation engineer assistant running LOCALLY.
 You receive deterministic analyzer output generated from customer-provided material.
@@ -60,39 +59,36 @@ def _history_messages(history, limit: int, content_limit: int) -> list[dict[str,
     return msgs
 
 
-def analysis_chat(message, history, analysis_state) -> str:
-    if not analysis_state:
-        return "Upload a log or SAML tracer and click **Analyze** first."
-    compact = json.dumps(analysis_state, ensure_ascii=False)[:120_000]
-    msgs = [{"role": "system", "content": ANALYSIS_SYSTEM + "\n\nANALYZER OUTPUT:\n" + compact}]
-    msgs.extend(_history_messages(history, 12, 12000))
-    msgs.append({"role": "user", "content": message})
-    try:
-        return complete(msgs)
-    except requests.RequestException as e:
-        return llm_unavailable(e, analyzer_still_works=True)
-    except Exception as e:
-        return f"LLM error: `{e}`"
-
-
-def assistant_chat(message, history, mode) -> str:
+def assistant_chat(message, history, mode, analysis_state=None, context_detached=False) -> str:
     systems = {
         "General": GENERAL_SYSTEM,
         "Support Mail": MAIL_SYSTEM,
         "Code": CODE_SYSTEM,
     }
-    msgs = [{"role": "system", "content": systems.get(mode, GENERAL_SYSTEM)}]
+    system = systems.get(mode, GENERAL_SYSTEM)
+    if analysis_state and not context_detached:
+        compact = json.dumps(analysis_state, ensure_ascii=False)[:120_000]
+        system = (
+            system
+            + "\n\nAttached analyzer JSON from the Analyze tab (local only; you have no web-search tool). "
+            "Use it when the user asks about this case. Do not claim you searched the internet.\n\n"
+            "ANALYZER OUTPUT:\n"
+            + compact
+        )
+    msgs = [{"role": "system", "content": system}]
     msgs.extend(_history_messages(history, 20, 20000))
     msgs.append({"role": "user", "content": message})
     try:
         return complete(msgs)
     except requests.RequestException as e:
-        return llm_unavailable(e)
+        extra = " The deterministic Analyze tab still works." if analysis_state and not context_detached else ""
+        return llm_unavailable(e) + extra
     except Exception as e:
         return f"LLM error: `{e}`"
 
 
 def web_chat(message, history) -> str:
+    from websearch import source_footer, web_context, web_search
     if not (message or "").strip():
         return "Enter a question to search."
     try:

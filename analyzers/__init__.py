@@ -2,7 +2,6 @@ from .saml import analyze_saml_input as _analyze_saml_input
 from .saml_signature import enhance_saml_signature_validation
 from .saml_supplied_cert import extract_pem_certificates_from_text, verify_with_supplied_certificate
 from .logs import analyze_log_text
-from .anonymizer import anonymize_text
 
 
 def analyze_saml_input(text: str, signing_cert: bytes | str | None = None):
