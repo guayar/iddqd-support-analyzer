@@ -2,7 +2,7 @@
 
 [![Tests](https://github.com/guayar/iddqd-support-analyzer/actions/workflows/tests.yml/badge.svg)](https://github.com/guayar/iddqd-support-analyzer/actions/workflows/tests.yml)
 
-Early-stage AI-assisted learning project and QA playground. Not production-ready.
+Early-stage AI-assisted project. Not a production product — I am building it to run locally at work on real SAML traces and logs, not only as a learning playground.
 
 Local troubleshooting toolkit for SAML/SSO and log analysis. Optional anonymizer and local LLM chats.
 
@@ -12,7 +12,7 @@ The core product is a local, deterministic SAML and log analyzer. It does not re
 
 ## Why I built this
 
-I built this to learn SAML and support-style log analysis by implementing the checks myself, including awkward real-world edge cases rather than only happy-path traces. Coding is AI-assisted; I still own the requirements, the tests, and how specs such as SAML Core are interpreted when a library and the spec disagree. The repo is a playground for that loop, not a product I would drop onto a customer network without review.
+I built this to learn SAML and support-style log analysis by implementing the checks myself, including awkward real-world edge cases rather than only happy-path traces. Coding is AI-assisted; I still own the requirements, the tests, and how specs such as SAML Core are interpreted when a library and the spec disagree. The point is a private workstation tool I can take into work: paste a trace or a log, get a structured read, keep extending it from cases I actually hit. It is not something I would drop onto a customer network as a supported product.
 
 ## Features
 
@@ -152,7 +152,7 @@ A deliberately separate web-enabled chat. It receives **no** Analyzer or Assista
 
 ## Known limitations / work in progress
 
-- Local Gradio app on `127.0.0.1`, not a packaged or multi-user product. Reports are heuristics plus spec-backed SAML checks, not a substitute for an IdP/SP vendor’s own validator.
+- Local Gradio app on `127.0.0.1` for my own workstation (including at work), not a packaged or multi-user product. Reports are heuristics plus spec-backed SAML checks, not a substitute for an IdP/SP vendor’s own validator.
 - `EncryptedAssertion` is detected, not decrypted. The anonymizer is useful, not DLP; shareable output still needs a human pass.
 - Log timestamps are treated as record boundaries when the shape is recognizable; numeric dates such as `09/01/26` do not get a calendar `time_range` unless the same log makes day/month order unambiguous.
 - Optional chats need local Ollama. Coverage grows from real traces and failing cases, not from claiming a complete SAML or logging catalogue.
