@@ -4,7 +4,7 @@
 
 Local troubleshooting toolkit for SAML/SSO and log analysis. Optional anonymizer and local LLM chats.
 
-**Current version:** `0.11.3`
+**Current version:** `0.11.4`
 
 The core product is a local, deterministic SAML and log analyzer. It does not require Ollama. Optional modules (Anonymize, Assistant + General Chat) are enabled from the **Config** tab and load after a restart.
 
@@ -69,10 +69,10 @@ If only a certificate embedded in `ds:KeyInfo` is available, the analyzer can ve
 ### Log analysis
 
 - timestamp range detection
-- severity counts
+- severity counts from recognized log-record prefixes
 - error/status code extraction
-- grouped error events and stack traces
-- `Caused by` chain extraction
+- multiline incidents with Java exception chains and Maven `[ERROR]` blocks
+- root-cause extraction from `Caused by:` (not a separate incident)
 - first occurrence and representative samples
 
 ### Anonymization (optional module)

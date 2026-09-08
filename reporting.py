@@ -333,11 +333,28 @@ def render_log_report(result: dict[str, Any]) -> str:
         out.extend(f"- `{k}` — {v} occurrence(s)" for k, v in list(result["error_codes"].items())[:40])
     else:
         out.append("- No explicit codes detected")
-    out.append(f"\n## Error groups ({len(result['error_groups'])} unique; {result['error_event_count']} events)")
-    if not result["error_groups"]:
+    groups = result.get("incidents") or result.get("error_groups") or []
+    out.append(f"\n## Incidents ({len(groups)} unique; {result['error_event_count']} events)")
+    if not groups:
         out.append("No explicit ERROR/FATAL/SEVERE/CRITICAL events detected.")
-    for i, g in enumerate(result["error_groups"][:30], 1):
-        out.append(f"\n### {i}. {g['signature']}\n- **Count:** {g['count']}\n- **Level:** {g['level']}\n- **Caused by:** `{g.get('root_cause') or 'not explicitly present'}`\n- **Codes:** {', '.join('`'+x+'`' for x in g.get('codes', {})) or '—'}\n- **First occurrence line:** {g['first_line']}\n\n```text\n{g['sample'][:5000]}\n```")
+    for i, g in enumerate(groups[:30], 1):
+        title = g.get("signature") or "Unknown error"
+        out.append(f"\n### {i}. {title}")
+        out.append(f"- **Severity:** {g['level']}")
+        out.append(f"- **Occurrences:** {g['count']}")
+        out.append(f"- **First occurrence line:** {g['first_line']}")
+        if g.get("exit_code") is not None:
+            out.append(f"- **Exit code:** {g['exit_code']}")
+        if g.get("root_cause"):
+            out.append(f"- **Root cause:** `{g['root_cause']}`")
+        codes = g.get("codes") or {}
+        out.append(f"- **Codes:** {', '.join('`'+x+'`' for x in codes) or '—'}")
+        chain = g.get("exception_chain") or []
+        if len(chain) >= 2:
+            short = [c.rsplit(".", 1)[-1] for c in chain]
+            out.append("\n**Exception chain**\n")
+            out.append("\n".join([f"`{short[0]}`"] + [f"→ `{c}`" for c in short[1:]]))
+        out.append(f"\n**Relevant log**\n\n```text\n{g['sample'][:50000]}\n```")
     return "\n".join(out)
 
 

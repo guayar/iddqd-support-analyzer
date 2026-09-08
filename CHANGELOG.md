@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## [0.11.4] - 2026-09-08
+
+### Changed
+
+- log analyzer treats Java stack traces as one incident with an exception chain; Maven `[ERROR]` advisory lines stay in the same failure; the word `Error` in message text is not a severity prefix
+- version bumped to `0.11.4`
+
 ## [0.11.3] - 2026-09-08
 
 ### Removed
