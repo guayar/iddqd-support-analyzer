@@ -6,9 +6,9 @@ from pathlib import Path
 from typing import Any
 
 from analyzers import analyze_log_text, analyze_saml_input
-from analyzers.saml import looks_like_saml_input
+from analyzers.saml import looks_like_saml_input, saml_root_types
 from analyzers.saml_supplied_cert import extract_pem_certificates_from_text
-from reporting import render_log_report, render_mixed_report, render_saml_report
+from reporting import render_log_report, render_mixed_report, render_saml_output
 from uploads import (
     InputError,
     collect_analyze_artifacts,
@@ -19,12 +19,40 @@ from uploads import (
 )
 
 
+_SAML_PROTOCOL_ROOTS = {"AuthnRequest", "Response", "Assertion"}
+_SAML_METADATA_ROOTS = {"EntityDescriptor", "EntitiesDescriptor"}
+
+
 def _run_saml(artifacts: list[tuple[str, str]], signing_cert_file, all_artifacts: list[tuple[str, str]]):
-    text = join_saml_artifacts(artifacts)
     cert_data = read_signing_certificate(signing_cert_file)
     if cert_data is None:
         cert_data = extract_pem_certificates_from_text("\n".join(t for _n, t in all_artifacts))
-    return analyze_saml_input(text, signing_cert=cert_data)
+
+    def run(arts: list[tuple[str, str]]):
+        return analyze_saml_input(join_saml_artifacts(arts), signing_cert=cert_data)
+
+    if len(artifacts) <= 1:
+        return run(artifacts)
+
+    typed = [(name, text, saml_root_types(text)) for name, text in artifacts]
+    meta_arts = [(n, t) for n, t, kinds in typed if kinds and kinds <= _SAML_METADATA_ROOTS]
+    protocol_arts = [(n, t, kinds) for n, t, kinds in typed if kinds & _SAML_PROTOCOL_ROOTS]
+    protocol_kinds = set().union(*(kinds for _n, _t, kinds in protocol_arts)) if protocol_arts else set()
+    together = (
+        not protocol_arts
+        or len(protocol_arts) <= 1
+        or ("AuthnRequest" in protocol_kinds and protocol_kinds & {"Response", "Assertion"})
+    )
+    if together:
+        return run(artifacts)
+
+    return {
+        "kind": "saml_multi",
+        "analyses": [
+            {"name": name, "result": run([(name, text)] + meta_arts)}
+            for name, text, _kinds in protocol_arts
+        ],
+    }
 
 
 def _run_log(artifacts: list[tuple[str, str]]):
@@ -39,7 +67,7 @@ def analyze(files, pasted, mode, signing_cert_file=None) -> tuple[str, str, dict
 
     if mode == "SAML":
         result = _run_saml(artifacts, signing_cert_file, artifacts)
-        md = render_saml_report(result)
+        md = render_saml_output(result)
     elif mode == "Log":
         result = _run_log(artifacts)
         md = render_log_report(result)
@@ -62,7 +90,7 @@ def analyze(files, pasted, mode, signing_cert_file=None) -> tuple[str, str, dict
             md = render_mixed_report(result)
         elif saml_arts:
             result = _run_saml(saml_arts, signing_cert_file, artifacts)
-            md = render_saml_report(result)
+            md = render_saml_output(result)
         else:
             result = _run_log(log_arts)
             md = render_log_report(result)

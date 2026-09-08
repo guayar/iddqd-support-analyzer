@@ -109,6 +109,22 @@ assert result["documents_found"] >= 2
 statuses = {c["check"]: c["status"] for c in result["checks"]}
 assert statuses["AuthnRequest ACS vs Response Destination"] == "MATCH"
 
+# Two independent Responses: one report each, not one merged analysis.
+resp2 = RESPONSE.replace("_resp1", "_resp2").replace("_req1", "_req2")
+md, _raw, result = analyze(
+    [_file("response-a.xml.base64", base64.b64encode(RESPONSE.encode()).decode())],
+    base64.b64encode(resp2.encode()).decode(),
+    "Auto-detect",
+)
+assert result["kind"] == "saml_multi"
+assert len(result["analyses"]) == 2
+assert all(item["result"]["kind"] == "saml" and item["result"]["summary"]["responses"] == 1 for item in result["analyses"])
+assert all(item["result"]["summary"]["authn_requests"] == 0 for item in result["analyses"])
+assert "## SAML analysis — `response-a.xml.base64`" in md
+assert "## SAML analysis — `pasted text`" in md
+assert result["analyses"][0]["result"]["documents"][0]["id"] == "_resp1"
+assert result["analyses"][1]["result"]["documents"][0]["id"] == "_resp2"
+
 empty_failed = False
 try:
     analyze(None, "  ", "Auto-detect")

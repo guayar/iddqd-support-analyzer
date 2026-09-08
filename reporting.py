@@ -399,6 +399,28 @@ def render_log_report(result: dict[str, Any]) -> str:
     return "\n".join(out)
 
 
+def render_saml_multi_sections(result: dict[str, Any]) -> str:
+    parts: list[str] = []
+    for item in result.get("analyses") or []:
+        name = item.get("name") or "artifact"
+        body = render_saml_report(item.get("result") or {}).replace(
+            "# SAML / SSO analysis", f"## SAML analysis — `{name}`", 1
+        )
+        parts.append(body)
+    return "\n\n".join(parts)
+
+
+def render_saml_output(result: dict[str, Any]) -> str:
+    if result.get("kind") == "saml_multi":
+        lines = ["# Analysis", "", "SAML artifacts:"]
+        for item in result.get("analyses") or []:
+            lines.append(f"- `{item.get('name')}`")
+        lines.append("")
+        lines.append(render_saml_multi_sections(result))
+        return "\n".join(lines)
+    return render_saml_report(result)
+
+
 def render_mixed_report(result: dict[str, Any]) -> str:
     lines = ["# Analysis", "", "Files/artifacts detected:"]
     for item in result.get("artifacts") or []:
@@ -406,7 +428,10 @@ def render_mixed_report(result: dict[str, Any]) -> str:
     saml = result.get("saml")
     if saml:
         lines.append("")
-        lines.append(render_saml_report(saml).replace("# SAML / SSO analysis", "## SAML analysis", 1))
+        if saml.get("kind") == "saml_multi":
+            lines.append(render_saml_multi_sections(saml))
+        else:
+            lines.append(render_saml_report(saml).replace("# SAML / SSO analysis", "## SAML analysis", 1))
     log = result.get("log")
     if log:
         lines.append("")

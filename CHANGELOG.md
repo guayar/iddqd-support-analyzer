@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## [0.11.12] - 2026-09-08
+
+### Changed
+
+- independent SAML Responses (file + paste, or multiple files) each get their own report; AuthnRequest + Response + metadata stay one correlated analysis
+- version bumped to `0.11.12`
+
 ## [0.11.11] - 2026-09-08
 
 ### Fixed

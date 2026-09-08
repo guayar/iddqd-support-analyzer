@@ -726,11 +726,18 @@ def looks_like_saml_input(text: str) -> bool:
     low = text.lower()
     if any(x in low for x in ("samlresponse", "samlrequest", "authnrequest", "urn:oasis:names:tc:saml", "<samlp:", "<saml:", "entitydescriptor")):
         return True
-    for candidate, _source in _extract_candidates(text):
+    return bool(saml_root_types(text))
+
+
+def saml_root_types(text: str) -> set[str]:
+    found: set[str] = set()
+    for candidate, _source in _extract_candidates(text or ""):
         root = _parse_xml(candidate)
-        if root is not None and _local(root.tag) in SAMLISH_ROOTS:
-            return True
-    return False
+        if root is not None:
+            loc = _local(root.tag)
+            if loc in SAMLISH_ROOTS:
+                found.add(loc)
+    return found
 
 
 def analyze_saml_input(text: str) -> dict[str, Any]:
