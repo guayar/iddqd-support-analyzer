@@ -216,9 +216,25 @@ def _har_payloads(text: str) -> list[tuple[str, str]]:
     return out
 
 
+_SAML_ARTIFACT_SEP_RE = re.compile(r"<!--\s*iddqd-artifact\s*-->")
+_FILE_BANNER_RE = re.compile(r"===== FILE: .+? =====")
+
+
+def _input_segments(text: str) -> list[str]:
+    """Decode each Analyze artifact on its own. Base64 payloads cannot be concatenated."""
+    parts = [text]
+    for pat in (_SAML_ARTIFACT_SEP_RE, _FILE_BANNER_RE):
+        parts = [piece for chunk in parts for piece in pat.split(chunk)]
+    return [part.strip() for part in parts if part.strip()]
+
+
 def _extract_candidates(text: str) -> list[tuple[str, str]]:
     text = html.unescape(text.strip())
-    candidates: list[tuple[str, str]] = [(text, "input")]
+    segments = _input_segments(text)
+    if len(segments) <= 1:
+        candidates: list[tuple[str, str]] = [(text, "input")]
+    else:
+        candidates = [(seg, f"input #{i}") for i, seg in enumerate(segments, 1)]
     candidates.extend(_har_payloads(text))
 
     for name in ("SAMLRequest", "SAMLResponse"):

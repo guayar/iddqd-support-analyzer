@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## [0.11.11] - 2026-09-08
+
+### Fixed
+
+- Analyze no longer Base64-decodes a file and a paste as one payload, so two SAML Base64 artifacts are each detected
+
+### Changed
+
+- version bumped to `0.11.11`
+
 ## [0.11.10] - 2026-09-08
 
 ### Fixed

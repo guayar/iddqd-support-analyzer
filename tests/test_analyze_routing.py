@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import tempfile
 from pathlib import Path
 
@@ -96,6 +97,17 @@ md, _raw, result = analyze(None, REQUEST + "\n" + RESPONSE, "Auto-detect")
 assert result["kind"] == "saml"
 assert result["summary"]["authn_requests"] == 1
 assert result["summary"]["responses"] == 1
+
+# Two Base64 artifacts (file + paste) must each decode; they must not be glued into one payload.
+b64_req = base64.b64encode(REQUEST.encode()).decode()
+b64_resp = base64.b64encode(RESPONSE.encode()).decode()
+md, _raw, result = analyze([_file("duplicated_attributes.xml.base64", b64_req)], b64_resp, "Auto-detect")
+assert result["kind"] == "saml"
+assert result["summary"]["authn_requests"] == 1
+assert result["summary"]["responses"] == 1
+assert result["documents_found"] >= 2
+statuses = {c["check"]: c["status"] for c in result["checks"]}
+assert statuses["AuthnRequest ACS vs Response Destination"] == "MATCH"
 
 empty_failed = False
 try:

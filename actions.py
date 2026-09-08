@@ -13,13 +13,14 @@ from uploads import (
     InputError,
     collect_analyze_artifacts,
     join_analyze_artifacts,
+    join_saml_artifacts,
     read_signing_certificate,
     read_text_file_and_paste,
 )
 
 
 def _run_saml(artifacts: list[tuple[str, str]], signing_cert_file, all_artifacts: list[tuple[str, str]]):
-    text = join_analyze_artifacts(artifacts)
+    text = join_saml_artifacts(artifacts)
     cert_data = read_signing_certificate(signing_cert_file)
     if cert_data is None:
         cert_data = extract_pem_certificates_from_text("\n".join(t for _n, t in all_artifacts))
