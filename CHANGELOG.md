@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## [0.11.3] - 2026-09-08
+
+### Removed
+
+- Assistant Mode switch (General / Support Mail / Code); one local assistant prompt covers those tasks from the user message
+
+### Changed
+
+- version bumped to `0.11.3`
+
 ## [0.11.2] - 2026-09-08
 
 ### Changed

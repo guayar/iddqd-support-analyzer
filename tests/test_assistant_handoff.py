@@ -23,10 +23,12 @@ assert "Open in Assistant" not in ui
 assert "analyze_with_assistant" in ui
 
 # G: no attached analysis -> no analyzer JSON in the system prompt.
-plain = assistant_system_prompt("General", None)
+plain = assistant_system_prompt(None)
 assert "ANALYZER OUTPUT" not in plain
 assert "Open in Assistant" not in plain
 assert "Attach latest analysis" not in plain
+assert "Support Mail" not in ui
+assert "psa-assistant-mode" not in ui
 
 # B: Analyze-with-assistant sync attaches that analysis and starts a clean chat.
 ctx, badge, history = send_to_assistant(analysis_a)
@@ -34,7 +36,7 @@ assert ctx == analysis_a
 assert "Analysis context attached" in badge
 assert "psa-context-on" in badge
 assert history == empty_assistant_history() == []
-attached = assistant_system_prompt("General", ctx)
+attached = assistant_system_prompt(ctx)
 assert "ANALYZER OUTPUT" in attached
 assert '"case": "A"' in attached
 assert "latest Analyze run" in attached
@@ -42,8 +44,8 @@ assert "latest Analyze run" in attached
 # C: a later Analyze result replaces A in Assistant (no extra attach step).
 ctx, badge, history = send_to_assistant(analysis_b)
 assert ctx == analysis_b
-assert '"case": "B"' in assistant_system_prompt("Code", ctx)
-assert '"case": "A"' not in assistant_system_prompt("General", ctx)
+assert '"case": "B"' in assistant_system_prompt(ctx)
+assert '"case": "A"' not in assistant_system_prompt(ctx)
 assert history == []
 
 # F: clear removes structured context and chat history.
@@ -52,14 +54,15 @@ assert ctx is None
 assert "No analysis context attached" in badge
 assert "psa-context-off" in badge
 assert history == []
-assert "ANALYZER OUTPUT" not in assistant_system_prompt("Support Mail", ctx)
+assert "ANALYZER OUTPUT" not in assistant_system_prompt(ctx)
 
 # H: General Chat has no analysis argument.
 assert "assistant_context" not in inspect.signature(web_chat).parameters
 assert "analysis_state" not in inspect.signature(web_chat).parameters
 
 sig = inspect.signature(assistant_chat)
-assert list(sig.parameters) == ["message", "history", "mode", "assistant_context"]
+assert list(sig.parameters) == ["message", "history", "assistant_context"]
+assert "mode" not in sig.parameters
 
 empty_failed = False
 try:

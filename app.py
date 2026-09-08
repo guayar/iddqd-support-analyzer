@@ -199,25 +199,6 @@ CSS = """
 .psa-assistant-controls {
     gap: 8px !important;
 }
-.psa-assistant-mode {
-    text-align: center !important;
-}
-.psa-assistant-mode [data-testid="block-info"] {
-    display: block !important;
-    width: 100% !important;
-    text-align: center !important;
-    font-size: 16px !important;
-}
-.psa-assistant-mode .wrap,
-.psa-assistant-mode fieldset {
-    display: flex !important;
-    flex-wrap: wrap !important;
-    justify-content: center !important;
-    width: 100% !important;
-}
-.psa-assistant-mode label {
-    font-size: 15px !important;
-}
 .psa-context {
     display: flex !important;
     align-items: center !important;
@@ -437,12 +418,6 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                             elem_classes=["psa-note"],
                         )
                         with gr.Column(elem_classes=["psa-assistant-controls"]):
-                            assistant_mode = gr.Radio(
-                                ["General", "Support Mail", "Code"],
-                                value="General",
-                                label="Mode",
-                                elem_classes=["psa-assistant-mode"],
-                            )
                             context_badge = gr.HTML(_context_badge(None))
                             clear_ctx = gr.Button("Clear analysis context")
                         with gr.Column(elem_classes=["psa-chat"]):
@@ -450,7 +425,7 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                             gr.ChatInterface(
                                 fn=assistant_chat,
                                 chatbot=assistant_chatbot,
-                                additional_inputs=[assistant_mode, assistant_context],
+                                additional_inputs=[assistant_context],
                                 save_history=False,
                                 fill_height=False,
                             )

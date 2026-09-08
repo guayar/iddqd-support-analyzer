@@ -49,7 +49,7 @@ assert "web_search" in web_src
 assert "analysis_state" not in inspect.signature(web_chat).parameters
 sig = inspect.signature(assistant_chat)
 assert "assistant_context" in sig.parameters
-assert "context_detached" not in sig.parameters
+assert "mode" not in sig.parameters
 assert "analysis_state" not in sig.parameters
 assert "assistant_context" not in inspect.signature(web_chat).parameters
 

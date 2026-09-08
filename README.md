@@ -4,7 +4,7 @@
 
 Local troubleshooting toolkit for SAML/SSO and log analysis. Optional anonymizer and local LLM chats.
 
-**Current version:** `0.11.2`
+**Current version:** `0.11.3`
 
 The core product is a local, deterministic SAML and log analyzer. It does not require Ollama. Optional modules (Anonymize, Assistant + General Chat) are enabled from the **Config** tab and load after a restart.
 
@@ -134,13 +134,7 @@ The anonymizer is not a certified DLP product; generated output should still be 
 
 Enable **Assistant and General Chat** on the Config tab, then restart. Requires local Ollama.
 
-Separate local modes for:
-
-- general technical assistance
-- enterprise support mail drafting
-- Java / TypeScript / Python / Playwright coding help
-
-The Assistant has no web-search path. The latest Analyze result is available in this chat automatically. **Clear analysis context** removes that report and resets the Assistant chat. General Chat never receives it.
+The Assistant has no web-search path and no Mode switch. Ask it for technical help, a support-mail draft, or code in the same chat. The latest Analyze result is available here automatically. **Clear analysis context** removes that report and resets the Assistant chat. General Chat never receives it.
 
 ### General Chat (same optional LLM module)
 

@@ -7,26 +7,14 @@ import requests
 
 from llm import complete, llm_unavailable
 
-GENERAL_SYSTEM = """You are a private local technical assistant running on the user's Ubuntu workstation.
+ASSISTANT_SYSTEM = """You are a private local technical assistant running on the user's Ubuntu workstation.
 You have no web-search tool and must never claim to have checked the internet or current external documentation.
 Be concise, technically precise, and practical. If uncertain, say what is uncertain.
+Match the task in the user's message: technical troubleshooting, enterprise support-mail drafts, or code.
 For programming questions, prioritize Java, TypeScript, Python and Playwright when relevant.
 Do not invent APIs, command results, files, logs, or execution results.
-"""
-
-MAIL_SYSTEM = """You are a senior enterprise technical support writing assistant running LOCALLY.
-Turn rough notes, drafts, or technical findings into concise, natural professional English.
-Preserve the user's meaning and technical facts. Do not invent completed checks, root causes, customer actions, dates, or results.
-Avoid robotic phrasing and unnecessary corporate filler.
-When useful, structure the message as: context/findings, what was verified, next step/request.
-Do not expose implementation details.
-"""
-
-CODE_SYSTEM = """You are a senior software engineering assistant running LOCALLY.
-Primary stack: Java, TypeScript, Python and Playwright.
-Help write, review, debug and explain code. Prefer production-quality, readable solutions and point out assumptions.
+When drafting support mail: preserve the user's meaning and technical facts; do not invent completed checks, root causes, customer actions, dates, or results; avoid robotic phrasing; when useful structure as context/findings, what was verified, next step/request; do not expose implementation details.
 Do not claim code was executed unless execution output was actually provided.
-You have no web-search tool, so do not claim to have checked current documentation. If an API/version detail may have changed, flag it.
 """
 
 WEB_SYSTEM = """You are a web-enabled general assistant. The language model itself runs locally, but for this chat the application deliberately searches the public web.
@@ -49,18 +37,12 @@ def _history_messages(history, limit: int, content_limit: int) -> list[dict[str,
     return msgs
 
 
-def assistant_system_prompt(mode, assistant_context=None) -> str:
-    systems = {
-        "General": GENERAL_SYSTEM,
-        "Support Mail": MAIL_SYSTEM,
-        "Code": CODE_SYSTEM,
-    }
-    system = systems.get(mode, GENERAL_SYSTEM)
+def assistant_system_prompt(assistant_context=None) -> str:
     if not assistant_context:
-        return system
+        return ASSISTANT_SYSTEM
     compact = json.dumps(assistant_context, ensure_ascii=False)[:120_000]
     return (
-        system
+        ASSISTANT_SYSTEM
         + "\n\nAttached analyzer JSON from the latest Analyze run "
         "(local only; you have no web-search tool). Use it when the user asks about this case. "
         "Do not claim you searched the internet.\n\n"
@@ -73,8 +55,8 @@ def empty_assistant_history():
     return []
 
 
-def assistant_chat(message, history, mode, assistant_context=None) -> str:
-    msgs = [{"role": "system", "content": assistant_system_prompt(mode, assistant_context)}]
+def assistant_chat(message, history, assistant_context=None) -> str:
+    msgs = [{"role": "system", "content": assistant_system_prompt(assistant_context)}]
     msgs.extend(_history_messages(history, 20, 20000))
     msgs.append({"role": "user", "content": message})
     try:
