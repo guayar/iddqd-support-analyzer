@@ -7,16 +7,6 @@ import requests
 
 from llm import complete, llm_unavailable
 
-ANALYSIS_SYSTEM = """You are a senior enterprise support/escalation engineer assistant running LOCALLY.
-You receive deterministic analyzer output generated from customer-provided material.
-Never invent values, completed checks, root causes, dates, error codes, or customer actions.
-Clearly distinguish observed facts from hypotheses and recommendations.
-If asked for an email, write concise, natural professional English suitable for enterprise support. Do not expose internal notes or implementation details.
-If asked for a report, produce a structured technical report with: Scope, Time range (if available), Findings, Error groups/codes, Caused-by chains, Assessment, Recommended next checks.
-For SAML, preserve exact URLs/Entity IDs/Audience/Destination/Recipient values and explicitly call out MATCH/MISMATCH/UNKNOWN checks.
-The system has no web-search tool. Do not claim to have checked external documentation.
-"""
-
 GENERAL_SYSTEM = """You are a private local technical assistant running on the user's Ubuntu workstation.
 You have no web-search tool and must never claim to have checked the internet or current external documentation.
 Be concise, technically precise, and practical. If uncertain, say what is uncertain.
@@ -59,29 +49,38 @@ def _history_messages(history, limit: int, content_limit: int) -> list[dict[str,
     return msgs
 
 
-def assistant_chat(message, history, mode, analysis_state=None, context_detached=False) -> str:
+def assistant_system_prompt(mode, assistant_context=None) -> str:
     systems = {
         "General": GENERAL_SYSTEM,
         "Support Mail": MAIL_SYSTEM,
         "Code": CODE_SYSTEM,
     }
     system = systems.get(mode, GENERAL_SYSTEM)
-    if analysis_state and not context_detached:
-        compact = json.dumps(analysis_state, ensure_ascii=False)[:120_000]
-        system = (
-            system
-            + "\n\nAttached analyzer JSON from the Analyze tab (local only; you have no web-search tool). "
-            "Use it when the user asks about this case. Do not claim you searched the internet.\n\n"
-            "ANALYZER OUTPUT:\n"
-            + compact
-        )
-    msgs = [{"role": "system", "content": system}]
+    if not assistant_context:
+        return system
+    compact = json.dumps(assistant_context, ensure_ascii=False)[:120_000]
+    return (
+        system
+        + "\n\nAttached analyzer JSON from an explicit Open in Assistant handoff "
+        "(local only; you have no web-search tool). Use it when the user asks about this case. "
+        "Do not claim you searched the internet.\n\n"
+        "ANALYZER OUTPUT:\n"
+        + compact
+    )
+
+
+def empty_assistant_history():
+    return []
+
+
+def assistant_chat(message, history, mode, assistant_context=None) -> str:
+    msgs = [{"role": "system", "content": assistant_system_prompt(mode, assistant_context)}]
     msgs.extend(_history_messages(history, 20, 20000))
     msgs.append({"role": "user", "content": message})
     try:
         return complete(msgs)
     except requests.RequestException as e:
-        extra = " The deterministic Analyze tab still works." if analysis_state and not context_detached else ""
+        extra = " The deterministic Analyze tab still works." if assistant_context else ""
         return llm_unavailable(e) + extra
     except Exception as e:
         return f"LLM error: `{e}`"

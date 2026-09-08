@@ -35,3 +35,4 @@ jobs:
           PYTHONPATH=. python tests/test_layers.py
           PYTHONPATH=. python tests/test_nameid.py
           PYTHONPATH=. python tests/test_modules.py
+          PYTHONPATH=. python tests/test_assistant_handoff.py

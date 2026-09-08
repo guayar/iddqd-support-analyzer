@@ -4,7 +4,7 @@
 
 Local troubleshooting toolkit for SAML/SSO and log analysis. Optional anonymizer and local LLM chats.
 
-**Current version:** `0.11.0`
+**Current version:** `0.11.1`
 
 The core product is a local, deterministic SAML and log analyzer. It does not require Ollama. Optional modules (Anonymize, Assistant + General Chat) are enabled from the **Config** tab and load after a restart.
 
@@ -140,7 +140,7 @@ Separate local modes for:
 - enterprise support mail drafting
 - Java / TypeScript / Python / Playwright coding help
 
-The Assistant has no web-search path. It automatically receives the current Analyze report. Use **Clear analysis context** on the Assistant tab to chat without that report.
+The Assistant has no web-search path. It can receive an Analyze result through an explicit **Open in Assistant** handoff on the Analyze tab. **Clear analysis context** removes that report and resets the Assistant chat.
 
 ### General Chat (same optional LLM module)
 
@@ -152,7 +152,7 @@ A deliberately separate web-enabled chat. It receives **no** Analyzer or Assista
 |---|---:|---:|---|
 | Analyze | No | No | Logs, SAML traces, metadata, public signing certificates |
 | Anonymize (optional) | No | No | Sensitive logs and SAML traces |
-| Assistant (optional) | Yes | No | Technical/support material plus the current Analyze report unless cleared |
+| Assistant (optional) | Yes | No | Technical/support material, plus an Analyze result only after **Open in Assistant** |
 | General Chat (optional) | Yes | Yes | Non-sensitive public questions only |
 | Config | No | No | Which optional modules to load after restart |
 
@@ -202,7 +202,7 @@ The certificate is read for the current analysis only. It is not copied into the
 
 ## Configuration
 
-Use the **Config** tab to enable optional modules. Changes are saved immediately to a local `.iddqd-modules.json` file (gitignored). A red notice appears until you click **Restart application** and refresh the browser.
+Use the **Config** tab to enable optional modules. Changes are saved immediately to a local `.iddqd-modules.json` file (gitignored). A red notice appears until you click **Restart application** and refresh the browser. Default UI is **Analyze** and **Config**.
 
 `config.example.env` contains the supported environment variables. Common settings:
 
@@ -247,6 +247,7 @@ PYTHONPATH=. python tests/test_saml_anonymizer.py
 PYTHONPATH=. python tests/test_layers.py
 PYTHONPATH=. python tests/test_nameid.py
 PYTHONPATH=. python tests/test_modules.py
+PYTHONPATH=. python tests/test_assistant_handoff.py
 ```
 
 The tests use synthetic SAML and log data only. Signature and anonymization tests generate ephemeral synthetic keys/certificates at runtime; no private key material is stored in the repository.

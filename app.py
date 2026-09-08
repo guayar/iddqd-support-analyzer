@@ -263,10 +263,10 @@ def _hero_text() -> str:
     )
 
 
-def _context_badge(result, detached: bool) -> str:
-    attached = bool(result) and not detached
-    state = "on" if attached else "off"
-    label = "Analysis context attached" if attached else "No analysis context attached"
+def _context_badge(attached) -> str:
+    on = bool(attached)
+    state = "on" if on else "off"
+    label = "Analysis context attached" if on else "No analysis context attached"
     return (
         f"<p class='psa-context'>"
         f"<span class='psa-context-light psa-context-{state}' aria-hidden='true'></span>"
@@ -282,12 +282,23 @@ def _restart_notice(saved: tuple[str, ...]) -> str:
 
 def analyze(files, pasted, mode, signing_cert_file=None):
     try:
-        md, raw, result = run_analyze(files, pasted, mode, signing_cert_file)
+        return run_analyze(files, pasted, mode, signing_cert_file)
     except InputError as e:
         raise gr.Error(str(e)) from e
-    if LLM_ON:
-        return md, raw, result, False, _context_badge(result, False)
-    return md, raw, result
+
+
+def send_to_assistant(latest_analysis):
+    from chats import empty_assistant_history
+
+    if not latest_analysis:
+        raise gr.Error("Analyze a log or SAML tracer first.")
+    return latest_analysis, _context_badge(latest_analysis), empty_assistant_history()
+
+
+def clear_assistant_context():
+    from chats import empty_assistant_history
+
+    return None, _context_badge(None), empty_assistant_history()
 
 
 def anonymize(file, pasted):
@@ -310,13 +321,9 @@ def restart_clicked():
     restart_application()
 
 
-def clear_assistant_context(analysis_state):
-    return True, _context_badge(analysis_state, True)
-
-
 with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
     analysis_state = gr.State(None)
-    assistant_detached = gr.State(False)
+    assistant_context = gr.State(None)
     with gr.Column(elem_classes=["psa-page"]):
         gr.Markdown(_hero_text(), elem_id="hero")
 
@@ -356,6 +363,7 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                         )
 
                     run = gr.Button("Analyze", variant="primary", elem_classes=["psa-primary"])
+                    open_assistant = gr.Button("Open in Assistant", visible=LLM_ON) if LLM_ON else None
 
                     gr.Markdown(
                         "Standalone certificate upload is used only for SAML XML Signature verification. "
@@ -368,8 +376,7 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                     with gr.Accordion("Structured analyzer output (JSON)", open=False):
                         raw = gr.Code(label="JSON", language="json")
 
-                    if not LLM_ON:
-                        run.click(analyze, inputs=[files, pasted, mode, signing_cert], outputs=[report, raw, analysis_state])
+                    run.click(analyze, inputs=[files, pasted, mode, signing_cert], outputs=[report, raw, analysis_state])
 
             if ANONYMIZE_ON:
                 with gr.Tab("Anonymize log"):
@@ -421,8 +428,9 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                         gr.Markdown(
                             "### Local Assistant\n"
                             "Everything in this tab stays between the browser, this application and the local Ollama model. "
-                            "**No web search.** The current Analyze report is attached automatically; use **Clear analysis context** "
-                            "to chat without it. Do not paste secrets into General Chat.",
+                            "**No web search.** Attach a report with **Open in Assistant** on the Analyze tab. "
+                            "**Clear analysis context** removes the attached report and resets this chat. "
+                            "Do not paste secrets into General Chat.",
                             elem_classes=["psa-note"],
                         )
                         with gr.Column(elem_classes=["psa-assistant-controls"]):
@@ -432,22 +440,26 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                                 label="Mode",
                                 elem_classes=["psa-assistant-mode"],
                             )
-                            context_badge = gr.HTML(_context_badge(None, False))
+                            context_badge = gr.HTML(_context_badge(None))
                             clear_ctx = gr.Button("Clear analysis context")
                         with gr.Column(elem_classes=["psa-chat"]):
                             assistant_chatbot = gr.Chatbot(height=CHAT_HEIGHT, label="Chat", elem_id="assistant-chat")
                             gr.ChatInterface(
                                 fn=assistant_chat,
                                 chatbot=assistant_chatbot,
-                                additional_inputs=[assistant_mode, analysis_state, assistant_detached],
+                                additional_inputs=[assistant_mode, assistant_context],
                                 save_history=False,
                                 fill_height=False,
                             )
-                        clear_ctx.click(clear_assistant_context, inputs=[analysis_state], outputs=[assistant_detached, context_badge])
-                        run.click(
-                            analyze,
-                            inputs=[files, pasted, mode, signing_cert],
-                            outputs=[report, raw, analysis_state, assistant_detached, context_badge],
+                        clear_ctx.click(
+                            clear_assistant_context,
+                            inputs=[],
+                            outputs=[assistant_context, context_badge, assistant_chatbot],
+                        )
+                        open_assistant.click(
+                            send_to_assistant,
+                            inputs=[analysis_state],
+                            outputs=[assistant_context, context_badge, assistant_chatbot],
                         )
 
                 with gr.Tab("General Chat"):
@@ -467,8 +479,8 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                 with gr.Column(elem_classes=["psa-shell"]):
                     gr.Markdown(
                         "### Modules\n"
-                        "Analyze is always available. Optional modules load only after **Restart application** and a browser refresh. "
-                        "Default is Analyze only.",
+                        "Analyze and Config are always available. Optional modules load only after **Restart application** and a browser refresh. "
+                        "Default UI: Analyze + Config. No optional modules are enabled by default.",
                         elem_classes=["psa-note"],
                     )
                     saved = read_saved_plugins()
@@ -479,7 +491,7 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                     )
                     llm_box = gr.Checkbox(
                         label="Assistant and General Chat",
-                        info="Requires local Ollama. Assistant can read the Analyze report. General Chat can use the web and never receives that report.",
+                        info="Requires local Ollama. Assistant can receive an Analyze result through Open in Assistant. General Chat can use the web and never receives that report.",
                         value=PLUGIN_LLM in saved,
                     )
                     restart_md = gr.Markdown(_restart_notice(saved))

@@ -12,7 +12,7 @@ Gradio UI (app.py)
   ├─ Anonymize (optional module) ──> actions.anonymize (lazy) ──> analyzers/anonymizer
   │
   ├─ Assistant (optional LLM module) ──> chats.assistant_chat ──> llm.py
-  │         └── receives Analyze state unless cleared; no websearch
+  │         └── Analyze result only after explicit Open in Assistant; no websearch
   │
   ├─ General Chat (optional LLM module) ──> chats.web_chat ──> websearch.py ──> llm.py
   │         └── never receives Analyze or Assistant context
@@ -36,7 +36,7 @@ Input
 ## Security boundaries
 
 - Analyzer does not invoke web search or require Ollama.
-- Assistant (optional) does not invoke web search. It may use the current Analyze report unless the user clears that context.
+- Assistant (optional) does not invoke web search. It receives an Analyze result only after an explicit Open in Assistant handoff.
 - General Chat (optional) does not inherit Analyzer or Assistant context.
 - Optional modules are off by default. Enabling them in Config requires a process restart.
 - Model endpoints are restricted to loopback by default.

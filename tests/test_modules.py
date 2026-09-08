@@ -18,6 +18,8 @@ assert json.loads(modules.MODULES_FILE.read_text(encoding="utf-8"))["plugins"] =
 assert modules.normalize_plugins(["oidc", "anonymize"]) == ("anonymize",)
 modules.write_saved_plugins([])
 assert modules.read_saved_plugins() == ()
+modules.MODULES_FILE.write_text("{not-json", encoding="utf-8")
+assert modules.read_saved_plugins() == ()
 
 from analyzers import analyze_log_text, analyze_saml_input  # noqa: E402
 import actions  # noqa: E402
@@ -46,7 +48,13 @@ web_src = inspect.getsource(web_chat)
 assert "web_search" in web_src
 assert "analysis_state" not in inspect.signature(web_chat).parameters
 sig = inspect.signature(assistant_chat)
-assert "analysis_state" in sig.parameters
-assert "context_detached" in sig.parameters
+assert "assistant_context" in sig.parameters
+assert "context_detached" not in sig.parameters
+assert "analysis_state" not in sig.parameters
+assert "assistant_context" not in inspect.signature(web_chat).parameters
+
+# J: Core-only UI is Analyze + Config (optional modules off).
+assert app.ANONYMIZE_ON is False
+assert app.LLM_ON is False
 
 print("MODULE PLUGIN TESTS OK")
