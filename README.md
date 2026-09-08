@@ -6,7 +6,7 @@ Early-stage AI-assisted project. Not a production product — I am building it t
 
 Local troubleshooting toolkit for SAML/SSO and log analysis. Optional anonymizer and local LLM chats.
 
-**Current version:** `0.11.18`
+**Current version:** `0.11.19`
 
 The core product is a local, deterministic SAML and log analyzer. It does not require Ollama. Optional modules (Anonymize, Assistant + General Chat) are enabled from the **Config** tab and load after a restart.
 
@@ -35,6 +35,7 @@ I built this to learn SAML and support-style log analysis by implementing the ch
 - optional standalone X.509 signing certificate upload (`.pem`, `.crt`, `.cer`; PEM or DER)
 - certificate fingerprints from SAML messages, metadata and supplied certificates
 - protocol/profile validation with structured error codes
+- copy the rendered Analyze report to the clipboard
 - cross-document checks across Request ↔ Response ↔ Assertion ↔ SP metadata ↔ IdP metadata
 
 Examples of validator findings:

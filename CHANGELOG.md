@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## [0.11.19] - 2026-09-08
+
+### Added
+
+- Analyze report window has a copy-to-clipboard control for the rendered report text
+
+### Changed
+
+- version bumped to `0.11.19`
+
 ## [0.11.18] - 2026-09-08
 
 ### Added

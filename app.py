@@ -73,9 +73,61 @@ CSS = """
     background: transparent !important;
     border: 0 !important;
 }
+#analysis-wrap {
+    position: relative !important;
+}
+#copy-report-slot,
+#copy-report-slot .html-container,
+#copy-report-slot .prose,
+#copy-report-slot .padded {
+    height: 0 !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    overflow: visible !important;
+}
+.psa-copy-report {
+    position: absolute !important;
+    top: 10px !important;
+    right: 12px !important;
+    z-index: 5 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 32px !important;
+    height: 32px !important;
+    padding: 0 !important;
+    border: 1px solid var(--border-color-primary) !important;
+    border-radius: 6px !important;
+    background: white !important;
+    color: #4b5563 !important;
+    cursor: pointer !important;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08) !important;
+}
+.psa-copy-report:hover {
+    color: #111827 !important;
+    border-color: #9ca3af !important;
+}
+.psa-copy-report svg {
+    width: 16px !important;
+    height: 16px !important;
+    display: block !important;
+}
+.psa-copy-report .psa-copy-check {
+    display: none !important;
+}
+.psa-copy-report.is-copied .psa-copy-icon {
+    display: none !important;
+}
+.psa-copy-report.is-copied .psa-copy-check {
+    display: block !important;
+    color: #16a34a !important;
+}
 #analysis {
     min-height: 210px !important;
-    padding: 14px 16px !important;
+    padding: 14px 48px 14px 16px !important;
     background: white !important;
     border: 1px solid var(--border-color-primary) !important;
     border-radius: 8px !important;
@@ -236,6 +288,47 @@ footer button.settings::before {{
 """
 
 
+COPY_REPORT_JS = """
+() => {
+  const bind = () => {
+    const btn = document.getElementById("psa-copy-report");
+    if (!btn || btn.dataset.bound === "1") return;
+    btn.dataset.bound = "1";
+    btn.addEventListener("click", async () => {
+      const root = document.querySelector("#analysis");
+      const text = ((root && root.innerText) || "").trim();
+      if (!text) return;
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch (e) {
+        return;
+      }
+      btn.classList.add("is-copied");
+      btn.setAttribute("aria-label", "Copied");
+      window.setTimeout(() => {
+        btn.classList.remove("is-copied");
+        btn.setAttribute("aria-label", "Copy report");
+      }, 1500);
+    });
+  };
+  bind();
+  new MutationObserver(bind).observe(document.body, { childList: true, subtree: true });
+}
+"""
+
+COPY_REPORT_HTML = """
+<button type="button" id="psa-copy-report" class="psa-copy-report" title="Copy report" aria-label="Copy report">
+  <svg class="psa-copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <rect x="9" y="9" width="13" height="13" rx="2"></rect>
+    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+  </svg>
+  <svg class="psa-copy-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M20 6 9 17l-5-5"></path>
+  </svg>
+</button>
+"""
+
+
 def _hero_text() -> str:
     extras = []
     if ANONYMIZE_ON:
@@ -372,7 +465,9 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                         elem_classes=["psa-note"],
                     )
 
-                    report = gr.Markdown(elem_id="analysis")
+                    with gr.Column(elem_id="analysis-wrap"):
+                        gr.HTML(COPY_REPORT_HTML, elem_id="copy-report-slot")
+                        report = gr.Markdown(elem_id="analysis")
                     decoded_download = gr.File(label="Decoded SAML artifacts", interactive=False)
 
                     with gr.Accordion("Structured analyzer output (JSON)", open=False):
@@ -512,5 +607,6 @@ if __name__ == "__main__":
         show_error=True,
         footer_links=["settings"],
         css=CSS,
+        js=COPY_REPORT_JS,
         max_file_size=f"{MAX_FILE_MB}mb",
     )
