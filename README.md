@@ -140,7 +140,7 @@ Separate local modes for:
 - enterprise support mail drafting
 - Java / TypeScript / Python / Playwright coding help
 
-The Assistant has no web-search path. It can receive an Analyze result through an explicit **Open in Assistant** handoff on the Analyze tab. **Clear analysis context** removes that report and resets the Assistant chat.
+The Assistant has no web-search path. It can receive an Analyze result through an explicit **Attach latest analysis** action on the Assistant tab. **Clear analysis context** removes that report and resets the Assistant chat.
 
 ### General Chat (same optional LLM module)
 
@@ -152,7 +152,7 @@ A deliberately separate web-enabled chat. It receives **no** Analyzer or Assista
 |---|---:|---:|---|
 | Analyze | No | No | Logs, SAML traces, metadata, public signing certificates |
 | Anonymize (optional) | No | No | Sensitive logs and SAML traces |
-| Assistant (optional) | Yes | No | Technical/support material, plus an Analyze result only after **Open in Assistant** |
+| Assistant (optional) | Yes | No | Technical/support material, plus an Analyze result only after **Attach latest analysis** |
 | General Chat (optional) | Yes | Yes | Non-sensitive public questions only |
 | Config | No | No | Which optional modules to load after restart |
 

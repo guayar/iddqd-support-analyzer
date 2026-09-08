@@ -19,6 +19,7 @@ assert "assistant_detached" not in analyze_src
 plain = assistant_system_prompt("General", None)
 assert "ANALYZER OUTPUT" not in plain
 assert "Open in Assistant" not in plain
+assert "Attach latest analysis" not in plain
 
 # B: explicit handoff attaches that analysis and starts a clean chat.
 ctx, badge, history = send_to_assistant(analysis_a)

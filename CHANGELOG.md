@@ -6,7 +6,7 @@ All notable changes to this project are documented here.
 
 ### Fixed
 
-- Assistant receives an Analyze result only through explicit **Open in Assistant**; a later Analyze does not replace an already attached case
+- Assistant receives an Analyze result only through explicit **Attach latest analysis** on the Assistant tab; a later Analyze does not replace an already attached case
 - **Clear analysis context** and attaching a different analysis both reset Assistant chat history
 - Config copy states the default UI is Analyze + Config
 
@@ -20,7 +20,7 @@ All notable changes to this project are documented here.
 
 - optional Anonymize and LLM modules enabled from the Config tab (default UI: Analyze + Config)
 - Restart application control after module changes; refresh the browser after the UI disconnects
-- Assistant can receive an Analyze result through Open in Assistant; General Chat never receives that report
+- Assistant can receive an Analyze result through Attach latest analysis; General Chat never receives that report
 
 ### Removed
 

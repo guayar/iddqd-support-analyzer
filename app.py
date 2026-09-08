@@ -363,7 +363,6 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                         )
 
                     run = gr.Button("Analyze", variant="primary", elem_classes=["psa-primary"])
-                    open_assistant = gr.Button("Open in Assistant", visible=LLM_ON) if LLM_ON else None
 
                     gr.Markdown(
                         "Standalone certificate upload is used only for SAML XML Signature verification. "
@@ -428,8 +427,8 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                         gr.Markdown(
                             "### Local Assistant\n"
                             "Everything in this tab stays between the browser, this application and the local Ollama model. "
-                            "**No web search.** Attach a report with **Open in Assistant** on the Analyze tab. "
-                            "**Clear analysis context** removes the attached report and resets this chat. "
+                            "**No web search.** Use **Attach latest analysis** to send the current Analyze result into this chat. "
+                            "**Clear analysis context** removes it and resets this chat. "
                             "Do not paste secrets into General Chat.",
                             elem_classes=["psa-note"],
                         )
@@ -441,6 +440,7 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                                 elem_classes=["psa-assistant-mode"],
                             )
                             context_badge = gr.HTML(_context_badge(None))
+                            attach_latest = gr.Button("Attach latest analysis")
                             clear_ctx = gr.Button("Clear analysis context")
                         with gr.Column(elem_classes=["psa-chat"]):
                             assistant_chatbot = gr.Chatbot(height=CHAT_HEIGHT, label="Chat", elem_id="assistant-chat")
@@ -451,14 +451,14 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                                 save_history=False,
                                 fill_height=False,
                             )
+                        attach_latest.click(
+                            send_to_assistant,
+                            inputs=[analysis_state],
+                            outputs=[assistant_context, context_badge, assistant_chatbot],
+                        )
                         clear_ctx.click(
                             clear_assistant_context,
                             inputs=[],
-                            outputs=[assistant_context, context_badge, assistant_chatbot],
-                        )
-                        open_assistant.click(
-                            send_to_assistant,
-                            inputs=[analysis_state],
                             outputs=[assistant_context, context_badge, assistant_chatbot],
                         )
 
@@ -491,7 +491,7 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                     )
                     llm_box = gr.Checkbox(
                         label="Assistant and General Chat",
-                        info="Requires local Ollama. Assistant can receive an Analyze result through Open in Assistant. General Chat can use the web and never receives that report.",
+                        info="Requires local Ollama. Assistant can attach an Analyze result from the Assistant tab. General Chat can use the web and never receives that report.",
                         value=PLUGIN_LLM in saved,
                     )
                     restart_md = gr.Markdown(_restart_notice(saved))

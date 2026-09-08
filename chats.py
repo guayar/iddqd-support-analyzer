@@ -61,7 +61,7 @@ def assistant_system_prompt(mode, assistant_context=None) -> str:
     compact = json.dumps(assistant_context, ensure_ascii=False)[:120_000]
     return (
         system
-        + "\n\nAttached analyzer JSON from an explicit Open in Assistant handoff "
+        + "\n\nAttached analyzer JSON from an explicit Attach latest analysis handoff "
         "(local only; you have no web-search tool). Use it when the user asks about this case. "
         "Do not claim you searched the internet.\n\n"
         "ANALYZER OUTPUT:\n"
