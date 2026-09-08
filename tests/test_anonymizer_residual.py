@@ -31,6 +31,28 @@ assert not any(h["kind"] == "USER" and h["value"] == "jsmith" for h in win["resi
 prop = anonymize_text("jwt.secret=super-secret-value")
 assert "super-secret-value" not in prop["text"]
 
+# Java stack frames, logger abbreviations, filenames and :: are not domains/IPs.
+stack = """2026-06-16T13:34:08.229+05:30 ERROR o.s.boot.SpringApplication : Application run failed
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:323) ~[spring-boot-3.2.0.jar:3.2.0]
+Caused by: java.lang.IllegalArgumentException: Could not resolve placeholder 'jwt.secret' in value "${jwt.secret}"
+[INFO] from pom.xml
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoExecutionException
+::
+"""
+st = anonymize_text(stack)
+assert "SpringApplication.java" in st["text"]
+assert "spring-boot-3.2.0.jar" in st["text"]
+assert "o.s.boot.SpringApplication" in st["text"]
+assert "jwt.secret" in st["text"]
+assert "pom.xml" in st["text"]
+assert "cwiki.apache.org" in st["text"]
+assert "::" in st["text"]
+assert not any(
+    row["original"].endswith((".java", ".jar", ".class", ".xml")) or row["original"] in {"jwt.secret", "::", "pom.xml"}
+    for row in st["mapping"]
+)
+assert "api.customer.example.com" not in anonymize_text("https://api.customer.example.com/login")["text"]
+
 # Residual scanner itself ignores placeholders and OASIS/W3C URIs.
 hits = scan_residual_leaks("EMAIL_001 and https://www.w3.org/2000/09/xmldsig# and java.lang.RuntimeException")
 assert hits == []

@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## [0.11.8] - 2026-09-08
+
+### Fixed
+
+- anonymizer no longer treats Java stack frames, logger abbreviations, `*.java`/`*.jar`/`pom.xml` or `::` as customer domains/IPs
+
+### Changed
+
+- version bumped to `0.11.8`
+
 ## [0.11.7] - 2026-09-08
 
 ### Added

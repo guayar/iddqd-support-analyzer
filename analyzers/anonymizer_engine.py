@@ -89,6 +89,21 @@ STANDARD_URI_PREFIXES = (
 STANDARD_HOSTS = {
     "www.w3.org", "w3.org", "schemas.xmlsoap.org", "docs.oasis-open.org", "www.oasis-open.org", "oasis-open.org"
 }
+PUBLIC_INFRA_HOST_SUFFIXES = (
+    ".apache.org",
+    ".spring.io",
+    ".oracle.com",
+    ".maven.org",
+    ".ietf.org",
+    ".github.com",
+    ".githubusercontent.com",
+)
+# Last labels that are source/build artifacts, not DNS TLDs.
+CODE_LAST_LABELS = {
+    "java", "jar", "class", "kt", "kts", "scala", "groovy", "xml", "properties",
+    "yml", "yaml", "gradle", "json", "log", "txt", "call", "inject", "secret",
+    "conf", "cfg", "ini", "md", "pom",
+}
 
 PLACEHOLDER_RE = re.compile(
     r"(?:DOMAIN|IP|EMAIL|HOST|SECRET|UUID|MAC|USER|URL|ENTITY|NAMEID|ATTR_VALUE|SAML_ID|SESSION|RELAYSTATE|ADDRESS|X509_CERT|SIGNATURE|DIGEST)_\d{3}",
@@ -135,9 +150,44 @@ class _Mapper:
         return {k: len(v) for k, v in self.values.items() if v}
 
 
+def _is_well_known_public_host(host: str) -> bool:
+    low = (host or "").strip("[]").lower()
+    if not low:
+        return False
+    if low in STANDARD_HOSTS or low in {"apache.org", "spring.io", "oracle.com", "maven.org"}:
+        return True
+    return any(low.endswith(suffix) for suffix in PUBLIC_INFRA_HOST_SUFFIXES)
+
+
 def _is_placeholder(value: str) -> bool:
     value = (value or "").strip()
     return bool(PLACEHOLDER_RE.fullmatch(value) or TEMPLATE_PLACEHOLDER_RE.fullmatch(value))
+
+
+def _looks_like_dns_hostname(value: str) -> bool:
+    """True for customer-looking hostnames; false for Java frames, loggers, filenames."""
+    if not value or _is_placeholder(value):
+        return False
+    low = value.lower().strip(".")
+    if low.startswith(PACKAGE_PREFIXES) or _is_well_known_public_host(low):
+        return False
+    labels = [part for part in value.split(".") if part]
+    if len(labels) < 2:
+        return False
+    tld = labels[-1].lower()
+    if tld in CODE_LAST_LABELS:
+        return False
+    if tld not in {"local", "internal", "lan", "corp", "home", "test"}:
+        if not (2 <= len(tld) <= 24 and tld.isalpha()):
+            return False
+    if sum(1 for lab in labels if len(lab) == 1) >= 2:
+        return False
+    for lab in labels:
+        if any(ch.isupper() for ch in lab) and any(ch.islower() for ch in lab):
+            return False
+        if any(ch in lab for ch in "()[]$"):
+            return False
+    return True
 
 
 def _is_standard_uri(value: str) -> bool:
@@ -166,7 +216,7 @@ def _anonymize_host(host: str, mapper: _Mapper) -> str:
         return host
     clean = host.strip("[]")
     low = clean.lower()
-    if low in {"localhost", "localhost.localdomain"} or low in STANDARD_HOSTS or _is_placeholder(clean):
+    if low in {"localhost", "localhost.localdomain"} or _is_well_known_public_host(clean) or _is_placeholder(clean):
         return host
     if _valid_ip(clean):
         rep = mapper.map("IP", clean)
@@ -224,7 +274,12 @@ def _anonymize_patterns(text: str, mapper: _Mapper) -> str:
 
     def ipv6_repl(m: re.Match[str]) -> str:
         value = m.group(0)
-        return mapper.map("IP", value) if _valid_ip(value, 6) and not _is_placeholder(value) else value
+        if not _valid_ip(value, 6) or _is_placeholder(value):
+            return value
+        ip = ipaddress.ip_address(value)
+        if ip.is_unspecified or ip.is_loopback or ip.is_link_local:
+            return value
+        return mapper.map("IP", value)
 
     out = IPV4_RE.sub(ipv4_repl, out)
     out = IPV6_CANDIDATE_RE.sub(ipv6_repl, out)
@@ -233,8 +288,7 @@ def _anonymize_patterns(text: str, mapper: _Mapper) -> str:
 
     def domain_repl(m: re.Match[str]) -> str:
         value = m.group(0)
-        low = value.lower()
-        if low.startswith(PACKAGE_PREFIXES) or low in STANDARD_HOSTS or _is_placeholder(value):
+        if not _looks_like_dns_hostname(value):
             return value
         return mapper.map("DOMAIN", value)
 
@@ -278,13 +332,14 @@ def _residual_allow(value: str) -> bool:
         return True
     if low.endswith(".invalid"):
         return True
+    if _is_well_known_public_host(value):
+        return True
+    if "." in value and not _valid_ip(value) and not EMAIL_RE.fullmatch(value) and not _looks_like_dns_hostname(value):
+        return True
     if _valid_ip(value):
-        try:
-            ip = ipaddress.ip_address(value)
-            if ip.is_loopback or ip.is_unspecified:
-                return True
-        except ValueError:
-            pass
+        ip = ipaddress.ip_address(value)
+        if ip.is_loopback or ip.is_unspecified or ip.is_link_local:
+            return True
     return False
 
 
