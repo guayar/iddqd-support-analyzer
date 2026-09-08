@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## [0.11.16] - 2026-09-08
+
+### Added
+
+- Analyze can download each SAML document unpacked from Base64 / Redirect / DEFLATE (and tracer/HAR fields), as separate XML files named from the source file; the bytes are the raw decode, not pretty-printed or anonymized
+
+### Changed
+
+- version bumped to `0.11.16`
+
 ## [0.11.15] - 2026-09-08
 
 ### Fixed

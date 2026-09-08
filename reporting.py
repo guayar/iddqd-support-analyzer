@@ -249,6 +249,15 @@ def render_saml_report(result: dict[str, Any]) -> str:
         for src in result["detected_sources"]:
             out.append(f"- **{src.get('document_type')}** — `{src.get('source')}`")
 
+    if result.get("decoded_artifacts"):
+        out.append("\n## Decoded artifacts")
+        for item in result["decoded_artifacts"]:
+            out.append(
+                f"- **{item.get('document_type')}** — `{item.get('export_name')}` · "
+                f"source `{item.get('source_name')}` · `{item.get('encoding')}`"
+            )
+        out.append("Download the raw decoded XML from **Decoded SAML artifacts** (not pretty-printed, not anonymized).")
+
     transport = result.get("transport") or {}
     if any(transport.get(k) for k in ("request_binding", "response_binding", "inferred_response_binding", "redirect_signature_present", "evidence")):
         out.append("\n## Transport / binding detection")
@@ -415,6 +424,15 @@ def render_saml_output(result: dict[str, Any]) -> str:
         lines = ["# Analysis", "", "SAML artifacts:"]
         for item in result.get("analyses") or []:
             lines.append(f"- `{item.get('name')}`")
+        if result.get("decoded_artifacts"):
+            lines.append("")
+            lines.append("## Decoded artifacts")
+            for item in result["decoded_artifacts"]:
+                lines.append(
+                    f"- **{item.get('document_type')}** — `{item.get('export_name')}` · "
+                    f"source `{item.get('source_name')}` · `{item.get('encoding')}`"
+                )
+            lines.append("Download the raw decoded XML from **Decoded SAML artifacts** (not pretty-printed, not anonymized).")
         lines.append("")
         lines.append(render_saml_multi_sections(result))
         return "\n".join(lines)
@@ -428,6 +446,15 @@ def render_mixed_report(result: dict[str, Any]) -> str:
     saml = result.get("saml")
     if saml:
         lines.append("")
+        if saml.get("decoded_artifacts") and saml.get("kind") == "saml_multi":
+            lines.append("## Decoded artifacts")
+            for item in saml["decoded_artifacts"]:
+                lines.append(
+                    f"- **{item.get('document_type')}** — `{item.get('export_name')}` · "
+                    f"source `{item.get('source_name')}` · `{item.get('encoding')}`"
+                )
+            lines.append("Download the raw decoded XML from **Decoded SAML artifacts** (not pretty-printed, not anonymized).")
+            lines.append("")
         if saml.get("kind") == "saml_multi":
             lines.append(render_saml_multi_sections(saml))
         else:

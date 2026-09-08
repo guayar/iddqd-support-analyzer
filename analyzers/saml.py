@@ -8,6 +8,7 @@ import re
 import urllib.parse
 import zlib
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from defusedxml import ElementTree as ET
@@ -744,6 +745,92 @@ def saml_root_types(text: str) -> set[str]:
     return found
 
 
+_TRANSPORT_SOURCE_RE = re.compile(r"Base64|DEFLATE|gzip|\bzlib\b|URL-decoded", re.I)
+_EXPORT_SLUG = {
+    "AuthnRequest": "authnrequest",
+    "Response": "response",
+    "Assertion": "assertion",
+    "EntityDescriptor": "metadata",
+    "EntitiesDescriptor": "metadata",
+    "Metadata": "metadata",
+}
+
+
+def _is_transport_source(source: str) -> bool:
+    return bool(_TRANSPORT_SOURCE_RE.search(source or ""))
+
+
+def _export_stem(source_name: str | None) -> str:
+    if not source_name or source_name == "pasted text":
+        return "pasted"
+    stem = Path(source_name).stem
+    stem = re.sub(r"[^A-Za-z0-9._-]+", "_", stem).strip("._")
+    return (stem or "pasted")[:80]
+
+
+def _xml_for_export(candidate: str) -> str:
+    start = candidate.find("<")
+    return candidate[start:] if start >= 0 else candidate
+
+
+def collect_decoded_artifacts(text: str, source_name: str | None = None) -> list[dict[str, Any]]:
+    """SAML XML the analyzer unpacked from a transport encoding, with source lineage."""
+    found: list[dict[str, Any]] = []
+    seen_xml: set[str] = set()
+    for candidate, source in _extract_candidates(text or ""):
+        if not _is_transport_source(source):
+            continue
+        root, _error = _parse_xml_detailed(candidate)
+        if root is None:
+            continue
+        typ = _local(root.tag)
+        if typ not in SAMLISH_ROOTS:
+            continue
+        xml = _xml_for_export(candidate)
+        if xml in seen_xml:
+            continue
+        seen_xml.add(xml)
+        found.append({
+            "source_name": source_name or "pasted text",
+            "encoding": source,
+            "document_type": "Metadata" if typ in {"EntityDescriptor", "EntitiesDescriptor"} else typ,
+            "xml": xml,
+        })
+    return found
+
+
+def assign_decoded_export_names(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    counts: dict[tuple[str, str], int] = {}
+    named: list[dict[str, Any]] = []
+    for item in items:
+        stem = _export_stem(item.get("source_name"))
+        slug = _EXPORT_SLUG.get(str(item.get("document_type") or ""), "saml")
+        key = (stem, slug)
+        counts[key] = counts.get(key, 0) + 1
+        row = dict(item)
+        row["export_name"] = f"{stem}.{slug}_{counts[key]:02d}.xml"
+        named.append(row)
+    return named
+
+
+def decoded_artifacts_for_named_inputs(artifacts: list[tuple[str, str]]) -> list[dict[str, Any]]:
+    """Collect transport-decoded SAML per source file so lineage is not lost at join."""
+    items: list[dict[str, Any]] = []
+    seen_files: set[tuple[str, str]] = set()
+    seen_xml: set[str] = set()
+    for name, text in artifacts:
+        key = (name, text)
+        if key in seen_files:
+            continue
+        seen_files.add(key)
+        for item in collect_decoded_artifacts(text, name):
+            if item["xml"] in seen_xml:
+                continue
+            seen_xml.add(item["xml"])
+            items.append(item)
+    return assign_decoded_export_names(items)
+
+
 def analyze_saml_input(text: str) -> dict[str, Any]:
     docs: list[dict[str, Any]] = []
     encodings: list[dict[str, str]] = []
@@ -923,6 +1010,9 @@ def analyze_saml_input(text: str) -> dict[str, Any]:
         "documents": docs,
         "detected_sources": encodings,
         "parse_failures": parse_failures,
+        "decoded_artifacts": assign_decoded_export_names(
+            collect_decoded_artifacts(text, "pasted text")
+        ),
         "transport": transport,
         "findings": findings,
         "checks": checks,

@@ -6,7 +6,7 @@ Early-stage AI-assisted project. Not a production product — I am building it t
 
 Local troubleshooting toolkit for SAML/SSO and log analysis. Optional anonymizer and local LLM chats.
 
-**Current version:** `0.11.15`
+**Current version:** `0.11.16`
 
 The core product is a local, deterministic SAML and log analyzer. It does not require Ollama. Optional modules (Anonymize, Assistant + General Chat) are enabled from the **Config** tab and load after a restart.
 
@@ -21,6 +21,7 @@ I built this to learn SAML and support-style log analysis by implementing the ch
 - raw `AuthnRequest`, `Response` and standalone `Assertion` XML
 - HTTP-POST Base64 decoding
 - HTTP-Redirect URL decoding, Base64 decoding and raw-DEFLATE decompression
+- download of each transport-decoded SAML document (raw XML, source filename preserved)
 - SP and IdP metadata parsing (`EntityDescriptor` / `EntitiesDescriptor`)
 - full Response and Assertion field extraction
 - Subject / NameID / SubjectConfirmation analysis

@@ -5,6 +5,7 @@ import os
 import gradio as gr
 
 from actions import analyze as run_analyze
+from actions import write_decoded_artifact_download
 from config import APP_PORT, APP_TITLE, APP_VERSION, MAX_FILE_MB
 from modules import (
     PLUGIN_ANONYMIZE,
@@ -268,9 +269,10 @@ def _restart_notice(saved: tuple[str, ...]) -> str:
 
 def analyze(files, pasted, mode, signing_cert_file=None):
     try:
-        return run_analyze(files, pasted, mode, signing_cert_file)
+        markdown, raw_json, result = run_analyze(files, pasted, mode, signing_cert_file)
     except InputError as e:
         raise gr.Error(str(e)) from e
+    return markdown, raw_json, result, write_decoded_artifact_download(result)
 
 
 def send_to_assistant(latest_analysis):
@@ -282,9 +284,9 @@ def send_to_assistant(latest_analysis):
 
 
 def analyze_with_assistant(files, pasted, mode, signing_cert_file=None):
-    markdown, raw_json, result = analyze(files, pasted, mode, signing_cert_file)
+    markdown, raw_json, result, download = analyze(files, pasted, mode, signing_cert_file)
     ctx, badge, history = send_to_assistant(result)
-    return markdown, raw_json, result, ctx, badge, history
+    return markdown, raw_json, result, download, ctx, badge, history
 
 
 def clear_assistant_context():
@@ -371,6 +373,7 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                     )
 
                     report = gr.Markdown(elem_id="analysis")
+                    decoded_download = gr.File(label="Decoded SAML artifacts", interactive=False)
 
                     with gr.Accordion("Structured analyzer output (JSON)", open=False):
                         raw = gr.Code(label="JSON", language="json")
@@ -492,10 +495,10 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                 run.click(
                     analyze_with_assistant,
                     inputs=[files, pasted, mode, signing_cert],
-                    outputs=[report, raw, analysis_state, assistant_context, context_badge, assistant_chatbot],
+                    outputs=[report, raw, analysis_state, decoded_download, assistant_context, context_badge, assistant_chatbot],
                 )
             else:
-                run.click(analyze, inputs=[files, pasted, mode, signing_cert], outputs=[report, raw, analysis_state])
+                run.click(analyze, inputs=[files, pasted, mode, signing_cert], outputs=[report, raw, analysis_state, decoded_download])
 
 
 if __name__ == "__main__":

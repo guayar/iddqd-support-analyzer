@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import json
 import tempfile
+import zipfile
 from pathlib import Path
 from typing import Any
 
 from analyzers import analyze_log_text, analyze_saml_input
-from analyzers.saml import looks_like_saml_input, saml_root_types
+from analyzers.saml import decoded_artifacts_for_named_inputs, looks_like_saml_input, saml_root_types
 from analyzers.saml_supplied_cert import extract_pem_certificates_from_text
 from reporting import render_log_report, render_mixed_report, render_saml_output
 from uploads import (
@@ -29,7 +30,9 @@ def _run_saml(artifacts: list[tuple[str, str]], signing_cert_file, all_artifacts
         cert_data = extract_pem_certificates_from_text("\n".join(t for _n, t in all_artifacts))
 
     def run(arts: list[tuple[str, str]]):
-        return analyze_saml_input(join_saml_artifacts(arts), signing_cert=cert_data)
+        result = analyze_saml_input(join_saml_artifacts(arts), signing_cert=cert_data)
+        result["decoded_artifacts"] = decoded_artifacts_for_named_inputs(arts)
+        return result
 
     if len(artifacts) <= 1:
         return run(artifacts)
@@ -46,12 +49,17 @@ def _run_saml(artifacts: list[tuple[str, str]], signing_cert_file, all_artifacts
     if together:
         return run(artifacts)
 
+    analyses = []
+    for name, text, _kinds in protocol_arts:
+        inner = run([(name, text)] + meta_arts)
+        inner.pop("decoded_artifacts", None)
+        analyses.append({"name": name, "result": inner})
     return {
         "kind": "saml_multi",
-        "analyses": [
-            {"name": name, "result": run([(name, text)] + meta_arts)}
-            for name, text, _kinds in protocol_arts
-        ],
+        "analyses": analyses,
+        "decoded_artifacts": decoded_artifacts_for_named_inputs(
+            [(name, text) for name, text, _kinds in protocol_arts] + meta_arts
+        ),
     }
 
 
@@ -96,6 +104,31 @@ def analyze(files, pasted, mode, signing_cert_file=None) -> tuple[str, str, dict
             md = render_log_report(result)
 
     return md, json.dumps(result, indent=2, ensure_ascii=False), result
+
+
+def decoded_artifacts_from_result(result: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not result:
+        return []
+    kind = result.get("kind")
+    if kind == "mixed":
+        return decoded_artifacts_from_result(result.get("saml") if isinstance(result.get("saml"), dict) else None)
+    return list(result.get("decoded_artifacts") or [])
+
+
+def write_decoded_artifact_download(result: dict[str, Any] | None) -> str | None:
+    items = decoded_artifacts_from_result(result)
+    if not items:
+        return None
+    out_dir = Path(tempfile.mkdtemp(prefix="iddqd_decoded_"))
+    if len(items) == 1:
+        path = out_dir / items[0]["export_name"]
+        path.write_bytes(items[0]["xml"].encode("utf-8"))
+        return str(path)
+    zip_path = out_dir / "decoded-saml-artifacts.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        for item in items:
+            zf.writestr(item["export_name"], item["xml"].encode("utf-8"))
+    return str(zip_path)
 
 
 def anonymize(file, pasted) -> tuple[str, str, str, str]:
