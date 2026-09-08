@@ -47,7 +47,13 @@ def anonymize(file, pasted) -> tuple[str, str, str, str]:
     out_path.write_text(result["text"], encoding="utf-8")
 
     mapping_json = json.dumps(
-        {"counts": result["counts"], "mapping": result["mapping"], "limitations": result["limitations"]},
+        {
+            "counts": result["counts"],
+            "mapping": result["mapping"],
+            "residual_count": result.get("residual_count", 0),
+            "residual_findings": result.get("residual_findings") or [],
+            "limitations": result["limitations"],
+        },
         indent=2,
         ensure_ascii=False,
     )

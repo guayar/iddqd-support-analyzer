@@ -407,6 +407,18 @@ def render_anonymize_summary(result: dict[str, Any]) -> str:
         summary.extend(f"- **{k}:** {v}" for k, v in sorted(counts.items()))
     else:
         summary.append("\nNo supported sensitive patterns were detected.")
+    residual = result.get("residual_findings") or []
+    summary.append("\n## Residual leaks")
+    if residual:
+        summary.append(
+            f"❌ **{len(residual)}** leftover match(es) after anonymization. Do not share until reviewed."
+        )
+        for i, hit in enumerate(residual[:40], 1):
+            summary.append(f"{i}. `{hit.get('kind')}` line {hit.get('line')} — `{hit.get('value')}`")
+        if len(residual) > 40:
+            summary.append(f"- … {len(residual) - 40} more")
+    else:
+        summary.append("No leftover email / IP / token / domain matches from the residual scan.")
     summary.append(
         "\n> Stable pseudonyms are used within this run, e.g. the same IP always maps to the same `IP_###`. "
         "Review the preview before external sharing; this tool is not a certified DLP engine."

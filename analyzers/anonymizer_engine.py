@@ -55,12 +55,17 @@ HOST_FIELD_RE = re.compile(
     re.I,
 )
 SECRET_KV_RE = re.compile(
-    r"(?P<prefix>\b(?:password|passwd|pwd|client[_-]?secret|api[_-]?key|access[_-]?token|refresh[_-]?token|session[_-]?id)\s*[:=]\s*)"
+    r"(?P<prefix>\b(?:password|passwd|pwd|client[_-]?secret|api[_-]?key|access[_-]?token|refresh[_-]?token|session[_-]?id|jwt[_./-]?secret)\s*[:=]\s*)"
     r"(?P<value>[^\s,;]+)",
     re.I,
 )
 AUTH_RE = re.compile(r"(?P<prefix>\bAuthorization\s*:\s*(?:Bearer|Basic)\s+)(?P<value>[^\s,;]+)", re.I)
 COOKIE_RE = re.compile(r"(?P<prefix>\b(?:Cookie|Set-Cookie)\s*:\s*)(?P<value>[^\r\n]+)", re.I)
+WINDOWS_USER_RE = re.compile(
+    r"(?P<prefix>(?:[A-Za-z]:\\|\\\\)Users\\)(?P<user>[^\\/]+)",
+    re.I,
+)
+UNIX_HOME_RE = re.compile(r"(?P<prefix>/(?:Users|home)/)(?P<user>[^/\s]+)")
 
 SENSITIVE_QUERY_KEYS = {
     "token", "access_token", "refresh_token", "id_token", "code", "password", "passwd", "pwd",
@@ -242,6 +247,15 @@ def _anonymize_patterns(text: str, mapper: _Mapper) -> str:
         return m.group("prefix") + mapper.map("HOST", value)
 
     out = HOST_FIELD_RE.sub(host_repl, out)
+
+    def win_user_repl(m: re.Match[str]) -> str:
+        user = m.group("user")
+        if _is_placeholder(user):
+            return m.group(0)
+        return m.group("prefix") + mapper.map("USER", user)
+
+    out = WINDOWS_USER_RE.sub(win_user_repl, out)
+    out = UNIX_HOME_RE.sub(win_user_repl, out)
     out = RELAYSTATE_RE.sub(
         lambda m: m.group("prefix") + (m.group("quote") or "") + (
             m.group("value") if _is_placeholder(m.group("value")) else mapper.map("RELAYSTATE", unquote_plus(m.group("value")))
@@ -249,6 +263,83 @@ def _anonymize_patterns(text: str, mapper: _Mapper) -> str:
         out,
     )
     return out
+
+
+def _residual_allow(value: str) -> bool:
+    value = (value or "").strip()
+    if not value or _is_placeholder(value) or PLACEHOLDER_RE.search(value):
+        return True
+    if _is_standard_uri(value):
+        return True
+    low = value.lower()
+    if low.startswith(PACKAGE_PREFIXES) or low in STANDARD_HOSTS:
+        return True
+    if low in {"localhost", "localhost.localdomain"}:
+        return True
+    if low.endswith(".invalid"):
+        return True
+    if _valid_ip(value):
+        try:
+            ip = ipaddress.ip_address(value)
+            if ip.is_loopback or ip.is_unspecified:
+                return True
+        except ValueError:
+            pass
+    return False
+
+
+def scan_residual_leaks(text: str, limit: int = 50) -> list[dict[str, Any]]:
+    """Second-pass detectors on already anonymized text. Placeholders and standard URIs are ignored."""
+    findings: list[dict[str, Any]] = []
+    seen: set[tuple[str, int, str]] = set()
+
+    def add(kind: str, line_no: int, value: str) -> None:
+        value = (value or "").strip()
+        if not value or _residual_allow(value):
+            return
+        key = (kind, line_no, value)
+        if key in seen:
+            return
+        seen.add(key)
+        findings.append({"kind": kind, "line": line_no, "value": value[:120]})
+
+    lines = text.splitlines() or [text]
+    for line_no, line in enumerate(lines, 1):
+        for m in EMAIL_RE.finditer(line):
+            add("EMAIL", line_no, m.group(0))
+        for m in JWT_RE.finditer(line):
+            add("JWT", line_no, m.group(0))
+        for m in AUTH_RE.finditer(line):
+            add("AUTH", line_no, m.group("value"))
+        for m in IPV4_RE.finditer(line):
+            if _valid_ip(m.group(0), 4):
+                add("IP", line_no, m.group(0))
+        for m in IPV6_CANDIDATE_RE.finditer(line):
+            if _valid_ip(m.group(0), 6):
+                add("IP", line_no, m.group(0))
+        for m in MAC_RE.finditer(line):
+            add("MAC", line_no, m.group(0))
+        for m in UUID_RE.finditer(line):
+            add("UUID", line_no, m.group(0))
+        for m in URL_RE.finditer(line):
+            raw = m.group(0).rstrip(".,);]")
+            if _is_standard_uri(raw):
+                continue
+            try:
+                host = urlsplit(raw).hostname
+            except Exception:
+                host = None
+            if host:
+                add("URL", line_no, host)
+        for m in DOMAIN_RE.finditer(line):
+            add("DOMAIN", line_no, m.group(0))
+        for m in WINDOWS_USER_RE.finditer(line):
+            add("USER", line_no, m.group("user"))
+        for m in UNIX_HOME_RE.finditer(line):
+            add("USER", line_no, m.group("user"))
+        if len(findings) >= limit:
+            break
+    return findings[:limit]
 
 
 def _looks_like_saml_xml(text: str) -> bool:
@@ -664,6 +755,12 @@ def anonymize_text(text: str) -> dict[str, Any]:
             "At least one SAML payload could not be parsed structurally and received fallback pattern-based anonymization; review it manually before sharing."
         )
 
+    residual = scan_residual_leaks(out)
+    if residual:
+        limitations.append(
+            f"Residual scan found {len(residual)} leftover match(es) after anonymization. Review them before external sharing."
+        )
+
     return {
         "text": out,
         "mapping": mapper.as_rows(),
@@ -672,5 +769,7 @@ def anonymize_text(text: str) -> dict[str, Any]:
         "encoded_saml_payloads_anonymized": encoded_saml_count,
         "encoded_saml_transports": sorted(saml_transports),
         "structured_saml_payloads_anonymized": structured_count,
+        "residual_findings": residual,
+        "residual_count": len(residual),
         "limitations": limitations,
     }

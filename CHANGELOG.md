@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## [0.11.7] - 2026-09-08
+
+### Added
+
+- residual leak scan after Anonymize (leftover email / IP / token / domain / user-home matches in the summary)
+- Windows/Unix user-home path and `jwt.secret=` replacements
+
+### Changed
+
+- version bumped to `0.11.7`
+
 ## [0.11.6] - 2026-09-08
 
 ### Changed

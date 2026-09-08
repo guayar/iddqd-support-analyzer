@@ -368,7 +368,7 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                         gr.Markdown(
                             "### Local log anonymizer\n"
                             "Creates a shareable pseudonymized copy while preserving timestamps, error codes and stack-trace "
-                            "structure. The mapping stays local and is not embedded in the output file.",
+                            "structure. A residual leak scan runs on the output. The mapping stays local and is not embedded in the output file.",
                             elem_classes=["psa-note"],
                         )
                         with gr.Row(equal_height=True):
