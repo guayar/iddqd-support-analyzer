@@ -428,13 +428,17 @@ def _extract_assertion(assertion) -> dict[str, Any]:
         })
 
     attrs = []
+    xsi_type = "{http://www.w3.org/2001/XMLSchema-instance}type"
     for a in assertion.findall("saml:AttributeStatement/saml:Attribute", NS):
-        values = [_all_text(v) for v in a.findall("saml:AttributeValue", NS)]
+        value_els = a.findall("saml:AttributeValue", NS)
+        values = [_all_text(v) for v in value_els]
         attrs.append({
             "name": a.attrib.get("Name"),
             "friendly_name": a.attrib.get("FriendlyName"),
             "name_format": a.attrib.get("NameFormat"),
+            "name_format_present": "NameFormat" in a.attrib,
             "values": [v for v in values if v is not None],
+            "xsi_types": [v.attrib.get(xsi_type) for v in value_els],
         })
 
     advice = assertion.find("saml:Advice", NS)

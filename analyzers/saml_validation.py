@@ -15,6 +15,7 @@ PERSISTENT_FORMAT = "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent"
 TRANSIENT_FORMAT = "urn:oasis:names:tc:SAML:2.0:nameid-format:transient"
 UNSPECIFIED_FORMAT = "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified"
 ENCRYPTED_FORMAT = "urn:oasis:names:tc:SAML:2.0:nameid-format:encrypted"
+UNSPECIFIED_ATTR_FORMAT = "urn:oasis:names:tc:SAML:2.0:attrname-format:unspecified"
 BEARER_METHOD = "urn:oasis:names:tc:SAML:2.0:cm:bearer"
 HTTP_POST = "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
 HTTP_REDIRECT = "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect"
@@ -754,6 +755,40 @@ def validate_saml(
                 issues.append(_issue("ATTRIBUTE_NAME_MISSING", "ERROR", attr_scope, "SAML Attribute Name is required.", standard="SAML Core 2.0 AttributeType"))
             if attr.get("name_format") and not _valid_uri(attr.get("name_format")):
                 issues.append(_issue("ATTRIBUTE_NAMEFORMAT_INVALID_URI", "ERROR", attr_scope, "Attribute NameFormat is not a valid URI.", observed=attr.get("name_format")))
+            xsi_types = [t for t in (attr.get("xsi_types") or []) if t]
+            assigned = [t for t in (attr.get("xsi_types") or [])]
+            if any(assigned) and (len(set(xsi_types)) != 1 or any(t is None for t in assigned)):
+                issues.append(_issue(
+                    "ATTRIBUTE_VALUE_TYPE_MISMATCH",
+                    "ERROR",
+                    attr_scope,
+                    "If any AttributeValue has xsi:type, every AttributeValue of that Attribute must use the identical datatype.",
+                    observed=assigned,
+                    expected="identical xsi:type on every AttributeValue, or omit xsi:type on all",
+                    standard="SAML Core 2.0 §2.7.3.1 AttributeValue",
+                ))
+
+        # Core identifies an Attribute by Name + NameFormat (omitted NameFormat = unspecified).
+        # AttributeStatement schema allows repeats; AttributeQuery MUST NOT repeat the same pair.
+        name_groups: dict[tuple[str, str], list[list[Any]]] = {}
+        for attr in a.get("attributes") or []:
+            name = attr.get("name")
+            if not name:
+                continue
+            fmt = (attr.get("name_format") or "").strip() or UNSPECIFIED_ATTR_FORMAT
+            name_groups.setdefault((name, fmt), []).append(list(attr.get("values") or []))
+        for (name, name_format), value_groups in name_groups.items():
+            if len(value_groups) < 2:
+                continue
+            issues.append(_issue(
+                "ATTRIBUTE_NAME_DUPLICATE",
+                "WARNING",
+                scope,
+                "The same SAML attribute (Name + NameFormat) appears more than once. Core identifies attributes by that pair and RECOMMENDS multiple values as AttributeValue children of one Attribute. Repeating the Attribute element is not forbidden in AttributeStatement, but AttributeQuery MUST NOT name an attribute twice, and many SPs keep only one occurrence.",
+                observed={"name": name, "name_format": name_format, "occurrences": len(value_groups), "value_groups": value_groups},
+                expected="one Attribute element per Name+NameFormat (multi-valued via AttributeValue)",
+                standard="SAML Core 2.0 §2.7.3.1 AttributeType and §3.3.2.3 AttributeQuery",
+            ))
 
     # Successful browser SSO response needs at least one AuthnStatement across the set.
     if resp and (resp.get("status_codes") or [None])[0] == SUCCESS and assertions:

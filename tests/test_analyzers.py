@@ -187,6 +187,38 @@ assert 'RESPONSE_DESTINATION_EMPTY' in legacy_codes
 assert 'NAMEID_EMAIL_FORMAT_INVALID' in legacy_codes
 assert 'RESPONSE_DESTINATION_MATCH' not in legacy_codes
 
+# Two Attribute elements with the same Name (python3-saml duplicated_attributes fixture style).
+dup_attr = RESPONSE.replace(
+    '<saml:Attribute Name="role" FriendlyName="Role"><saml:AttributeValue>admin</saml:AttributeValue></saml:Attribute>',
+    '<saml:Attribute Name="uid"><saml:AttributeValue>test</saml:AttributeValue></saml:Attribute>'
+    '<saml:Attribute Name="uid"><saml:AttributeValue>test2</saml:AttributeValue></saml:Attribute>'
+    '<saml:Attribute Name="eduPersonAffiliation"><saml:AttributeValue>user</saml:AttributeValue><saml:AttributeValue>admin</saml:AttributeValue></saml:Attribute>',
+)
+dup_findings = [f for f in analyze_saml_input(dup_attr)["findings"] if f["code"] == "ATTRIBUTE_NAME_DUPLICATE"]
+assert len(dup_findings) == 1
+assert dup_findings[0]["severity"] == "WARNING"
+assert dup_findings[0]["observed"]["name"] == "uid"
+assert dup_findings[0]["observed"]["occurrences"] == 2
+assert dup_findings[0]["observed"]["name_format"] == "urn:oasis:names:tc:SAML:2.0:attrname-format:unspecified"
+assert "ATTRIBUTE_NAME_DUPLICATE" not in {f["code"] for f in s["findings"]}
+
+# Same Name with different NameFormat is two SAML attributes, not a duplicate.
+diff_fmt = RESPONSE.replace(
+    '<saml:Attribute Name="role" FriendlyName="Role"><saml:AttributeValue>admin</saml:AttributeValue></saml:Attribute>',
+    '<saml:Attribute Name="uid" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:basic"><saml:AttributeValue>test</saml:AttributeValue></saml:Attribute>'
+    '<saml:Attribute Name="uid" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:uri"><saml:AttributeValue>test2</saml:AttributeValue></saml:Attribute>',
+)
+assert "ATTRIBUTE_NAME_DUPLICATE" not in {f["code"] for f in analyze_saml_input(diff_fmt)["findings"]}
+
+# Conflicting xsi:type on AttributeValue of one Attribute is a Core error.
+type_mismatch = RESPONSE.replace(
+    '<saml:Attribute Name="role" FriendlyName="Role"><saml:AttributeValue>admin</saml:AttributeValue></saml:Attribute>',
+    '<saml:Attribute Name="role" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema">'
+    '<saml:AttributeValue xsi:type="xs:string">admin</saml:AttributeValue>'
+    '<saml:AttributeValue xsi:type="xs:integer">1</saml:AttributeValue></saml:Attribute>',
+)
+assert "ATTRIBUTE_VALUE_TYPE_MISMATCH" in {f["code"] for f in analyze_saml_input(type_mismatch)["findings"]}
+
 # ID must not merely exist; it must be valid xs:ID/NCName syntax.
 bad_id = RESPONSE.replace('ID="_resp1"', 'ID="123 bad:id"', 1)
 case_invalid_id = analyze_saml_input(bad_id)

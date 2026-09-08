@@ -4,7 +4,7 @@
 
 Local troubleshooting toolkit for SAML/SSO and log analysis. Optional anonymizer and local LLM chats.
 
-**Current version:** `0.11.12`
+**Current version:** `0.11.13`
 
 The core product is a local, deterministic SAML and log analyzer. It does not require Ollama. Optional modules (Anonymize, Assistant + General Chat) are enabled from the **Config** tab and load after a restart.
 
@@ -20,7 +20,7 @@ The core product is a local, deterministic SAML and log analyzer. It does not re
 - Subject / NameID / SubjectConfirmation analysis
 - AudienceRestriction and Conditions analysis
 - AuthnStatement, session and AuthnContext extraction
-- attribute extraction, including multi-valued attributes
+- attribute extraction, including multi-valued attributes; duplicate `Name`+`NameFormat` and conflicting `xsi:type` on `AttributeValue`
 - XML Signature structure inspection
 - SAML XML Signature profile validation, including the single same-document `Reference URI="#ID"` rule
 - cryptographic XML Signature and digest verification with public X.509 certificates
@@ -45,6 +45,8 @@ SUBJECT_IDENTIFIER_CHOICE_INVALID
 BEARER_RECIPIENT_ACS_MISMATCH
 AUDIENCE_SP_ENTITYID_MISMATCH
 DUPLICATE_SAML_ID
+ATTRIBUTE_NAME_DUPLICATE
+ATTRIBUTE_VALUE_TYPE_MISMATCH
 XML_NOT_WELL_FORMED
 RESPONSE_SIGNATURE_REFERENCE_URI_INVALID
 RESPONSE_XML_SIGNATURE_INVALID

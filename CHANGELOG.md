@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## [0.11.13] - 2026-09-08
+
+### Added
+
+- `ATTRIBUTE_NAME_DUPLICATE` when the same SAML attribute identity (`Name` + `NameFormat`, defaulting omitted format to unspecified) appears more than once in an assertion; this is not forbidden in AttributeStatement (Core recommends multiple `AttributeValue` children instead). `AttributeQuery` MUST NOT repeat that pair. Same `Name` with different `NameFormat` is not a duplicate
+- `ATTRIBUTE_VALUE_TYPE_MISMATCH` when `xsi:type` is set on some but not all `AttributeValue` children, or the types differ
+
+### Changed
+
+- version bumped to `0.11.13`
+
 ## [0.11.12] - 2026-09-08
 
 ### Changed
