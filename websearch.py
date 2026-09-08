@@ -4,6 +4,7 @@ import json
 
 from ddgs import DDGS
 
+from chats import _content_text
 from config import WEB_FETCH_CHARS, WEB_FETCH_RESULTS, WEB_SEARCH_REGION, WEB_SEARCH_RESULTS
 from llm import complete
 
@@ -11,8 +12,11 @@ from llm import complete
 def history_text(history, limit: int = 6) -> str:
     items = []
     for h in (history or [])[-limit:]:
-        if isinstance(h, dict) and h.get("role") in {"user", "assistant"} and isinstance(h.get("content"), str):
-            items.append(f"{h['role'].upper()}: {h['content'][:2500]}")
+        if not (isinstance(h, dict) and h.get("role") in {"user", "assistant"}):
+            continue
+        text = _content_text(h.get("content"))
+        if text:
+            items.append(f"{h['role'].upper()}: {text[:2500]}")
     return "\n".join(items)
 
 

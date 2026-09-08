@@ -27,13 +27,29 @@ This General Chat is intentionally separate from the private Analyzer/Assistant.
 """
 
 
+def _content_text(content) -> str:
+    """Flatten Gradio 6 Chatbot content (str or list of text blocks) to a string."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, dict):
+        if content.get("type") not in {None, "text"}:
+            return ""
+        text = content.get("text")
+        return text if isinstance(text, str) else ""
+    if isinstance(content, (list, tuple)):
+        parts = [_content_text(part) for part in content]
+        return "\n".join(part for part in parts if part)
+    text = getattr(content, "text", None)
+    return text if isinstance(text, str) else ""
+
+
 def _history_messages(history, limit: int, content_limit: int) -> list[dict[str, str]]:
     msgs: list[dict[str, str]] = []
     for h in (history or [])[-limit:]:
         if isinstance(h, dict) and h.get("role") in {"user", "assistant"}:
-            c = h.get("content")
-            if isinstance(c, str):
-                msgs.append({"role": h["role"], "content": c[:content_limit]})
+            text = _content_text(h.get("content"))
+            if text:
+                msgs.append({"role": h["role"], "content": text[:content_limit]})
     return msgs
 
 

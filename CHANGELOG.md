@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## [0.11.14] - 2026-09-08
+
+### Fixed
+
+- Assistant and General Chat keep prior turns in a session; Gradio 6 history uses text blocks, which were previously dropped before the Ollama request
+
+### Changed
+
+- version bumped to `0.11.14`
+
 ## [0.11.13] - 2026-09-08
 
 ### Added

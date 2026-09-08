@@ -4,7 +4,7 @@
 
 Local troubleshooting toolkit for SAML/SSO and log analysis. Optional anonymizer and local LLM chats.
 
-**Current version:** `0.11.13`
+**Current version:** `0.11.14`
 
 The core product is a local, deterministic SAML and log analyzer. It does not require Ollama. Optional modules (Anonymize, Assistant + General Chat) are enabled from the **Config** tab and load after a restart.
 
