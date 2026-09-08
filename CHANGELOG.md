@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## [0.11.6] - 2026-09-08
+
+### Changed
+
+- log severity counts use the same attention icons as SAML findings (`❌` / `⚠️` / `ℹ️` / `🔍`)
+- version bumped to `0.11.6`
+
 ## [0.11.5] - 2026-09-08
 
 ### Changed

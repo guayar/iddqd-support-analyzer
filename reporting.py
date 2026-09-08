@@ -4,6 +4,36 @@ import json
 from typing import Any
 
 
+def _severity_icon(level: str) -> str:
+    lv = (level or "").upper()
+    if lv in {"ERROR", "FATAL", "SEVERE", "CRITICAL"}:
+        return "❌"
+    if lv in {"WARN", "WARNING"}:
+        return "⚠️"
+    if lv == "INFO":
+        return "ℹ️"
+    if lv == "DEBUG":
+        return "🔍"
+    if lv == "TRACE":
+        return "▫️"
+    return "•"
+
+
+def _severity_sort_key(level: str) -> tuple[int, str]:
+    order = {
+        "FATAL": 0,
+        "CRITICAL": 1,
+        "SEVERE": 2,
+        "ERROR": 3,
+        "WARN": 4,
+        "INFO": 5,
+        "DEBUG": 6,
+        "TRACE": 7,
+    }
+    lv = (level or "").upper()
+    return (order.get(lv, 50), lv)
+
+
 def _fmt(value: Any) -> str:
     if value is None or value == "" or value == [] or value == {}:
         return "—"
@@ -286,7 +316,7 @@ def render_saml_report(result: dict[str, Any]) -> str:
         out.append("\n## Standards / SSO validation findings")
         for f in result["findings"]:
             severity = f.get("severity")
-            icon = "❌" if severity == "ERROR" else ("⚠️" if severity == "WARNING" else "ℹ️")
+            icon = _severity_icon(severity)
             line = f"- {icon} **{f.get('code')}** — `{severity}` — **{f.get('scope')}**\n  - {f.get('message')}"
             if f.get("observed") is not None:
                 line += f"\n  - observed: `{_fmt(f.get('observed'))}`"
@@ -325,7 +355,10 @@ def render_log_report(result: dict[str, Any]) -> str:
         "\n## Severity counts",
     ]
     if result["levels"]:
-        out.extend(f"- **{k}:** {v}" for k, v in sorted(result["levels"].items()))
+        out.extend(
+            f"- {_severity_icon(k)} **{k}:** {v}"
+            for k, v in sorted(result["levels"].items(), key=lambda kv: _severity_sort_key(kv[0]))
+        )
     else:
         out.append("- No standard severity markers detected")
     out.append("\n## Error / status codes")
@@ -340,7 +373,7 @@ def render_log_report(result: dict[str, Any]) -> str:
     for i, g in enumerate(groups[:30], 1):
         title = g.get("signature") or "Unknown error"
         out.append(f"\n### {i}. {title}")
-        out.append(f"- **Severity:** {g['level']}")
+        out.append(f"- **Severity:** {_severity_icon(g['level'])} {g['level']}")
         out.append(f"- **Occurrences:** {g['count']}")
         out.append(f"- **First occurrence line:** {g['first_line']}")
         if g.get("exit_code") is not None:

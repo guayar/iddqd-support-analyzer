@@ -42,6 +42,7 @@ log_report = render_log_report({
     "error_event_count": 0,
 })
 assert "**File:** `app.log`" in log_report
+assert "❌ **ERROR:** 1" in log_report
 assert "No explicit ERROR/FATAL/SEVERE/CRITICAL events detected." in log_report
 
 summary = render_anonymize_summary({"counts": {"IP": 1}, "replacements": 1})

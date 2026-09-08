@@ -40,7 +40,8 @@ assert "<summary>Relevant log</summary>" in md
 assert "**Caused by (3)**" in md
 assert "1. `org.springframework.boot.web.server.WebServerException:" in md
 assert "3. `java.lang.IllegalArgumentException: Could not resolve placeholder 'jwt.secret'" in md
-assert "starting ApplicationContext" not in g["signature"]
+assert "❌ **ERROR:**" in md
+assert "**Severity:** ❌ ERROR" in md
 
 TEST_B = "Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.\n"
 b = analyze_log_text(TEST_B)
