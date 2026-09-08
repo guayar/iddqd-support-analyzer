@@ -2,11 +2,17 @@
 
 [![Tests](https://github.com/guayar/iddqd-support-analyzer/actions/workflows/tests.yml/badge.svg)](https://github.com/guayar/iddqd-support-analyzer/actions/workflows/tests.yml)
 
+Early-stage AI-assisted learning project and QA playground. Not production-ready.
+
 Local troubleshooting toolkit for SAML/SSO and log analysis. Optional anonymizer and local LLM chats.
 
 **Current version:** `0.11.15`
 
 The core product is a local, deterministic SAML and log analyzer. It does not require Ollama. Optional modules (Anonymize, Assistant + General Chat) are enabled from the **Config** tab and load after a restart.
+
+## Why I built this
+
+I built this to learn SAML and support-style log analysis by implementing the checks myself, including awkward real-world edge cases rather than only happy-path traces. Coding is AI-assisted; I still own the requirements, the tests, and how specs such as SAML Core are interpreted when a library and the spec disagree. The repo is a playground for that loop, not a product I would drop onto a customer network without review.
 
 ## Features
 
@@ -143,6 +149,13 @@ The Assistant has no web-search path and no Mode switch. Ask it for technical he
 ### General Chat (same optional LLM module)
 
 A deliberately separate web-enabled chat. It receives **no** Analyzer or Assistant context, including the Analyze report. Search queries are generated locally, sent to public search providers through `ddgs`, and the returned pages are summarized by the local model.
+
+## Known limitations / work in progress
+
+- Local Gradio app on `127.0.0.1`, not a packaged or multi-user product. Reports are heuristics plus spec-backed SAML checks, not a substitute for an IdP/SP vendor’s own validator.
+- `EncryptedAssertion` is detected, not decrypted. The anonymizer is useful, not DLP; shareable output still needs a human pass.
+- Log timestamps are treated as record boundaries when the shape is recognizable; numeric dates such as `09/01/26` do not get a calendar `time_range` unless the same log makes day/month order unambiguous.
+- Optional chats need local Ollama. Coverage grows from real traces and failing cases, not from claiming a complete SAML or logging catalogue.
 
 ## Privacy model
 
