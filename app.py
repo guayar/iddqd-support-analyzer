@@ -59,7 +59,10 @@ CSS = """
 .psa-shell .group,
 .psa-shell .column,
 .psa-shell .row,
-.psa-chat {
+.psa-chat,
+.psa-chat .interface,
+.psa-chat .column,
+.psa-chat .block {
     width: 100% !important;
     max-width: 100% !important;
 }
@@ -373,13 +376,17 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                             "to chat without it. Do not paste secrets into General Chat.",
                             elem_classes=["psa-note"],
                         )
-                        assistant_mode = gr.Radio(
-                            ["General", "Support Mail", "Code"],
-                            value="General",
-                            label="Mode",
-                        )
-                        context_badge = gr.Markdown(_context_badge(None, False))
-                        clear_ctx = gr.Button("Clear analysis context")
+                        with gr.Row(equal_height=True):
+                            assistant_mode = gr.Radio(
+                                ["General", "Support Mail", "Code"],
+                                value="General",
+                                label="Mode",
+                                scale=1,
+                                elem_classes=["psa-control", "psa-mode"],
+                            )
+                            with gr.Column(scale=1, elem_classes=["psa-control"]):
+                                context_badge = gr.Markdown(_context_badge(None, False))
+                                clear_ctx = gr.Button("Clear analysis context")
                         with gr.Column(elem_classes=["psa-chat"]):
                             assistant_chatbot = gr.Chatbot(height=CHAT_HEIGHT, label="Chat", elem_id="assistant-chat")
                             gr.ChatInterface(
@@ -387,6 +394,7 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                                 chatbot=assistant_chatbot,
                                 additional_inputs=[assistant_mode, analysis_state, assistant_detached],
                                 save_history=False,
+                                fill_height=False,
                             )
                         clear_ctx.click(clear_assistant_context, inputs=[analysis_state], outputs=[assistant_detached, context_badge])
                         run.click(
@@ -406,7 +414,7 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                         )
                         with gr.Column(elem_classes=["psa-chat"]):
                             web_chatbot = gr.Chatbot(height=CHAT_HEIGHT, label="Chat", elem_id="web-chat")
-                            gr.ChatInterface(fn=web_chat, chatbot=web_chatbot, save_history=False)
+                            gr.ChatInterface(fn=web_chat, chatbot=web_chatbot, save_history=False, fill_height=False)
 
             with gr.Tab("Config"):
                 with gr.Column(elem_classes=["psa-shell"]):
