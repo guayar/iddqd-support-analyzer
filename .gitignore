@@ -42,6 +42,7 @@ anonymized_*
 # IDE / OS
 .idea/
 .vscode/
+.cursor/
 .DS_Store
 Thumbs.db
 

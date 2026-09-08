@@ -199,8 +199,21 @@ CSS = """
 .psa-assistant-controls {
     gap: 8px !important;
 }
+.psa-assistant-mode {
+    text-align: center !important;
+}
 .psa-assistant-mode [data-testid="block-info"] {
+    display: block !important;
+    width: 100% !important;
+    text-align: center !important;
     font-size: 16px !important;
+}
+.psa-assistant-mode .wrap,
+.psa-assistant-mode fieldset {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+    width: 100% !important;
 }
 .psa-assistant-mode label {
     font-size: 15px !important;
@@ -208,6 +221,7 @@ CSS = """
 .psa-context {
     display: flex !important;
     align-items: center !important;
+    justify-content: center !important;
     gap: 10px !important;
     margin: 6px 0 2px 0 !important;
     font-size: 16px !important;
