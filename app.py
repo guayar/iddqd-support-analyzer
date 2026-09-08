@@ -290,29 +290,38 @@ footer button.settings::before {{
 
 COPY_REPORT_JS = """
 () => {
-  const bind = () => {
-    const btn = document.getElementById("psa-copy-report");
-    if (!btn || btn.dataset.bound === "1") return;
-    btn.dataset.bound = "1";
-    btn.addEventListener("click", async () => {
-      const root = document.querySelector("#analysis");
-      const text = ((root && root.innerText) || "").trim();
-      if (!text) return;
-      try {
-        await navigator.clipboard.writeText(text);
-      } catch (e) {
-        return;
-      }
-      btn.classList.add("is-copied");
-      btn.setAttribute("aria-label", "Copied");
-      window.setTimeout(() => {
-        btn.classList.remove("is-copied");
-        btn.setAttribute("aria-label", "Copy report");
-      }, 1500);
-    });
-  };
-  bind();
-  new MutationObserver(bind).observe(document.body, { childList: true, subtree: true });
+  if (window.__psaCopyReportBound) return;
+  window.__psaCopyReportBound = true;
+  document.addEventListener("click", async (event) => {
+    const btn = event.target && event.target.closest && event.target.closest("#psa-copy-report");
+    if (!btn) return;
+    event.preventDefault();
+    const root = document.querySelector("#analysis");
+    const text = ((root && root.innerText) || "").trim();
+    if (!text) return;
+    let ok = false;
+    try {
+      await navigator.clipboard.writeText(text);
+      ok = true;
+    } catch (e) {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      try { ok = document.execCommand("copy"); } catch (e2) { ok = false; }
+      document.body.removeChild(ta);
+    }
+    if (!ok) return;
+    btn.classList.add("is-copied");
+    btn.setAttribute("aria-label", "Copied");
+    window.setTimeout(() => {
+      btn.classList.remove("is-copied");
+      btn.setAttribute("aria-label", "Copy report");
+    }, 1500);
+  });
 }
 """
 
@@ -595,6 +604,8 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
             else:
                 run.click(analyze, inputs=[files, pasted, mode, signing_cert], outputs=[report, raw, analysis_state, decoded_download])
 
+            demo.load(fn=None, js=COPY_REPORT_JS)
+
 
 if __name__ == "__main__":
     auth = None
@@ -607,6 +618,5 @@ if __name__ == "__main__":
         show_error=True,
         footer_links=["settings"],
         css=CSS,
-        js=COPY_REPORT_JS,
         max_file_size=f"{MAX_FILE_MB}mb",
     )

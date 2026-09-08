@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## [0.11.20] - 2026-09-08
+
+### Fixed
+
+- Analyze copy-to-clipboard actually copies the report; Gradio 6 ignores `launch(js=...)`, so the handler is bound on page load instead
+
+### Changed
+
+- version bumped to `0.11.20`
+
 ## [0.11.19] - 2026-09-08
 
 ### Added
