@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## [0.11.5] - 2026-09-08
+
+### Changed
+
+- log incident report keeps the raw sample in a collapsible **Relevant log** block and lists each `Caused by` under it as a numbered list with a count
+- version bumped to `0.11.5`
+
 ## [0.11.4] - 2026-09-08
 
 ### Changed

@@ -354,7 +354,15 @@ def render_log_report(result: dict[str, Any]) -> str:
             short = [c.rsplit(".", 1)[-1] for c in chain]
             out.append("\n**Exception chain**\n")
             out.append("\n".join([f"`{short[0]}`"] + [f"→ `{c}`" for c in short[1:]]))
-        out.append(f"\n**Relevant log**\n\n```text\n{g['sample'][:50000]}\n```")
+        sample = (g.get("sample") or "")[:50_000]
+        out.append(
+            "\n<details>\n<summary>Relevant log</summary>\n\n"
+            f"```text\n{sample}\n```\n\n</details>"
+        )
+        causes = g.get("causes") or []
+        if causes:
+            out.append(f"\n**Caused by ({len(causes)})**\n")
+            out.extend(f"{n}. `{cause}`" for n, cause in enumerate(causes, 1))
     return "\n".join(out)
 
 
