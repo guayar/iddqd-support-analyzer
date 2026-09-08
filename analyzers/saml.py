@@ -13,7 +13,7 @@ from typing import Any
 
 from defusedxml import ElementTree as ET
 
-from .saml_validation import validate_saml
+from .saml_validation import BEARER_METHOD, validate_saml
 
 NS = {
     "samlp": "urn:oasis:names:tc:SAML:2.0:protocol",
@@ -741,6 +741,17 @@ def _subject_in_response_to(assertion: dict[str, Any]) -> list[str]:
     return vals
 
 
+def _bearer_in_response_to(assertion: dict[str, Any]) -> list[tuple[int, str | None]]:
+    rows: list[tuple[int, str | None]] = []
+    bi = 0
+    for sc in (assertion.get("subject") or {}).get("confirmations") or []:
+        if sc.get("method") != BEARER_METHOD:
+            continue
+        bi += 1
+        rows.append((bi, (sc.get("data") or {}).get("InResponseTo")))
+    return rows
+
+
 def _time_checks(assertion: dict[str, Any]) -> list[dict[str, Any]]:
     checks = []
     now = datetime.now(timezone.utc)
@@ -951,6 +962,14 @@ def analyze_saml_input(text: str) -> dict[str, Any]:
         if resp:
             for idx, recipient in enumerate(recipients, 1):
                 checks.append(_check(f"Response Destination vs Assertion #{ai} Recipient #{idx}", resp.get("destination"), recipient, "Both normally identify the receiving ACS endpoint."))
+            for bi, bearer_irt in _bearer_in_response_to(ass):
+                if resp.get("in_response_to") and bearer_irt:
+                    checks.append(_check(
+                        f"Response InResponseTo vs Assertion #{ai} bearer SubjectConfirmation #{bi} InResponseTo",
+                        resp.get("in_response_to"),
+                        bearer_irt,
+                        "Solicited Web Browser SSO: both MUST identify the same AuthnRequest ID. This check does not require the original request.",
+                    ))
             checks.append(_check(f"Response Issuer vs Assertion #{ai} Issuer", _issuer_value(resp.get("issuer")), _issuer_value(ass.get("issuer")), "A mismatch is suspicious unless the deployment intentionally uses different issuers."))
 
     sp_metadata = [m for m in metadata if "SP" in (m.get("roles") or [])]

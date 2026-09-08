@@ -266,4 +266,60 @@ assert session_expired_findings[0]['severity'] == 'WARNING'
 assert session_expired_findings[0]['observed'] == '2013-06-17T22:54:14Z'
 assert 'SESSION_NOTONORAFTER_EXPIRED' not in {f['code'] for f in s['findings']}
 
+# Response InResponseTo vs bearer SubjectConfirmationData InResponseTo.
+irt_mismatch = RESPONSE.replace(
+    'Recipient="https://sp.example/acs" InResponseTo="_req1"',
+    'Recipient="https://sp.example/acs" InResponseTo="invalid_inresponse"',
+    1,
+)
+irt_mismatch_result = analyze_saml_input(irt_mismatch)
+irt_mismatch_findings = [f for f in irt_mismatch_result['findings'] if f['code'] == 'RESPONSE_BEARER_INRESPONSETO_MISMATCH']
+assert len(irt_mismatch_findings) == 1
+assert irt_mismatch_findings[0]['severity'] == 'ERROR'
+assert irt_mismatch_findings[0]['observed']['Response InResponseTo'] == '_req1'
+assert irt_mismatch_findings[0]['observed']['SubjectConfirmationData InResponseTo'] == 'invalid_inresponse'
+assert any(
+    c['status'] == 'MISMATCH' and c['check'].startswith('Response InResponseTo vs Assertion #1 bearer SubjectConfirmation #1')
+    for c in irt_mismatch_result['checks']
+)
+assert 'RESPONSE_BEARER_INRESPONSETO_MISMATCH' not in {f['code'] for f in s['findings']}
+assert any(
+    c['status'] == 'MATCH' and c['check'].startswith('Response InResponseTo vs Assertion #1 bearer SubjectConfirmation #1')
+    for c in s['checks']
+)
+
+# Solicited Response (InResponseTo present) still requires bearer InResponseTo without AuthnRequest.
+irt_missing_bearer = RESPONSE.replace(' Recipient="https://sp.example/acs" InResponseTo="_req1"', ' Recipient="https://sp.example/acs"', 1)
+assert 'BEARER_INRESPONSETO_MISSING' in {f['code'] for f in analyze_saml_input(irt_missing_bearer)['findings']}
+
+# Unsolicited: neither InResponseTo — allowed. Bearer InResponseTo without Response InResponseTo is not.
+unsolicited = RESPONSE.replace(' InResponseTo="_req1"', '', 1).replace(' InResponseTo="_req1"', '', 1)
+unsolicited_codes = {f['code'] for f in analyze_saml_input(unsolicited)['findings']}
+assert 'BEARER_INRESPONSETO_UNSOLICITED' not in unsolicited_codes
+assert 'RESPONSE_BEARER_INRESPONSETO_MISMATCH' not in unsolicited_codes
+unsolicited_bearer = RESPONSE.replace(' ID="_resp1" Version="2.0" InResponseTo="_req1"', ' ID="_resp1" Version="2.0"', 1)
+assert 'BEARER_INRESPONSETO_UNSOLICITED' in {f['code'] for f in analyze_saml_input(unsolicited_bearer)['findings']}
+
+# One matching bearer and one mismatched bearer.
+two_bearer = RESPONSE.replace(
+    '</saml:SubjectConfirmation>',
+    '</saml:SubjectConfirmation>'
+    '<saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer">'
+    '<saml:SubjectConfirmationData Recipient="https://sp.example/acs" InResponseTo="other_req" NotOnOrAfter="2099-09-07T08:05:00Z"/>'
+    '</saml:SubjectConfirmation>',
+    1,
+)
+two_bearer_result = analyze_saml_input(two_bearer)
+two_bearer_findings = [f for f in two_bearer_result['findings'] if f['code'] == 'RESPONSE_BEARER_INRESPONSETO_MISMATCH']
+assert len(two_bearer_findings) == 1
+assert two_bearer_findings[0]['scope'].endswith('bearer SubjectConfirmation #2')
+assert two_bearer_findings[0]['observed']['SubjectConfirmationData InResponseTo'] == 'other_req'
+
+# AuthnRequest matching Response only still reports bearer vs request and the internal pair.
+req_matches_response_only = analyze_saml_input('\n'.join([REQUEST, irt_mismatch]))
+req_only_codes = {f['code'] for f in req_matches_response_only['findings']}
+assert 'RESPONSE_BEARER_INRESPONSETO_MISMATCH' in req_only_codes
+assert 'BEARER_INRESPONSETO_MISMATCH' in req_only_codes
+assert 'RESPONSE_INRESPONSETO_MISMATCH' not in req_only_codes
+
 print('EXTENDED VALIDATION TESTS OK')

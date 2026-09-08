@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here.
 
+## [0.11.22] - 2026-09-08
+
+### Added
+
+- `RESPONSE_BEARER_INRESPONSETO_MISMATCH` (ERROR) when Response `InResponseTo` and bearer `SubjectConfirmationData/@InResponseTo` are both present and differ; solicited SSO requires both to name the same AuthnRequest ID (Core §3.2.2 + Profiles §4.1.4.2/§4.1.4.3), without needing the original request
+- Mapping check `Response InResponseTo vs Assertion #n bearer SubjectConfirmation #k InResponseTo`
+- `BEARER_INRESPONSETO_MISSING` also when the Response itself claims to be solicited (has `InResponseTo`) even if AuthnRequest was not supplied
+- `BEARER_INRESPONSETO_UNSOLICITED` (ERROR) when an unsolicited Response (no Response `InResponseTo`, no AuthnRequest) still carries bearer `InResponseTo` (Profiles §4.1.4.3 / §4.1.5)
+
+### Changed
+
+- version bumped to `0.11.22`
+
 ## [0.11.21] - 2026-09-08
 
 ### Added

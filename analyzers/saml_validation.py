@@ -730,11 +730,42 @@ def validate_saml(
                 issues.append(_issue("BEARER_CONFIRMATION_EXPIRED", "ERROR", sc_scope, "Bearer SubjectConfirmationData has expired at analyzer runtime.", observed=data.get("NotOnOrAfter"), expected=f"> {now.isoformat()}", standard="SAML Profiles 2.0 §4.1.4.3"))
             if data.get("NotBefore"):
                 issues.append(_issue("BEARER_NOTBEFORE_FORBIDDEN", "ERROR", sc_scope, "Bearer SubjectConfirmationData must not contain NotBefore.", observed=data.get("NotBefore"), expected="omitted", standard="SAML Profiles 2.0 Approved Errata E52"))
-            if req:
-                if not data.get("InResponseTo"):
-                    issues.append(_issue("BEARER_INRESPONSETO_MISSING", "ERROR", sc_scope, "Solicited Browser SSO bearer SubjectConfirmationData requires InResponseTo.", expected=req.get("id"), standard="SAML Profiles 2.0 §4.1.4.2/§4.1.4.3"))
-                elif req.get("id") and data.get("InResponseTo") != req.get("id"):
-                    issues.append(_issue("BEARER_INRESPONSETO_MISMATCH", "ERROR", sc_scope, "SubjectConfirmationData InResponseTo does not match AuthnRequest ID.", observed=data.get("InResponseTo"), expected=req.get("id"), standard="SAML Profiles 2.0 §4.1.4.3"))
+            resp_irt = (resp or {}).get("in_response_to") if resp else None
+            bearer_irt = data.get("InResponseTo")
+            if resp and resp_irt and bearer_irt and resp_irt != bearer_irt:
+                issues.append(_issue(
+                    "RESPONSE_BEARER_INRESPONSETO_MISMATCH",
+                    "ERROR",
+                    sc_scope,
+                    "Response InResponseTo and bearer SubjectConfirmationData InResponseTo both identify a request but do not match. In solicited Web Browser SSO they MUST refer to the same AuthnRequest ID.",
+                    observed={"Response InResponseTo": resp_irt, "SubjectConfirmationData InResponseTo": bearer_irt},
+                    expected="identical InResponseTo values",
+                    standard="SAML Core 2.0 §3.2.2 + SAML Profiles 2.0 §4.1.4.2/§4.1.4.3",
+                    note="This internal consistency check does not require the original AuthnRequest and does not judge InResponseTo by its literal text.",
+                ))
+            solicited = bool(req) or bool(resp_irt)
+            if resp and solicited:
+                if not bearer_irt:
+                    issues.append(_issue(
+                        "BEARER_INRESPONSETO_MISSING",
+                        "ERROR",
+                        sc_scope,
+                        "Solicited Browser SSO bearer SubjectConfirmationData requires InResponseTo.",
+                        expected=(req or {}).get("id") or resp_irt,
+                        standard="SAML Profiles 2.0 §4.1.4.2/§4.1.4.3",
+                    ))
+                elif req and req.get("id") and bearer_irt != req.get("id"):
+                    issues.append(_issue("BEARER_INRESPONSETO_MISMATCH", "ERROR", sc_scope, "SubjectConfirmationData InResponseTo does not match AuthnRequest ID.", observed=bearer_irt, expected=req.get("id"), standard="SAML Profiles 2.0 §4.1.4.3"))
+            elif resp and not req and not resp_irt and bearer_irt:
+                issues.append(_issue(
+                    "BEARER_INRESPONSETO_UNSOLICITED",
+                    "ERROR",
+                    sc_scope,
+                    "Unsolicited Browser SSO Response has no InResponseTo, so bearer SubjectConfirmationData MUST NOT contain InResponseTo.",
+                    observed=bearer_irt,
+                    expected="omitted",
+                    standard="SAML Profiles 2.0 §4.1.4.3 + §4.1.5",
+                ))
 
         cond = a.get("conditions") or {}
         nb_raw = cond.get("NotBefore")
