@@ -6,7 +6,7 @@ Early-stage AI-assisted project. Not a production product — I am building it t
 
 Local troubleshooting toolkit for SAML/SSO and log analysis. Optional anonymizer and local LLM chats.
 
-**Current version:** `0.11.16`
+**Current version:** `0.11.17`
 
 The core product is a local, deterministic SAML and log analyzer. It does not require Ollama. Optional modules (Anonymize, Assistant + General Chat) are enabled from the **Config** tab and load after a restart.
 
@@ -54,6 +54,7 @@ AUDIENCE_SP_ENTITYID_MISMATCH
 DUPLICATE_SAML_ID
 ATTRIBUTE_NAME_DUPLICATE
 ATTRIBUTE_VALUE_TYPE_MISMATCH
+ENCRYPTED_ATTRIBUTE_PRESENT
 XML_NOT_WELL_FORMED
 RESPONSE_SIGNATURE_REFERENCE_URI_INVALID
 RESPONSE_XML_SIGNATURE_INVALID
@@ -73,7 +74,7 @@ A bare `-----BEGIN PUBLIC KEY-----` file is not accepted in this path; upload th
 
 If only a certificate embedded in `ds:KeyInfo` is available, the analyzer can verify the cryptographic signature but explicitly reports that signer trust is not established by metadata.
 
-`EncryptedAssertion` is detected, but decryption is not implemented. Decryption would require the SP private key and is intentionally kept separate from signature verification.
+`EncryptedAssertion` and `EncryptedAttribute` are detected, but decryption is not implemented. Decryption would require the SP private key and is intentionally kept separate from signature verification. XML Encryption algorithms on `EncryptedAttribute` are reported.
 
 ### Log analysis
 

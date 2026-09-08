@@ -219,6 +219,36 @@ type_mismatch = RESPONSE.replace(
 )
 assert "ATTRIBUTE_VALUE_TYPE_MISMATCH" in {f["code"] for f in analyze_saml_input(type_mismatch)["findings"]}
 
+# EncryptedAttribute is reported as INFO with XML Encryption algorithms; ciphertext is not decrypted.
+enc_attr = RESPONSE.replace(
+    '<saml:Attribute Name="role" FriendlyName="Role"><saml:AttributeValue>admin</saml:AttributeValue></saml:Attribute>',
+    '<saml:EncryptedAttribute>'
+    '<xenc:EncryptedData xmlns:xenc="http://www.w3.org/2001/04/xmlenc#" Type="http://www.w3.org/2001/04/xmlenc#Element">'
+    '<xenc:EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#aes256-cbc"/>'
+    '<ds:KeyInfo xmlns:ds="http://www.w3.org/2000/09/xmldsig#">'
+    '<xenc:EncryptedKey>'
+    '<xenc:EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#rsa-oaep-mgf1p"/>'
+    '<xenc:CipherData><xenc:CipherValue>QQ==</xenc:CipherValue></xenc:CipherData>'
+    '</xenc:EncryptedKey>'
+    '</ds:KeyInfo>'
+    '<xenc:CipherData><xenc:CipherValue>QQ==</xenc:CipherValue></xenc:CipherData>'
+    '</xenc:EncryptedData>'
+    '</saml:EncryptedAttribute>',
+)
+enc_result = analyze_saml_input(enc_attr)
+enc_docs = next(x for x in enc_result["documents"] if x["type"] == "Response")
+enc_ass = enc_docs["assertions"][0]
+assert enc_ass["encrypted_attribute_count"] == 1
+assert enc_ass["attributes"] == []
+enc_findings = [f for f in enc_result["findings"] if f["code"] == "ENCRYPTED_ATTRIBUTE_PRESENT"]
+assert len(enc_findings) == 1
+assert enc_findings[0]["severity"] == "INFO"
+assert enc_findings[0]["scope"] == "Assertion #1"
+assert enc_findings[0]["observed"]["EncryptedAttribute count"] == 1
+assert enc_findings[0]["observed"]["content encryption"] == "aes256-cbc"
+assert enc_findings[0]["observed"]["key encryption"] == "rsa-oaep-mgf1p"
+assert "ENCRYPTED_ATTRIBUTE_PRESENT" not in {f["code"] for f in s["findings"]}
+
 # ID must not merely exist; it must be valid xs:ID/NCName syntax.
 bad_id = RESPONSE.replace('ID="_resp1"', 'ID="123 bad:id"', 1)
 case_invalid_id = analyze_saml_input(bad_id)

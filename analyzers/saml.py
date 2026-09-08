@@ -34,6 +34,40 @@ def _local(tag: str) -> str:
     return tag.rsplit("}", 1)[-1]
 
 
+def _xmlenc_algorithm_name(uri: str | None) -> str | None:
+    if not uri:
+        return None
+    if "#" in uri:
+        return uri.rsplit("#", 1)[-1] or uri
+    return uri.rsplit("/", 1)[-1] or uri
+
+
+def _encrypted_attributes(assertion) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for enc in assertion.findall(".//saml:EncryptedAttribute", NS):
+        data = enc.find("xenc:EncryptedData", NS)
+        content_uri = None
+        if data is not None:
+            method = data.find("xenc:EncryptionMethod", NS)
+            if method is not None:
+                content_uri = method.attrib.get("Algorithm")
+        key_uris: list[str] = []
+        seen: set[str] = set()
+        for encrypted_key in enc.findall(".//xenc:EncryptedKey", NS):
+            method = encrypted_key.find("xenc:EncryptionMethod", NS)
+            uri = method.attrib.get("Algorithm") if method is not None else None
+            if uri and uri not in seen:
+                seen.add(uri)
+                key_uris.append(uri)
+        out.append({
+            "content_encryption": _xmlenc_algorithm_name(content_uri),
+            "content_encryption_uri": content_uri,
+            "key_encryption": [_xmlenc_algorithm_name(uri) for uri in key_uris],
+            "key_encryption_uris": key_uris,
+        })
+    return out
+
+
 def _text(el):
     return (el.text or "").strip() if el is not None else None
 
@@ -489,6 +523,8 @@ def _extract_assertion(assertion) -> dict[str, Any]:
         },
         "authn_statements": authn_statements,
         "attributes": attrs,
+        "encrypted_attributes": _encrypted_attributes(assertion),
+        "encrypted_attribute_count": len(assertion.findall(".//saml:EncryptedAttribute", NS)),
         "attribute_statement_count": len(assertion.findall("saml:AttributeStatement", NS)),
         "authz_decision_statement_count": len(assertion.findall("saml:AuthzDecisionStatement", NS)),
         "advice_children": advice_children,
@@ -1035,6 +1071,7 @@ def analyze_saml_input(text: str) -> dict[str, Any]:
             "Signature presence and algorithms are reported, but cryptographic trust validation is not performed by the current validator.",
             "A standard SAML Response contains Assertion XML directly; the analyzer decodes whole Base64 SAMLRequest/SAMLResponse payloads and standalone Base64 Assertions, but intentionally does not recursively decode arbitrary Base64 text nodes such as X509 certificates.",
             "EncryptedAssertion is detected but cannot be decrypted without the SP private key.",
+            "EncryptedAttribute is detected; XML Encryption algorithms are reported, but plaintext attributes are not recovered without the SP private key.",
             "Time validity is evaluated against the analyzer machine's current UTC time and does not apply configurable clock skew yet; historical samples will therefore correctly appear expired today.",
             "Standards validation combines SAML 2.0 Core requirements with Web Browser SSO profile rules where the supplied documents indicate an SSO Response. Binding-dependent checks are only hard errors when the binding can be inferred; otherwise they are warnings.",
         ],

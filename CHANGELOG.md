@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## [0.11.17] - 2026-09-08
+
+### Added
+
+- `ENCRYPTED_ATTRIBUTE_PRESENT` (INFO) when an assertion contains `EncryptedAttribute`; reports XML Encryption content and key algorithms and does not decrypt without the SP private key
+
+### Changed
+
+- version bumped to `0.11.17`
+
 ## [0.11.16] - 2026-09-08
 
 ### Added

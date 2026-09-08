@@ -147,6 +147,19 @@ def _md_assertion(a: dict[str, Any], index: int | None = None) -> list[str]:
         out.append(_bullet("NameFormat", attr.get("name_format"), 1))
         out.append(_bullet("Value(s)", attr.get("values"), 1))
 
+    enc_attrs = a.get("encrypted_attributes") or []
+    if enc_attrs:
+        out.append(_bullet("EncryptedAttribute count", a.get("encrypted_attribute_count") or len(enc_attrs)))
+        content = list(dict.fromkeys(e.get("content_encryption") for e in enc_attrs if e.get("content_encryption")))
+        key_enc = list(dict.fromkeys(
+            name
+            for e in enc_attrs
+            for name in (e.get("key_encryption") or [])
+            if name
+        ))
+        out.append(_bullet("EncryptedAttribute content encryption", content[0] if len(content) == 1 else content))
+        out.append(_bullet("EncryptedAttribute key encryption", key_enc[0] if len(key_enc) == 1 else key_enc))
+
     out += [
         _bullet("AttributeStatement count", a.get("attribute_statement_count")),
         _bullet("AuthzDecisionStatement count", a.get("authz_decision_statement_count")),

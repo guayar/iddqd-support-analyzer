@@ -790,6 +790,29 @@ def validate_saml(
                 standard="SAML Core 2.0 §2.7.3.1 AttributeType and §3.3.2.3 AttributeQuery",
             ))
 
+        enc_attrs = a.get("encrypted_attributes") or []
+        if enc_attrs:
+            content = list(dict.fromkeys(e.get("content_encryption") for e in enc_attrs if e.get("content_encryption")))
+            key_enc = list(dict.fromkeys(
+                name
+                for e in enc_attrs
+                for name in (e.get("key_encryption") or [])
+                if name
+            ))
+            issues.append(_issue(
+                "ENCRYPTED_ATTRIBUTE_PRESENT",
+                "INFO",
+                scope,
+                "Encrypted AttributeStatement content was detected. The analyzer can inspect the XML Encryption structure and algorithms, but cannot recover the plaintext attribute without the corresponding SP private key.",
+                observed={
+                    "EncryptedAttribute count": len(enc_attrs),
+                    "content encryption": content[0] if len(content) == 1 else content,
+                    "key encryption": key_enc[0] if len(key_enc) == 1 else key_enc,
+                },
+                expected="SP private key required for decryption",
+                standard="SAML Core 2.0 §2.7.3.2 EncryptedAttribute / XML Encryption",
+            ))
+
     # Successful browser SSO response needs at least one AuthnStatement across the set.
     if resp and (resp.get("status_codes") or [None])[0] == SUCCESS and assertions:
         if sum(len(a.get("authn_statements") or []) for a in assertions) == 0:
