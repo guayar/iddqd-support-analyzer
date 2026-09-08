@@ -42,30 +42,43 @@ def _xmlenc_algorithm_name(uri: str | None) -> str | None:
     return uri.rsplit("/", 1)[-1] or uri
 
 
+def _xmlenc_payload(container) -> dict[str, Any]:
+    data = container.find("xenc:EncryptedData", NS)
+    content_uri = None
+    key_info_present = False
+    if data is not None:
+        method = data.find("xenc:EncryptionMethod", NS)
+        if method is not None:
+            content_uri = method.attrib.get("Algorithm")
+        key_info_present = data.find("ds:KeyInfo", NS) is not None
+    key_uris: list[str] = []
+    seen: set[str] = set()
+    missing_key_method = 0
+    encrypted_keys = list(container.findall(".//xenc:EncryptedKey", NS))
+    for encrypted_key in encrypted_keys:
+        method = encrypted_key.find("xenc:EncryptionMethod", NS)
+        uri = method.attrib.get("Algorithm") if method is not None else None
+        if not uri:
+            missing_key_method += 1
+            continue
+        if uri not in seen:
+            seen.add(uri)
+            key_uris.append(uri)
+    return {
+        "encrypted_data_present": data is not None,
+        "content_encryption": _xmlenc_algorithm_name(content_uri),
+        "content_encryption_uri": content_uri,
+        "content_encryption_method_present": bool(content_uri),
+        "key_encryption": [_xmlenc_algorithm_name(uri) for uri in key_uris],
+        "key_encryption_uris": key_uris,
+        "key_info_present": key_info_present,
+        "encrypted_key_count": len(encrypted_keys),
+        "encrypted_key_missing_encryption_method_count": missing_key_method,
+    }
+
+
 def _encrypted_attributes(assertion) -> list[dict[str, Any]]:
-    out: list[dict[str, Any]] = []
-    for enc in assertion.findall(".//saml:EncryptedAttribute", NS):
-        data = enc.find("xenc:EncryptedData", NS)
-        content_uri = None
-        if data is not None:
-            method = data.find("xenc:EncryptionMethod", NS)
-            if method is not None:
-                content_uri = method.attrib.get("Algorithm")
-        key_uris: list[str] = []
-        seen: set[str] = set()
-        for encrypted_key in enc.findall(".//xenc:EncryptedKey", NS):
-            method = encrypted_key.find("xenc:EncryptionMethod", NS)
-            uri = method.attrib.get("Algorithm") if method is not None else None
-            if uri and uri not in seen:
-                seen.add(uri)
-                key_uris.append(uri)
-        out.append({
-            "content_encryption": _xmlenc_algorithm_name(content_uri),
-            "content_encryption_uri": content_uri,
-            "key_encryption": [_xmlenc_algorithm_name(uri) for uri in key_uris],
-            "key_encryption_uris": key_uris,
-        })
-    return out
+    return [_xmlenc_payload(enc) for enc in assertion.findall(".//saml:EncryptedAttribute", NS)]
 
 
 def _text(el):
@@ -504,6 +517,7 @@ def _extract_assertion(assertion) -> dict[str, Any]:
             "nameid_count": len(nameid_els),
             "confirmations": subject_confirmations,
             "encrypted_id_present": encrypted_id is not None,
+            "encrypted_id": _xmlenc_payload(encrypted_id) if encrypted_id is not None else None,
             "base_id_present": base_id is not None,
             "subject_identifier_choice_count": (
                 (1 if nameid_els else 0)
@@ -1071,7 +1085,7 @@ def analyze_saml_input(text: str) -> dict[str, Any]:
             "Signature presence and algorithms are reported, but cryptographic trust validation is not performed by the current validator.",
             "A standard SAML Response contains Assertion XML directly; the analyzer decodes whole Base64 SAMLRequest/SAMLResponse payloads and standalone Base64 Assertions, but intentionally does not recursively decode arbitrary Base64 text nodes such as X509 certificates.",
             "EncryptedAssertion is detected but cannot be decrypted without the SP private key.",
-            "EncryptedAttribute is detected; XML Encryption algorithms are reported, but plaintext attributes are not recovered without the SP private key.",
+            "EncryptedAttribute and EncryptedID are detected; XML Encryption algorithms and KeyInfo presence are reported, but plaintext is not recovered without the corresponding private key.",
             "Time validity is evaluated against the analyzer machine's current UTC time and does not apply configurable clock skew yet; historical samples will therefore correctly appear expired today.",
             "Standards validation combines SAML 2.0 Core requirements with Web Browser SSO profile rules where the supplied documents indicate an SSO Response. Binding-dependent checks are only hard errors when the binding can be inferred; otherwise they are warnings.",
         ],

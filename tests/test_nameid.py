@@ -361,6 +361,39 @@ assert "SUBJECT_IDENTIFIER_CHOICE_INVALID" not in _codes(_analyze_subject(ENCRYP
 # --- 30. EncryptedID + bearer does not require NameID ---
 assert "BROWSER_SSO_SUBJECT_MISSING" not in _codes(_analyze_subject(ENCRYPTED_ID))
 
+# python3-saml invalids/encrypted_nameID_without_EncMethod: EncryptedKey without EncryptionMethod.
+ENC_ID_NO_KEY_METHOD = """<saml:EncryptedID>
+<xenc:EncryptedData xmlns:xenc="http://www.w3.org/2001/04/xmlenc#" Type="http://www.w3.org/2001/04/xmlenc#Element">
+<xenc:EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#aes128-cbc"/>
+<ds:KeyInfo xmlns:ds="http://www.w3.org/2000/09/xmldsig#">
+<xenc:EncryptedKey>
+<xenc:CipherData><xenc:CipherValue>QQ==</xenc:CipherValue></xenc:CipherData>
+</xenc:EncryptedKey>
+</ds:KeyInfo>
+<xenc:CipherData><xenc:CipherValue>QQ==</xenc:CipherValue></xenc:CipherData>
+</xenc:EncryptedData>
+</saml:EncryptedID>"""
+no_key_method = _analyze_subject(ENC_ID_NO_KEY_METHOD)
+assert "ENCRYPTED_ID_PRESENT" in _codes(no_key_method)
+assert "ENCRYPTED_ID_KEY_ENCRYPTION_METHOD_MISSING" in _codes(no_key_method)
+assert "ENCRYPTED_ID_KEYINFO_MISSING" not in _codes(no_key_method)
+present = [f for f in no_key_method["findings"] if f["code"] == "ENCRYPTED_ID_PRESENT"][0]
+assert present["severity"] == "INFO"
+assert present["observed"]["content encryption"] == "aes128-cbc"
+assert present["observed"]["KeyInfo present"] is True
+
+# python3-saml invalids/encrypted_nameID_without_keyinfo: no KeyInfo / EncryptedKey.
+ENC_ID_NO_KEYINFO = """<saml:EncryptedID>
+<xenc:EncryptedData xmlns:xenc="http://www.w3.org/2001/04/xmlenc#" Type="http://www.w3.org/2001/04/xmlenc#Element">
+<xenc:EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#aes128-cbc"/>
+<xenc:CipherData><xenc:CipherValue>QQ==</xenc:CipherValue></xenc:CipherData>
+</xenc:EncryptedData>
+</saml:EncryptedID>"""
+no_keyinfo = _analyze_subject(ENC_ID_NO_KEYINFO)
+assert "ENCRYPTED_ID_PRESENT" in _codes(no_keyinfo)
+assert "ENCRYPTED_ID_KEYINFO_MISSING" in _codes(no_keyinfo)
+assert "ENCRYPTED_ID_KEY_ENCRYPTION_METHOD_MISSING" not in _codes(no_keyinfo)
+
 # --- 31. two assertions, findings scoped ---
 two_assert = (
     '<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" '

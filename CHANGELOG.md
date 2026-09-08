@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## [0.11.18] - 2026-09-08
+
+### Added
+
+- `ENCRYPTED_ID_PRESENT` (INFO) when Subject contains `EncryptedID`; reports content/key algorithms and KeyInfo without decrypting
+- `ENCRYPTED_ID_KEY_ENCRYPTION_METHOD_MISSING` and `ENCRYPTED_ID_ENCRYPTION_METHOD_MISSING` (WARNING) when EncryptionMethod is omitted (XML Encryption allows this; python3-saml `encrypted_nameID_without_EncMethod` fails)
+- `ENCRYPTED_ID_KEYINFO_MISSING` (WARNING) when EncryptedData has neither KeyInfo nor EncryptedKey (XML Encryption allows this; python3-saml `encrypted_nameID_without_keyinfo` fails)
+
+### Changed
+
+- version bumped to `0.11.18`
+
 ## [0.11.17] - 2026-09-08
 
 ### Added

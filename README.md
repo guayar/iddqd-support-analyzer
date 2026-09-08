@@ -6,7 +6,7 @@ Early-stage AI-assisted project. Not a production product — I am building it t
 
 Local troubleshooting toolkit for SAML/SSO and log analysis. Optional anonymizer and local LLM chats.
 
-**Current version:** `0.11.17`
+**Current version:** `0.11.18`
 
 The core product is a local, deterministic SAML and log analyzer. It does not require Ollama. Optional modules (Anonymize, Assistant + General Chat) are enabled from the **Config** tab and load after a restart.
 
@@ -45,6 +45,10 @@ RESPONSE_STATUS_MISSING
 NAMEID_EMAIL_FORMAT_INVALID
 NAMEID_EMAIL_FORMAT_NOT_FULLY_CHECKED
 NAMEID_ENCRYPTED_FORMAT_PLAINTEXT
+ENCRYPTED_ID_PRESENT
+ENCRYPTED_ID_ENCRYPTION_METHOD_MISSING
+ENCRYPTED_ID_KEY_ENCRYPTION_METHOD_MISSING
+ENCRYPTED_ID_KEYINFO_MISSING
 NAMEID_ENTITY_URI_INVALID
 NAMEID_PERSISTENT_NAMEQUALIFIER_NOT_CHECKED
 NAMEIDPOLICY_RETURNED_FORMAT_MISMATCH
@@ -74,7 +78,7 @@ A bare `-----BEGIN PUBLIC KEY-----` file is not accepted in this path; upload th
 
 If only a certificate embedded in `ds:KeyInfo` is available, the analyzer can verify the cryptographic signature but explicitly reports that signer trust is not established by metadata.
 
-`EncryptedAssertion` and `EncryptedAttribute` are detected, but decryption is not implemented. Decryption would require the SP private key and is intentionally kept separate from signature verification. XML Encryption algorithms on `EncryptedAttribute` are reported.
+`EncryptedAssertion`, `EncryptedAttribute` and `EncryptedID` are detected, but decryption is not implemented. Decryption would require the SP private key and is intentionally kept separate from signature verification. XML Encryption algorithms and KeyInfo presence are reported. Missing EncryptionMethod or KeyInfo on EncryptedID is a warning: XML Encryption allows the omission, typical SP libraries do not.
 
 ### Log analysis
 

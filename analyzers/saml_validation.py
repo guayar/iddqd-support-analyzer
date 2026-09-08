@@ -628,6 +628,55 @@ def validate_saml(
         if choice > 1:
             issues.append(_issue("SUBJECT_IDENTIFIER_CHOICE_INVALID", "ERROR", scope, "Subject contains more than one of BaseID, NameID and EncryptedID. These identifier forms are mutually exclusive.", observed=choice, expected="exactly one of BaseID | NameID | EncryptedID", standard="SAML Core 2.0 SubjectType"))
 
+        enc_id = subject.get("encrypted_id")
+        if subject.get("encrypted_id_present") and enc_id:
+            content = enc_id.get("content_encryption")
+            key_enc = enc_id.get("key_encryption") or []
+            issues.append(_issue(
+                "ENCRYPTED_ID_PRESENT",
+                "INFO",
+                scope,
+                "EncryptedID was detected. The analyzer can inspect the XML Encryption structure and algorithms, but cannot recover the plaintext NameID without the corresponding SP private key.",
+                observed={
+                    "content encryption": content,
+                    "key encryption": key_enc[0] if len(key_enc) == 1 else key_enc,
+                    "KeyInfo present": enc_id.get("key_info_present"),
+                    "EncryptedKey count": enc_id.get("encrypted_key_count"),
+                },
+                expected="SP private key required for decryption",
+                standard="SAML Core 2.0 §2.2.4 EncryptedID / XML Encryption",
+            ))
+            if not enc_id.get("content_encryption_method_present"):
+                issues.append(_issue(
+                    "ENCRYPTED_ID_ENCRYPTION_METHOD_MISSING",
+                    "WARNING",
+                    scope,
+                    "EncryptedID EncryptedData has no EncryptionMethod Algorithm. XML Encryption allows the omission if the recipient already knows the algorithm; typical SAML libraries cannot decrypt without it.",
+                    observed={"content encryption": content},
+                    expected="xenc:EncryptionMethod Algorithm on EncryptedData",
+                    standard="XML Encryption EncryptedType EncryptionMethod (optional) / SAML Core 2.0 §2.2.4",
+                ))
+            if enc_id.get("encrypted_key_missing_encryption_method_count"):
+                issues.append(_issue(
+                    "ENCRYPTED_ID_KEY_ENCRYPTION_METHOD_MISSING",
+                    "WARNING",
+                    scope,
+                    "EncryptedID contains EncryptedKey without EncryptionMethod. XML Encryption allows the omission if the recipient already knows the key wrap algorithm; python3-saml / xmlsec typically fail this case.",
+                    observed={"EncryptedKey count": enc_id.get("encrypted_key_count"), "key encryption": key_enc},
+                    expected="xenc:EncryptionMethod Algorithm on EncryptedKey",
+                    standard="XML Encryption EncryptedKey EncryptionMethod (optional)",
+                ))
+            if not enc_id.get("key_info_present") and not enc_id.get("encrypted_key_count"):
+                issues.append(_issue(
+                    "ENCRYPTED_ID_KEYINFO_MISSING",
+                    "WARNING",
+                    scope,
+                    "EncryptedID EncryptedData has no ds:KeyInfo and no EncryptedKey. XML Encryption allows KeyInfo to be omitted if the recipient already has the key; python3-saml treats this as invalid and a typical Web SSO SP cannot unwrap the content key from the message.",
+                    observed={"KeyInfo present": False, "EncryptedKey count": 0},
+                    expected="ds:KeyInfo with EncryptedKey, or a sibling xenc:EncryptedKey",
+                    standard="XML Encryption EncryptedData KeyInfo (optional) / SAML Core 2.0 EncryptedElementType",
+                ))
+
         issues.extend(
             validate_nameid(
                 nameid,

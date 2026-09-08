@@ -95,6 +95,13 @@ def _md_assertion(a: dict[str, Any], index: int | None = None) -> list[str]:
         _bullet("SPProvidedID", nameid.get("sp_provided_id")),
         _bullet("EncryptedID present", subject.get("encrypted_id_present")),
     ]
+    enc_id = subject.get("encrypted_id") or {}
+    if subject.get("encrypted_id_present"):
+        out.append(_bullet("EncryptedID content encryption", enc_id.get("content_encryption")))
+        key_enc = enc_id.get("key_encryption") or []
+        out.append(_bullet("EncryptedID key encryption", key_enc[0] if len(key_enc) == 1 else key_enc))
+        out.append(_bullet("EncryptedID KeyInfo present", enc_id.get("key_info_present")))
+        out.append(_bullet("EncryptedID EncryptedKey count", enc_id.get("encrypted_key_count")))
     confirmations = subject.get("confirmations") or []
     if confirmations:
         for i, sc in enumerate(confirmations, 1):
