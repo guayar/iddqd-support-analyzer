@@ -196,6 +196,36 @@ CSS = """
     color: #b91c1c !important;
     font-weight: 600 !important;
 }
+.psa-assistant-controls {
+    gap: 8px !important;
+}
+.psa-assistant-mode [data-testid="block-info"] {
+    font-size: 16px !important;
+}
+.psa-assistant-mode label {
+    font-size: 15px !important;
+}
+.psa-context {
+    display: flex !important;
+    align-items: center !important;
+    gap: 10px !important;
+    margin: 6px 0 2px 0 !important;
+    font-size: 16px !important;
+    font-weight: 500 !important;
+    line-height: 1.3 !important;
+}
+.psa-context-light {
+    width: 12px !important;
+    height: 12px !important;
+    border-radius: 50% !important;
+    flex-shrink: 0 !important;
+}
+.psa-context-off {
+    background: #9ca3af !important;
+}
+.psa-context-on {
+    background: #16a34a !important;
+}
 """ + f"""
 footer button.settings::before {{
     content: "v{APP_VERSION} · ";
@@ -220,9 +250,14 @@ def _hero_text() -> str:
 
 
 def _context_badge(result, detached: bool) -> str:
-    if result and not detached:
-        return "Analysis context attached"
-    return "No analysis context attached"
+    attached = bool(result) and not detached
+    state = "on" if attached else "off"
+    label = "Analysis context attached" if attached else "No analysis context attached"
+    return (
+        f"<p class='psa-context'>"
+        f"<span class='psa-context-light psa-context-{state}' aria-hidden='true'></span>"
+        f"{label}</p>"
+    )
 
 
 def _restart_notice(saved: tuple[str, ...]) -> str:
@@ -376,17 +411,15 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                             "to chat without it. Do not paste secrets into General Chat.",
                             elem_classes=["psa-note"],
                         )
-                        with gr.Row(equal_height=True):
+                        with gr.Column(elem_classes=["psa-assistant-controls"]):
                             assistant_mode = gr.Radio(
                                 ["General", "Support Mail", "Code"],
                                 value="General",
                                 label="Mode",
-                                scale=1,
-                                elem_classes=["psa-control", "psa-mode"],
+                                elem_classes=["psa-assistant-mode"],
                             )
-                            with gr.Column(scale=1, elem_classes=["psa-control"]):
-                                context_badge = gr.Markdown(_context_badge(None, False))
-                                clear_ctx = gr.Button("Clear analysis context")
+                            context_badge = gr.HTML(_context_badge(None, False))
+                            clear_ctx = gr.Button("Clear analysis context")
                         with gr.Column(elem_classes=["psa-chat"]):
                             assistant_chatbot = gr.Chatbot(height=CHAT_HEIGHT, label="Chat", elem_id="assistant-chat")
                             gr.ChatInterface(
