@@ -254,4 +254,16 @@ bad_id = RESPONSE.replace('ID="_resp1"', 'ID="123 bad:id"', 1)
 case_invalid_id = analyze_saml_input(bad_id)
 assert 'RESPONSE_ID_INVALID' in {f['code'] for f in case_invalid_id['findings']}
 
+# SessionNotOnOrAfter expiry is independent of Conditions and of SessionIndex syntax.
+session_expired = RESPONSE.replace(
+    'AuthnInstant="2026-09-07T08:00:00Z" SessionIndex="abc"',
+    'AuthnInstant="2026-09-07T08:00:00Z" SessionIndex="_51be37965feb5579d803141076936dc2e9d1d98ebf" SessionNotOnOrAfter="2013-06-17T22:54:14Z"',
+)
+session_expired_result = analyze_saml_input(session_expired)
+session_expired_findings = [f for f in session_expired_result['findings'] if f['code'] == 'SESSION_NOTONORAFTER_EXPIRED']
+assert len(session_expired_findings) == 1
+assert session_expired_findings[0]['severity'] == 'WARNING'
+assert session_expired_findings[0]['observed'] == '2013-06-17T22:54:14Z'
+assert 'SESSION_NOTONORAFTER_EXPIRED' not in {f['code'] for f in s['findings']}
+
 print('EXTENDED VALIDATION TESTS OK')

@@ -6,7 +6,7 @@ Early-stage AI-assisted project. Not a production product — I am building it t
 
 Local troubleshooting toolkit for SAML/SSO and log analysis. Optional anonymizer and local LLM chats.
 
-**Current version:** `0.11.20`
+**Current version:** `0.11.21`
 
 The core product is a local, deterministic SAML and log analyzer. It does not require Ollama. Optional modules (Anonymize, Assistant + General Chat) are enabled from the **Config** tab and load after a restart.
 
@@ -54,6 +54,7 @@ NAMEID_ENTITY_URI_INVALID
 NAMEID_PERSISTENT_NAMEQUALIFIER_NOT_CHECKED
 NAMEIDPOLICY_RETURNED_FORMAT_MISMATCH
 SUBJECT_IDENTIFIER_CHOICE_INVALID
+SESSION_NOTONORAFTER_EXPIRED
 BEARER_RECIPIENT_ACS_MISMATCH
 AUDIENCE_SP_ENTITYID_MISMATCH
 DUPLICATE_SAML_ID

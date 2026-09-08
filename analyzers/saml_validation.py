@@ -783,11 +783,23 @@ def validate_saml(
                 issues.append(_issue("AUTHNINSTANT_NOT_UTC", "ERROR", st_scope, "AuthnInstant must be expressed in UTC.", observed=authn_raw, expected="UTC", standard="SAML Core 2.0 §1.3.3"))
             if not (st.get("authn_context_class_ref") or st.get("authn_context_decl_ref") or st.get("authn_context_decl_present")):
                 issues.append(_issue("AUTHNCONTEXT_MISSING", "ERROR", st_scope, "AuthnStatement must contain an AuthnContext identifying/describing the authentication context.", standard="SAML Core 2.0 AuthnStatementType"))
-            session_noa = _parse_time(st.get("SessionNotOnOrAfter"))
-            if st.get("SessionNotOnOrAfter") and session_noa is None:
-                issues.append(_issue("SESSION_NOTONORAFTER_INVALID", "ERROR", st_scope, "SessionNotOnOrAfter is not a valid timezone-aware dateTime.", observed=st.get("SessionNotOnOrAfter")))
-            elif st.get("SessionNotOnOrAfter") and not _is_utc_time(st.get("SessionNotOnOrAfter")):
-                issues.append(_issue("SESSION_NOTONORAFTER_NOT_UTC", "ERROR", st_scope, "SessionNotOnOrAfter must be expressed in UTC.", observed=st.get("SessionNotOnOrAfter"), expected="UTC", standard="SAML Core 2.0 §1.3.3"))
+            session_raw = st.get("SessionNotOnOrAfter")
+            session_noa = _parse_time(session_raw)
+            if session_raw and session_noa is None:
+                issues.append(_issue("SESSION_NOTONORAFTER_INVALID", "ERROR", st_scope, "SessionNotOnOrAfter is not a valid timezone-aware dateTime.", observed=session_raw))
+            elif session_raw and not _is_utc_time(session_raw):
+                issues.append(_issue("SESSION_NOTONORAFTER_NOT_UTC", "ERROR", st_scope, "SessionNotOnOrAfter must be expressed in UTC.", observed=session_raw, expected="UTC", standard="SAML Core 2.0 §1.3.3"))
+            elif session_noa and now >= session_noa:
+                issues.append(_issue(
+                    "SESSION_NOTONORAFTER_EXPIRED",
+                    "WARNING",
+                    st_scope,
+                    "AuthnStatement SessionNotOnOrAfter has passed at analyzer runtime. For Web Browser SSO this is an upper bound on the SP security context derived from the assertion, not a required ACS reject of the Response.",
+                    observed=session_raw,
+                    expected=f"> {now.isoformat()}",
+                    standard="SAML Core 2.0 §2.7.2 + Approved Errata E79; SAML Profiles 2.0 §4.1.4.3",
+                    note="Core OS said the IdP session MUST be considered ended; E79 replaced that with an upper bound and defers processing to profiles. Profiles say the security context SHOULD be discarded once this time is reached. There is no required relationship to Conditions NotOnOrAfter. SessionIndex remains an opaque string.",
+                ))
             if st.get("authn_context_class_ref") and not _valid_uri(st.get("authn_context_class_ref")):
                 issues.append(_issue("AUTHNCONTEXT_CLASSREF_INVALID", "ERROR", st_scope, "AuthnContextClassRef is not a valid URI.", observed=st.get("authn_context_class_ref"), standard="SAML Core 2.0 AuthnContext"))
             if st.get("authn_context_decl_ref") and not _valid_uri(st.get("authn_context_decl_ref")):

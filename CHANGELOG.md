@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## [0.11.21] - 2026-09-08
+
+### Added
+
+- `SESSION_NOTONORAFTER_EXPIRED` (WARNING) when AuthnStatement `SessionNotOnOrAfter` has passed. Core OS “MUST consider session ended” was loosened by Approved Errata E79; Web Browser SSO Profiles §4.1.4.3 only SHOULD discard the derived security context. Independent of `SessionIndex` syntax and of Conditions `NotOnOrAfter`.
+
+### Changed
+
+- version bumped to `0.11.21`
+
 ## [0.11.20] - 2026-09-08
 
 ### Fixed
