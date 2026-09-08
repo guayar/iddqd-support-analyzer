@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## [0.11.2] - 2026-09-08
+
+### Changed
+
+- Assistant receives the latest Analyze result automatically; General Chat remains the isolated web-enabled tab
+- version bumped to `0.11.2`
+
+### Removed
+
+- **Attach latest analysis** (redundant once Analyze already has a result)
+
 ## [0.11.1] - 2026-09-08
 
 ### Fixed
@@ -20,7 +31,7 @@ All notable changes to this project are documented here.
 
 - optional Anonymize and LLM modules enabled from the Config tab (default UI: Analyze + Config)
 - Restart application control after module changes; refresh the browser after the UI disconnects
-- Assistant can receive an Analyze result through Attach latest analysis; General Chat never receives that report
+- Assistant can receive an Analyze result; General Chat never receives that report
 
 ### Removed
 

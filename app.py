@@ -295,6 +295,12 @@ def send_to_assistant(latest_analysis):
     return latest_analysis, _context_badge(latest_analysis), empty_assistant_history()
 
 
+def analyze_with_assistant(files, pasted, mode, signing_cert_file=None):
+    markdown, raw_json, result = analyze(files, pasted, mode, signing_cert_file)
+    ctx, badge, history = send_to_assistant(result)
+    return markdown, raw_json, result, ctx, badge, history
+
+
 def clear_assistant_context():
     from chats import empty_assistant_history
 
@@ -375,8 +381,6 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                     with gr.Accordion("Structured analyzer output (JSON)", open=False):
                         raw = gr.Code(label="JSON", language="json")
 
-                    run.click(analyze, inputs=[files, pasted, mode, signing_cert], outputs=[report, raw, analysis_state])
-
             if ANONYMIZE_ON:
                 with gr.Tab("Anonymize log"):
                     with gr.Column(elem_classes=["psa-shell"]):
@@ -427,9 +431,9 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                         gr.Markdown(
                             "### Local Assistant\n"
                             "Everything in this tab stays between the browser, this application and the local Ollama model. "
-                            "**No web search.** Use **Attach latest analysis** to send the current Analyze result into this chat. "
+                            "**No web search.** The latest Analyze result is available here automatically. "
                             "**Clear analysis context** removes it and resets this chat. "
-                            "Do not paste secrets into General Chat.",
+                            "General Chat never receives that report — do not paste secrets there.",
                             elem_classes=["psa-note"],
                         )
                         with gr.Column(elem_classes=["psa-assistant-controls"]):
@@ -440,7 +444,6 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                                 elem_classes=["psa-assistant-mode"],
                             )
                             context_badge = gr.HTML(_context_badge(None))
-                            attach_latest = gr.Button("Attach latest analysis")
                             clear_ctx = gr.Button("Clear analysis context")
                         with gr.Column(elem_classes=["psa-chat"]):
                             assistant_chatbot = gr.Chatbot(height=CHAT_HEIGHT, label="Chat", elem_id="assistant-chat")
@@ -451,11 +454,6 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                                 save_history=False,
                                 fill_height=False,
                             )
-                        attach_latest.click(
-                            send_to_assistant,
-                            inputs=[analysis_state],
-                            outputs=[assistant_context, context_badge, assistant_chatbot],
-                        )
                         clear_ctx.click(
                             clear_assistant_context,
                             inputs=[],
@@ -491,7 +489,7 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                     )
                     llm_box = gr.Checkbox(
                         label="Assistant and General Chat",
-                        info="Requires local Ollama. Assistant can attach an Analyze result from the Assistant tab. General Chat can use the web and never receives that report.",
+                        info="Requires local Ollama. Assistant sees the latest Analyze result. General Chat can use the web and never receives that report.",
                         value=PLUGIN_LLM in saved,
                     )
                     restart_md = gr.Markdown(_restart_notice(saved))
@@ -499,6 +497,15 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                     anon_box.change(save_modules, inputs=[anon_box, llm_box], outputs=[restart_md])
                     llm_box.change(save_modules, inputs=[anon_box, llm_box], outputs=[restart_md])
                     restart_btn.click(restart_clicked)
+
+            if LLM_ON:
+                run.click(
+                    analyze_with_assistant,
+                    inputs=[files, pasted, mode, signing_cert],
+                    outputs=[report, raw, analysis_state, assistant_context, context_badge, assistant_chatbot],
+                )
+            else:
+                run.click(analyze, inputs=[files, pasted, mode, signing_cert], outputs=[report, raw, analysis_state])
 
 
 if __name__ == "__main__":
