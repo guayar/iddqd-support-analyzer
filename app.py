@@ -15,7 +15,7 @@ from modules import (
     restart_application,
     write_saved_plugins,
 )
-from uploads import InputError
+from uploads import InputError, should_clear_file_for_paste, should_clear_paste_for_file
 
 DROP_HEIGHT = 220
 CHAT_HEIGHT = 480
@@ -297,6 +297,14 @@ def anonymize(file, pasted):
         raise gr.Error(str(e)) from e
 
 
+def _anon_file_chosen(file):
+    return "" if should_clear_paste_for_file(file) else gr.update()
+
+
+def _anon_text_chosen(text):
+    return None if should_clear_file_for_paste(text) else gr.update()
+
+
 def save_modules(anonymize_on: bool, llm_on: bool):
     saved = write_saved_plugins(
         ([PLUGIN_ANONYMIZE] if anonymize_on else []) + ([PLUGIN_LLM] if llm_on else [])
@@ -398,6 +406,8 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                         with gr.Accordion("Local replacement map — do NOT share this with the anonymized log", open=False):
                             anon_mapping = gr.Code(label="Mapping JSON", language="json")
 
+                        anon_file.change(_anon_file_chosen, inputs=anon_file, outputs=anon_pasted)
+                        anon_pasted.change(_anon_text_chosen, inputs=anon_pasted, outputs=anon_file)
                         anon_run.click(
                             anonymize,
                             inputs=[anon_file, anon_pasted],

@@ -7,25 +7,65 @@ from typing import Any
 
 from analyzers import analyze_log_text, analyze_saml_input
 from analyzers.saml import looks_like_saml_input
-from reporting import render_log_report, render_saml_report
-from uploads import InputError, read_signing_certificate, read_text_file_and_paste, read_text_files
+from analyzers.saml_supplied_cert import extract_pem_certificates_from_text
+from reporting import render_log_report, render_mixed_report, render_saml_report
+from uploads import (
+    InputError,
+    collect_analyze_artifacts,
+    join_analyze_artifacts,
+    read_signing_certificate,
+    read_text_file_and_paste,
+)
+
+
+def _run_saml(artifacts: list[tuple[str, str]], signing_cert_file, all_artifacts: list[tuple[str, str]]):
+    text = join_analyze_artifacts(artifacts)
+    cert_data = read_signing_certificate(signing_cert_file)
+    if cert_data is None:
+        cert_data = extract_pem_certificates_from_text("\n".join(t for _n, t in all_artifacts))
+    return analyze_saml_input(text, signing_cert=cert_data)
+
+
+def _run_log(artifacts: list[tuple[str, str]]):
+    names = [name for name, _text in artifacts if name != "pasted text"]
+    return analyze_log_text(join_analyze_artifacts(artifacts), filename=", ".join(names) if names else None)
 
 
 def analyze(files, pasted, mode, signing_cert_file=None) -> tuple[str, str, dict[str, Any]]:
-    file_text, names = read_text_files(files)
-    text = (file_text + "\n" + (pasted or "")).strip()
-    if not text:
+    artifacts = collect_analyze_artifacts(files, pasted)
+    if not artifacts:
         raise InputError("Upload a log/SAML tracer or paste text first.")
-    chosen = mode
-    if mode == "Auto-detect":
-        chosen = "SAML" if looks_like_saml_input(text) else "Log"
-    if chosen == "SAML":
-        cert_data = read_signing_certificate(signing_cert_file)
-        result = analyze_saml_input(text, signing_cert=cert_data)
+
+    if mode == "SAML":
+        result = _run_saml(artifacts, signing_cert_file, artifacts)
         md = render_saml_report(result)
-    else:
-        result = analyze_log_text(text, filename=", ".join(names) if names else None)
+    elif mode == "Log":
+        result = _run_log(artifacts)
         md = render_log_report(result)
+    else:
+        classified = [
+            (name, text, "SAML" if looks_like_saml_input(text) else "Log")
+            for name, text in artifacts
+        ]
+        saml_arts = [(n, t) for n, t, kind in classified if kind == "SAML"]
+        log_arts = [(n, t) for n, t, kind in classified if kind == "Log"]
+        if saml_arts and log_arts:
+            saml_result = _run_saml(saml_arts, signing_cert_file, artifacts)
+            log_result = _run_log(log_arts)
+            result = {
+                "kind": "mixed",
+                "artifacts": [{"name": n, "kind": k} for n, _t, k in classified],
+                "saml": saml_result,
+                "log": log_result,
+            }
+            md = render_mixed_report(result)
+        elif saml_arts:
+            result = _run_saml(saml_arts, signing_cert_file, artifacts)
+            md = render_saml_report(result)
+        else:
+            result = _run_log(log_arts)
+            md = render_log_report(result)
+
     return md, json.dumps(result, indent=2, ensure_ascii=False), result
 
 

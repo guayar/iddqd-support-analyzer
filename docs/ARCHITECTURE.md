@@ -8,6 +8,7 @@ The core Analyzer is deterministic first. Protocol parsing, required-field check
 Gradio UI (app.py)
   │
   ├─ Analyze (always) ──> actions.analyze ──> analyzers/saml,logs ──> reporting
+  │         └── Auto-detect routes each artifact; SAML files stay one correlated bundle
   │         └── log incidents: multiline records + Java exception chains
   │
   ├─ Anonymize (optional module) ──> actions.anonymize (lazy) ──> analyzers/anonymizer

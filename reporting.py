@@ -399,6 +399,21 @@ def render_log_report(result: dict[str, Any]) -> str:
     return "\n".join(out)
 
 
+def render_mixed_report(result: dict[str, Any]) -> str:
+    lines = ["# Analysis", "", "Files/artifacts detected:"]
+    for item in result.get("artifacts") or []:
+        lines.append(f"- {item.get('name')} — {item.get('kind')}")
+    saml = result.get("saml")
+    if saml:
+        lines.append("")
+        lines.append(render_saml_report(saml).replace("# SAML / SSO analysis", "## SAML analysis", 1))
+    log = result.get("log")
+    if log:
+        lines.append("")
+        lines.append(render_log_report(log).replace("# Log analysis", "## Log analysis", 1))
+    return "\n".join(lines)
+
+
 def render_anonymize_summary(result: dict[str, Any]) -> str:
     counts = result["counts"]
     summary = ["# Anonymized log", f"**Unique values anonymized:** {result['replacements']}"]

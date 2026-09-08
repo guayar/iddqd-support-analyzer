@@ -4,7 +4,7 @@
 
 Local troubleshooting toolkit for SAML/SSO and log analysis. Optional anonymizer and local LLM chats.
 
-**Current version:** `0.11.9`
+**Current version:** `0.11.10`
 
 The core product is a local, deterministic SAML and log analyzer. It does not require Ollama. Optional modules (Anonymize, Assistant + General Chat) are enabled from the **Config** tab and load after a restart.
 
@@ -75,9 +75,11 @@ If only a certificate embedded in `ds:KeyInfo` is available, the analyzer can ve
 - root-cause extraction from `Caused by:` (not a separate incident)
 - first occurrence, numbered `Caused by` list, and a collapsible raw log sample
 
+Auto-detect classifies each uploaded file (and pasted text as one extra artifact). SAML documents are still analyzed together so Request/Response/metadata correlation is preserved. Log files go to the log analyzer. A mixed upload produces one report with both sections. Explicit **SAML** / **Log** modes still send the whole bundle to that analyzer.
+
 ### Anonymization (optional module)
 
-Enable **Anonymize** on the Config tab, then restart. Local deterministic pseudonymization for logs and SAML traces, including:
+Enable **Anonymize** on the Config tab, then restart. Drop a file **or** paste text — not both; choosing one source clears the other. Local deterministic pseudonymization for logs and SAML traces, including:
 
 - IPv4 / IPv6
 - hostnames and domains

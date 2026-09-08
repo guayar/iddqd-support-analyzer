@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## [0.11.10] - 2026-09-08
+
+### Fixed
+
+- Anonymize uses one input source (uploaded file or pasted text), not a silent concatenation of both
+- Analyze Auto-detect classifies each file/paste separately so a mixed log + SAML upload is not forced into a single analyzer
+
+### Changed
+
+- version bumped to `0.11.10`
+
 ## [0.11.9] - 2026-09-08
 
 ### Added

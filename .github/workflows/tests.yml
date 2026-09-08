@@ -35,6 +35,8 @@ jobs:
           PYTHONPATH=. python tests/test_anonymizer_saml.py
           PYTHONPATH=. python tests/test_saml_anonymizer.py
           PYTHONPATH=. python tests/test_layers.py
+          PYTHONPATH=. python tests/test_anonymize_sources.py
+          PYTHONPATH=. python tests/test_analyze_routing.py
           PYTHONPATH=. python tests/test_nameid.py
           PYTHONPATH=. python tests/test_modules.py
           PYTHONPATH=. python tests/test_assistant_handoff.py
