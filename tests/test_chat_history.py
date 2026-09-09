@@ -75,6 +75,17 @@ def test_websearch_history_text_uses_gradio_blocks():
     assert "The main issue is an expired certificate." in text
 
 
+def test_plan_web_search_is_local_by_default_and_minimal_when_needed():
+    from websearch import plan_web_search
+
+    with patch("websearch.complete", return_value='{"search": false}'):
+        assert plan_web_search("co to jest?", [], has_images=True) == []
+    with patch("websearch.complete", return_value='{"search": true, "queries": ["ROCm 10.1 release"]}'):
+        assert plan_web_search("czy jest już ROCm 10.1?", [], has_images=False) == ["ROCm 10.1 release"]
+    with patch("websearch.complete", return_value="not-json"):
+        assert plan_web_search("sprawdź najnowszą wersję", []) == []
+
+
 def test_search_backend_resolution():
     from websearch import resolve_search_backend, source_footer
 
@@ -98,5 +109,6 @@ if __name__ == "__main__":
     test_non_text_blocks_are_skipped()
     test_assistant_second_turn_includes_prior_turns_and_analyze_json()
     test_websearch_history_text_uses_gradio_blocks()
+    test_plan_web_search_is_local_by_default_and_minimal_when_needed()
     test_search_backend_resolution()
     print("CHAT HISTORY TESTS OK")

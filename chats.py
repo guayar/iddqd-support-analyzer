@@ -22,16 +22,17 @@ OCR is imperfect (0 vs O, 1 vs l vs I, punctuation, URLs). Prefer the image when
 Never treat OCR as a second Analyzer. Never send images, OCR or Analyzer JSON to the public web.
 """
 
-WEB_SYSTEM = """You are a web-enabled general assistant. The language model itself runs locally, but for this chat the application deliberately searches the public web.
-Use the supplied search results as external evidence. Current date: {today}.
+WEB_SYSTEM = """You are a web-enabled general assistant. The language model itself runs locally.
+When WEB SEARCH RESULTS are supplied, use them as external evidence. Current date: {today}.
+When no search results are supplied, answer from the conversation and any local image only. Do not invent web sources or claim you searched.
 Answer in the user's language unless asked otherwise.
 For technical questions, prefer official documentation, vendor documentation, release notes and primary sources over blogs.
 Do not fabricate facts or sources. If the search evidence is insufficient or conflicting, say so.
 Cite factual web-derived claims inline using source markers like [S1], [S2]. Do not invent markers that are not in the supplied material.
 This General Chat is intentionally a separate module from the private Analyzer and Assistant. Never imply you can see content from those tabs.
 You may receive a local image on this tab only (for example a product photo). Use the pixels and any LOCAL OCR EXTRACT.
-OCR is imperfect. Prefer the image when OCR and pixels conflict.
-Image bytes stay on this machine. Only the generated text search queries are sent to public search providers. Never claim the image file was uploaded to the web.
+OCR is imperfect and often garbage on photos. Prefer the image when OCR and pixels conflict. Never turn OCR fragments into web queries yourself.
+Image bytes stay on this machine. Only application-generated text search queries are sent to public search providers. Never claim the image file was uploaded to the web.
 Never treat this image as Analyzer output or an Assistant screenshot.
 """
 
@@ -155,20 +156,6 @@ def _user_content(
     return "\n\n".join(parts).strip()
 
 
-def _search_seed(text: str, attachments: list[dict[str, Any]]) -> str:
-    """Text that may leave the machine as search-query material. No image bytes or file paths."""
-    bits: list[str] = []
-    if (text or "").strip():
-        bits.append(text.strip())
-    for att in attachments:
-        ocr = (att.get("ocr_text") or "").strip()
-        if ocr:
-            bits.append(ocr[:2000])
-    if not bits and attachments:
-        bits.append("identify this product and current public retail prices")
-    return "\n".join(bits).strip()
-
-
 def assistant_system_prompt(assistant_context=None) -> str:
     if not assistant_context:
         return ASSISTANT_SYSTEM
@@ -260,7 +247,7 @@ def assistant_chat(message, history, assistant_context=None) -> str:
 
 def web_chat(message, history) -> str:
     from vision import SCOPE_GENERAL_CHAT, attach_images
-    from websearch import source_footer, web_context, web_search
+    from websearch import execute_web_search, plan_web_search, source_footer, web_context
 
     text, paths = normalize_user_message(message)
     attachments, notes = attach_images(paths, scope=SCOPE_GENERAL_CHAT)
@@ -277,19 +264,27 @@ def web_chat(message, history) -> str:
         text,
         attachments,
         notes,
-        empty_image_prompt="Identify the product or subject in this image and look up current public prices and sources.",
+        empty_image_prompt="Identify the subject in this image from the pixels. Do not invent a web search.",
     )
-    seed = _search_seed(text, attachments)
     if not user_text:
         return "Enter a question or attach a local image."
 
+    planned: list[str] = []
     try:
-        results, queries, backend = web_search(seed, history)
-    except Exception as e:
-        results, queries, backend = [], [seed] if seed else [text], "auto"
-        search_error = str(e)
-    else:
-        search_error = ""
+        planned = plan_web_search(text, history, has_images=bool(attachments))
+    except Exception:
+        planned = []
+    search_skipped = not planned
+    results: list[dict[str, str]] = []
+    queries: list[str] = []
+    backend = "auto"
+    search_error = ""
+    if not search_skipped:
+        try:
+            results, queries, backend = execute_web_search(planned)
+        except Exception as e:
+            results, queries, backend = [], planned, "auto"
+            search_error = str(e)
 
     msgs: list[dict[str, Any]] = [{"role": "system", "content": WEB_SYSTEM.format(today=date.today().isoformat())}]
     msgs.extend(_history_messages(history, 10, 12000))
@@ -306,6 +301,17 @@ def web_chat(message, history) -> str:
             return answer + source_footer(results, queries, backend)
         except Exception as e:
             return f"Local LLM error after successful web search: `{e}`" + source_footer(results, queries, backend)
+
+    if search_skipped:
+        msgs.append({
+            "role": "system",
+            "content": "No web search was run. Answer from the conversation, any local image, and the user question only. Do not invent sources.",
+        })
+        msgs.append(user_msg)
+        try:
+            return complete(msgs)
+        except Exception as e:
+            return f"Local LLM error: `{e}`"
 
     msgs.append({
         "role": "system",

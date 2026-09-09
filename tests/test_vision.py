@@ -81,33 +81,75 @@ def test_assistant_sends_image_and_ocr_and_keeps_web_chat_isolated(tmp_path):
     assert "ANALYZER OUTPUT" in captured[0][0]["content"]
 
     product = str(_png(tmp_path / "product.png", color=(10, 20, 30)))
-    search_seeds: list[str] = []
+    search_plans: list[tuple[str, bool]] = []
+    executed: list[list[str]] = []
     web_captured: list = []
 
-    def fake_search(message, history):
-        search_seeds.append(message)
-        return ([], ["public question"], "auto")
+    def fake_plan(message, history, has_images=False):
+        search_plans.append((message, has_images))
+        return ["Pearl Export current price"]
+
+    def fake_execute(queries):
+        executed.append(queries)
+        return ([], queries, "auto")
 
     def fake_web_complete(messages, temperature=0.2):
         web_captured.append(messages)
         return "web-ok"
 
     with patch("chats.complete", fake_web_complete), patch(
-        "websearch.web_search",
-        fake_search,
+        "websearch.plan_web_search",
+        fake_plan,
+    ), patch(
+        "websearch.execute_web_search",
+        fake_execute,
     ), patch(
         "vision.ocr_image",
-        side_effect=lambda p, scope=SCOPE_GENERAL_CHAT: {**inspect_image(p), "text": "Nike Air Max 90", "error": None},
+        side_effect=lambda p, scope=SCOPE_GENERAL_CHAT: {**inspect_image(p), "text": "INVALID_ISSUER customer123", "error": None},
     ), patch("vision.encode_image_png_base64", return_value="cHJvZA=="):
         web_chat({"text": "ile to kosztuje?", "files": [{"path": product}]}, [])
-    assert search_seeds == ["ile to kosztuje?\nNike Air Max 90"]
-    assert all("ZmFrZQ" not in seed and "cHJvZA" not in seed for seed in search_seeds)
+    assert search_plans == [("ile to kosztuje?", True)]
+    assert executed == [["Pearl Export current price"]]
+    assert all("INVALID_ISSUER" not in p[0] for p in search_plans)
     sent = web_captured[0]
     assert all("ANALYZER OUTPUT" not in str(m.get("content")) for m in sent)
-    assert all("INVALID_ISSUER" not in str(m.get("content")) for m in sent)
     user = [m for m in sent if m.get("role") == "user"][-1]
     assert user["images"] == ["cHJvZA=="]
-    assert "Nike Air Max 90" in user["content"]
+    assert "INVALID_ISSUER" in user["content"]
+
+
+def test_general_chat_skips_search_for_what_is_this_photo(tmp_path):
+    path = str(_png(tmp_path / "drums.png"))
+    planned = []
+    executed = []
+
+    def fake_plan(message, history, has_images=False):
+        planned.append((message, has_images))
+        return []
+
+    def fake_execute(queries):
+        executed.append(queries)
+        return ([], queries, "auto")
+
+    with patch("chats.complete", return_value="perkusja"), patch(
+        "websearch.plan_web_search",
+        fake_plan,
+    ), patch(
+        "websearch.execute_web_search",
+        fake_execute,
+    ), patch(
+        "vision.ocr_image",
+        side_effect=lambda p, scope=SCOPE_GENERAL_CHAT: {
+            **inspect_image(p),
+            "text": "OS ZA h WA AA OTSA LT RPA",
+            "error": None,
+        },
+    ), patch("vision.encode_image_png_base64", return_value="ZHJ1bQ=="):
+        out = web_chat({"text": "co to jest?", "files": [{"path": path}]}, [])
+    assert out == "perkusja"
+    assert planned == [("co to jest?", True)]
+    assert executed == []
+    assert "Web sources used by this chat" not in out
 
 
 def test_attach_scopes_are_separate(tmp_path):
@@ -157,6 +199,7 @@ if __name__ == "__main__":
         test_accepts_png_and_caps_count(td)
         test_ocr_failure_still_attaches(td)
         test_assistant_sends_image_and_ocr_and_keeps_web_chat_isolated(td)
+        test_general_chat_skips_search_for_what_is_this_photo(td)
         test_follow_up_resends_previous_screenshot(td)
         test_attach_scopes_are_separate(td)
     print("VISION TESTS OK")

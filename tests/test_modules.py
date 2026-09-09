@@ -57,7 +57,8 @@ assert "websearch" not in sys.modules
 assert "web_search" not in inspect.getsource(assistant_chat)
 assert "websearch" not in inspect.getsource(assistant_chat)
 web_src = inspect.getsource(web_chat)
-assert "web_search" in web_src
+assert "plan_web_search" in web_src
+assert "execute_web_search" in web_src
 assert "analysis_state" not in inspect.signature(web_chat).parameters
 sig = inspect.signature(assistant_chat)
 assert "assistant_context" in sig.parameters

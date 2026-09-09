@@ -2,7 +2,7 @@
 
 [![Tests](https://github.com/guayar/iddqd-support-analyzer/actions/workflows/tests.yml/badge.svg)](https://github.com/guayar/iddqd-support-analyzer/actions/workflows/tests.yml)
 
-**Current version:** `0.13.1`
+**Current version:** `0.13.2`
 
 Local workstation tool for SAML/SSO and `*.log` troubleshooting. The core **Analyze** path is deterministic (no Ollama). Optional modules load from **Config** after a restart. Early-stage, for a private Ubuntu box — not a packaged product.
 
@@ -11,7 +11,7 @@ Local workstation tool for SAML/SSO and `*.log` troubleshooting. The core **Anal
 - **Analyze** — decode SAML (POST/Redirect), check protocol/profile rules, XML signatures and metadata trust, correlate Request/Response/Assertion/metadata, parse Java/Maven-style logs, copy the report
 - **Anonymize** — local pseudonymization of logs and SAML so a copy can be shared (not DLP; review the residual leak scan)
 - **Assistant** — local Ollama only: support/tech help, screenshots + OCR, latest Analyze JSON; no web search
-- **General Chat** — separate module: public web search; optional local photos stay on that tab (text queries only leave the machine)
+- **General Chat** — separate module: local by default; public web search only when the turn needs current/external info
 
 Default tabs: Analyze + Config. Order with everything on: Analyze → Anonymize → Assistant → General Chat → Config.
 

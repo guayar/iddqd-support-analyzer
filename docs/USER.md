@@ -154,7 +154,7 @@ Ubuntu OCR (Assistant and General Chat, optional): `sudo apt install tesseract-o
 
 Enable **General Chat** on the Config tab, then restart. Requires local Ollama. Independent of Assistant.
 
-A deliberately separate web-enabled chat. It receives **no** Analyzer or Assistant context, including the Analyze report, screenshots and OCR. Search queries are generated locally, sent to public search providers through `ddgs`, and the returned pages are summarized by the local model. You may attach a **local product photo** (PNG/JPEG/WEBP): pixels stay on this machine; only text queries (from your question plus local OCR) leave for search. A muted line shows `OLLAMA_MODEL` and that web search is enabled.
+A deliberately separate web-enabled chat. It receives **no** Analyzer or Assistant context. Local by default: a planning step (local model, JSON) decides whether this turn needs the public web. Search only when the user asked to look something up or the task needs current/external facts. Simple “what is this?” on a photo stays local. Queries are short and never include OCR dumps, screenshots, logs or Analyzer JSON. The sources footer appears only when search actually ran.
 
 ## Known limitations
 

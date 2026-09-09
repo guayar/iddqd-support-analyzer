@@ -37,36 +37,13 @@ def history_text(history, limit: int = 6) -> str:
     return "\n".join(items)
 
 
-def search_queries(message: str, history) -> list[str]:
-    """Ask the local model for focused search queries. Only the resulting query strings leave the machine."""
-    prompt = f"""Create 1 to 3 concise web-search queries for the user's latest request.
-Preserve important product names, versions, error codes and technical terms. Prefer English queries for technical documentation when useful.
-For a follow-up question, use the short conversation context to make the query self-contained.
-Return ONLY a JSON array of strings, no markdown.
-
-RECENT CONTEXT:
-{history_text(history)}
-
-LATEST REQUEST:
-{message}
-"""
-    try:
-        raw = complete(
-            [{"role": "system", "content": "You generate precise web search queries."}, {"role": "user", "content": prompt}],
-            temperature=0.0,
-        ).strip()
-        if raw.startswith("```"):
-            raw = raw.strip("`")
-            if raw.lower().startswith("json"):
-                raw = raw[4:].strip()
-        parsed = json.loads(raw)
-        if isinstance(parsed, list):
-            queries = [str(x).strip() for x in parsed if str(x).strip()]
-            if queries:
-                return queries[:3]
-    except Exception:
-        pass
-    return [message.strip()]
+def _loads_json(raw: str):
+    text = (raw or "").strip()
+    if text.startswith("```"):
+        text = text.strip("`")
+        if text.lower().startswith("json"):
+            text = text[4:].strip()
+    return json.loads(text)
 
 
 def resolve_search_backend(raw: str | None = None) -> str:
@@ -83,14 +60,64 @@ def resolve_search_backend(raw: str | None = None) -> str:
     return ",".join(ordered) if ordered else "auto"
 
 
-def web_search(message: str, history) -> tuple[list[dict[str, str]], list[str], str]:
-    queries = search_queries(message, history)
+def plan_web_search(message: str, history, *, has_images: bool = False) -> list[str]:
+    """Local-by-default. Returns 1–3 minimal queries, or [] to stay local. Never sends OCR/images."""
+    request = (message or "").strip()
+    if not request and has_images:
+        request = "(no text; user attached a local image)"
+    if not request:
+        return []
+    prompt = f"""Decide whether this General Chat turn needs a live public web search.
+Default: do NOT search. Answer from the local model, the conversation, and any attached image.
+Search only if the user asked to look something up online, or the task clearly needs current/external public information (latest version, current price, public documentation, whether a product/release exists). If the recent conversation is already a web-research thread and this is a follow-up, search remains appropriate.
+Do not search to describe or identify an attached image, explain code, rewrite text, or reason over supplied local evidence.
+Attached images are not a reason to search. You are not given OCR, screenshots, logs, or Analyzer JSON — never invent queries from those.
+If search is true, queries must be 1 to 3 short strings using only terms present in the user request or recent chat text. No emails, internal hostnames, stack traces, or pasted log bodies.
+
+Attached local images this turn: {"yes" if has_images else "no"}
+
+RECENT CONTEXT:
+{history_text(history) or "(none)"}
+
+LATEST REQUEST:
+{request}
+
+Return ONLY JSON: {{"search": false}} or {{"search": true, "queries": ["short query"]}}
+"""
+    try:
+        raw = complete(
+            [
+                {"role": "system", "content": "You decide whether to search the public web. Local by default. JSON only."},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.0,
+        )
+        parsed = _loads_json(raw)
+        if not isinstance(parsed, dict) or parsed.get("search") is not True:
+            return []
+        queries: list[str] = []
+        for item in parsed.get("queries") or []:
+            query = " ".join(str(item).split())
+            if query and len(query) <= 200:
+                queries.append(query)
+        return queries[:3]
+    except Exception:
+        return []
+
+
+def search_queries(message: str, history) -> list[str]:
+    """Queries only when a web search is actually planned. Empty means stay local."""
+    return plan_web_search(message, history)
+
+
+def execute_web_search(queries: list[str]) -> tuple[list[dict[str, str]], list[str], str]:
     backend = resolve_search_backend()
     merged: list[dict[str, str]] = []
     seen: set[str] = set()
     ddgs = DDGS(timeout=10)
+    used = [q for q in queries if str(q).strip()][:3]
 
-    for query in queries:
+    for query in used:
         try:
             results = ddgs.text(
                 query,
@@ -127,7 +154,14 @@ def web_search(message: str, history) -> tuple[list[dict[str, str]], list[str], 
         except Exception:
             item["content"] = ""
 
-    return merged, queries, backend
+    return merged, used, backend
+
+
+def web_search(message: str, history, *, has_images: bool = False) -> tuple[list[dict[str, str]], list[str], str]:
+    queries = plan_web_search(message, history, has_images=has_images)
+    if not queries:
+        return [], [], resolve_search_backend()
+    return execute_web_search(queries)
 
 
 def web_context(results: list[dict[str, str]]) -> str:

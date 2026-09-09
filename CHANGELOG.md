@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## [0.13.2] - 2026-09-09
+
+### Fixed
+
+- General Chat no longer searches the web on every message. A local model decides per turn (JSON); default is local. Queries are minimal and never OCR/image dumps. Footer only when search ran.
+
+### Changed
+
+- version bumped to `0.13.2`
+
 ## [0.13.1] - 2026-09-09
 
 ### Fixed
