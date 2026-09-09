@@ -663,7 +663,7 @@ def parse_java_exception_chain(lines: list[str]) -> dict[str, Any]:
     causes: list[str] = []
     suppressed: list[str] = []
     for raw in lines:
-        if log_record_prefix(line := raw):
+        if log_record_prefix(raw):
             continue
         s = raw.strip()
         if not s:

@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## [0.15.2] - 2026-09-09
+
+### Changed
+
+- Signature validation uses the shared SAML namespace map from `analyzers/saml.py` instead of a local copy. Dead import and unused walrus assignment cleaned up
+- version bumped to `0.15.2`
+
 ## [0.15.1] - 2026-09-09
 
 ### Changed

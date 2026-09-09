@@ -7,7 +7,6 @@ from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 
 from .saml_signature import (
-    _embedded_certs,
     _issue,
     _iter_result_objects,
     _parse_lxml_documents,

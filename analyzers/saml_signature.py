@@ -8,10 +8,6 @@ from typing import Any
 from .saml import NS, _extract_candidates, _skip_xml_prologue
 from .xml_safe import lxml_fromstring
 
-DS_NS = "http://www.w3.org/2000/09/xmldsig#"
-MD_NS = "urn:oasis:names:tc:SAML:2.0:metadata"
-SAML_NS = "urn:oasis:names:tc:SAML:2.0:assertion"
-
 
 def _issue(
     code: str,
@@ -176,7 +172,7 @@ def _parse_lxml_documents(text: str):
                 saml_objects.setdefault((local, rid), root)
 
         if local == "Response":
-            for assertion in root.xpath("./saml:Assertion", namespaces={"saml": SAML_NS}):
+            for assertion in root.xpath("./saml:Assertion", namespaces={"saml": NS["saml"]}):
                 aid = assertion.get("ID")
                 if aid:
                     saml_objects.setdefault(("Assertion", aid), assertion)
@@ -186,7 +182,7 @@ def _parse_lxml_documents(text: str):
 
 def _metadata_signing_certs(metadata_roots: list[Any]) -> dict[tuple[str, str], list[dict[str, str]]]:
     trust: dict[tuple[str, str], list[dict[str, str]]] = {}
-    ns = {"md": MD_NS, "ds": DS_NS}
+    ns = {"md": NS["md"], "ds": NS["ds"]}
 
     for root in metadata_roots:
         local = root.tag.rsplit("}", 1)[-1]
@@ -224,8 +220,8 @@ def _metadata_signing_certs(metadata_roots: list[Any]) -> dict[tuple[str, str], 
 def _embedded_certs(element: Any) -> list[dict[str, str]]:
     if element is None:
         return []
-    ns = {"ds": DS_NS}
-    signature = element.find(f"{{{DS_NS}}}Signature")
+    ns = {"ds": NS["ds"]}
+    signature = element.find(f"{{{NS['ds']}}}Signature")
     if signature is None:
         return []
     out: list[dict[str, str]] = []
