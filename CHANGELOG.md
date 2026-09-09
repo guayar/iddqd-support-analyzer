@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## [0.13.1] - 2026-09-09
+
+### Fixed
+
+- Assistant and General Chat stay inside the viewport: the transcript scrolls, the prompt does not grow the page under the input bar
+
+### Changed
+
+- version bumped to `0.13.1`
+
 ## [0.13.0] - 2026-09-09
 
 ### Added

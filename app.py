@@ -21,7 +21,6 @@ from modules import (
 from uploads import InputError, should_clear_file_for_paste, should_clear_paste_for_file
 
 DROP_HEIGHT = 220
-CHAT_HEIGHT = 480
 CONTROL_HEIGHT = 128
 
 ANONYMIZE_ON = plugin_enabled(PLUGIN_ANONYMIZE)
@@ -139,12 +138,76 @@ CSS = """
 .psa-chat {
     display: flex !important;
     flex-direction: column !important;
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+}
+.psa-chat-tab {
+    height: calc(100dvh - 6.75rem) !important;
+    max-height: calc(100dvh - 6.75rem) !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+.psa-chat-tab > div,
+.psa-chat-tab .gap,
+.psa-chat-tab .form,
+.psa-chat-tab .panel,
+.psa-chat > div,
+.psa-chat .interface,
+.psa-chat .column,
+.psa-chat .form,
+.psa-chat .gap {
+    min-height: 0 !important;
+}
+.psa-chat-tab > div {
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 1 auto !important;
+    overflow: hidden !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    min-height: 0 !important;
+}
+.psa-chat > div,
+.psa-chat .interface,
+.psa-chat .column {
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 1 auto !important;
+    overflow: hidden !important;
+    height: 100% !important;
+    max-height: 100% !important;
+}
+.psa-chat-tab .psa-note,
+.psa-chat-tab .psa-assistant-controls,
+.psa-chat-tab .psa-llm-meta {
+    flex: 0 0 auto !important;
+    overflow: auto !important;
+    max-height: 28vh !important;
 }
 #assistant-chat,
 #web-chat {
-    height: calc(100dvh - 28rem) !important;
-    min-height: 8rem !important;
-    max-height: calc(100dvh - 28rem) !important;
+    flex: 1 1 auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: hidden !important;
+}
+#assistant-chat .wrapper,
+#web-chat .wrapper,
+#assistant-chat .bubble-wrap,
+#web-chat .bubble-wrap {
+    height: 100% !important;
+    max-height: 100% !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+}
+.psa-chat textarea {
+    max-height: 6.5rem !important;
+    overflow-y: auto !important;
+    resize: none !important;
 }
 #paste-input textarea,
 #anon-paste textarea {
@@ -561,7 +624,7 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                 from chats import assistant_chat
 
                 with gr.Tab("Assistant"):
-                    with gr.Column(elem_classes=["psa-shell"]):
+                    with gr.Column(elem_classes=["psa-shell", "psa-chat-tab"]):
                         gr.Markdown(
                             "### Local Assistant\n"
                             "Everything in this tab stays between the browser, this application, local OCR and the local Ollama model. "
@@ -575,7 +638,13 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                             context_badge = gr.HTML(_context_badge(None))
                             clear_ctx = gr.Button("Clear analysis context")
                         with gr.Column(elem_classes=["psa-chat"]):
-                            assistant_chatbot = gr.Chatbot(height=CHAT_HEIGHT, label="Chat", elem_id="assistant-chat")
+                            assistant_chatbot = gr.Chatbot(
+                                height="100%",
+                                max_height="100%",
+                                resizable=False,
+                                label="Chat",
+                                elem_id="assistant-chat",
+                            )
                             gr.ChatInterface(
                                 fn=assistant_chat,
                                 multimodal=True,
@@ -589,7 +658,7 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                                 ),
                                 additional_inputs=[assistant_context],
                                 save_history=False,
-                                fill_height=False,
+                                fill_height=True,
                             )
                         clear_ctx.click(
                             clear_assistant_context,
@@ -601,7 +670,7 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                 from chats import web_chat
 
                 with gr.Tab("General Chat"):
-                    with gr.Column(elem_classes=["psa-shell"]):
+                    with gr.Column(elem_classes=["psa-shell", "psa-chat-tab"]):
                         gr.Markdown(
                             "### Web-enabled General Chat\n"
                             "This tab is a **separate module**. It may send **text search queries** to public search providers "
@@ -615,7 +684,13 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                             gr.HTML(
                                 f"<p class='psa-llm-meta'>{_model_hint('Web search enabled')}</p>"
                             )
-                            web_chatbot = gr.Chatbot(height=CHAT_HEIGHT, label="Chat", elem_id="web-chat")
+                            web_chatbot = gr.Chatbot(
+                                height="100%",
+                                max_height="100%",
+                                resizable=False,
+                                label="Chat",
+                                elem_id="web-chat",
+                            )
                             gr.ChatInterface(
                                 fn=web_chat,
                                 multimodal=True,
@@ -628,7 +703,7 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                                     max_plain_text_length=20000,
                                 ),
                                 save_history=False,
-                                fill_height=False,
+                                fill_height=True,
                             )
 
             with gr.Tab("Config"):

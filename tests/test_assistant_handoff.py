@@ -40,6 +40,7 @@ assert 'label="General Chat"' in ui
 assert "Assistant and General Chat" not in ui
 assert "PLUGIN_ASSISTANT" in ui
 assert "PLUGIN_GENERAL_CHAT" in ui
+assert "psa-chat-tab" in ui
 assert OLLAMA_MODEL not in _hero_text()
 assert "Model:" not in _hero_text()
 
