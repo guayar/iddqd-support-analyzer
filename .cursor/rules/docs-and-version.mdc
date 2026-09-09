@@ -1,0 +1,22 @@
+---
+description: Keep VERSION, changelog, user docs and the GitHub About description in lockstep
+alwaysApply: true
+---
+
+# Version and documentation
+
+When behavior, UI, modules, env vars or security boundaries change, update docs in the same change — do not leave this for later.
+
+Required together:
+
+1. `VERSION` (semver: minor for new capability, patch for a focused fix)
+2. `CHANGELOG.md` — new heading matching `VERSION`, with Added/Changed/Fixed as appropriate
+3. `README.md` — `**Current version:**` plus any user-facing sections that would otherwise be stale (modules, privacy, config, requirements, limitations)
+4. `docs/ARCHITECTURE.md` and `config.example.env` when architecture or env vars changed
+5. GitHub **About** description on the default branch repo (`gh repo edit --description`). It must include the current `VERSION` and a one-line feature summary. This box does not update itself when you tag a release.
+
+The README version string must equal `VERSION`. The latest changelog heading must equal `VERSION`. The GitHub About description must contain that same version.
+
+Do not bump the version for a docs-only follow-up of a change that already shipped that version; still fix stale wording, including the GitHub About text if it would lag.
+
+Do not mention Cursor or add `Co-authored-by: Cursor`.

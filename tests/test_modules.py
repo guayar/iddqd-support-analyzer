@@ -13,9 +13,20 @@ os.environ["IDDQD_MODULES_FILE"] = str(td / ".iddqd-modules.json")
 import modules  # noqa: E402
 
 assert modules.read_saved_plugins() == ()
-assert modules.write_saved_plugins(["llm", "unknown", "anonymize", "llm"]) == ("anonymize", "llm")
-assert json.loads(modules.MODULES_FILE.read_text(encoding="utf-8"))["plugins"] == ["anonymize", "llm"]
+assert modules.write_saved_plugins(["llm", "unknown", "anonymize", "llm"]) == (
+    "anonymize",
+    "assistant",
+    "general_chat",
+)
+assert json.loads(modules.MODULES_FILE.read_text(encoding="utf-8"))["plugins"] == [
+    "anonymize",
+    "assistant",
+    "general_chat",
+]
 assert modules.normalize_plugins(["oidc", "anonymize"]) == ("anonymize",)
+assert modules.normalize_plugins(["llm"]) == ("assistant", "general_chat")
+assert modules.normalize_plugins(["assistant"]) == ("assistant",)
+assert modules.normalize_plugins(["general_chat"]) == ("general_chat",)
 modules.write_saved_plugins([])
 assert modules.read_saved_plugins() == ()
 modules.MODULES_FILE.write_text("{not-json", encoding="utf-8")
@@ -33,11 +44,12 @@ assert "llm" not in sys.modules
 import app  # noqa: E402
 
 assert app.ANONYMIZE_ON is False
-assert app.LLM_ON is False
+assert app.ASSISTANT_ON is False
+assert app.GENERAL_CHAT_ON is False
 assert "websearch" not in sys.modules
 assert "chats" not in sys.modules
-src_flags = (app.ANONYMIZE_ON, app.LLM_ON)
-assert src_flags == (False, False)
+src_flags = (app.ANONYMIZE_ON, app.ASSISTANT_ON, app.GENERAL_CHAT_ON)
+assert src_flags == (False, False, False)
 
 from chats import assistant_chat, web_chat  # noqa: E402
 
@@ -55,6 +67,7 @@ assert "assistant_context" not in inspect.signature(web_chat).parameters
 
 # J: Core-only UI is Analyze + Config (optional modules off).
 assert app.ANONYMIZE_ON is False
-assert app.LLM_ON is False
+assert app.ASSISTANT_ON is False
+assert app.GENERAL_CHAT_ON is False
 
 print("MODULE PLUGIN TESTS OK")

@@ -28,8 +28,11 @@ Answer in the user's language unless asked otherwise.
 For technical questions, prefer official documentation, vendor documentation, release notes and primary sources over blogs.
 Do not fabricate facts or sources. If the search evidence is insufficient or conflicting, say so.
 Cite factual web-derived claims inline using source markers like [S1], [S2]. Do not invent markers that are not in the supplied material.
-This General Chat is intentionally separate from the private Analyzer/Assistant. Never imply you can see content from those tabs.
-You do not receive screenshots, OCR extracts or Analyzer reports.
+This General Chat is intentionally a separate module from the private Analyzer and Assistant. Never imply you can see content from those tabs.
+You may receive a local image on this tab only (for example a product photo). Use the pixels and any LOCAL OCR EXTRACT.
+OCR is imperfect. Prefer the image when OCR and pixels conflict.
+Image bytes stay on this machine. Only the generated text search queries are sent to public search providers. Never claim the image file was uploaded to the web.
+Never treat this image as Analyzer output or an Assistant screenshot.
 """
 
 
@@ -132,18 +135,38 @@ def _ocr_block(att: dict[str, Any], index: int, total: int) -> str:
     )
 
 
-def _user_content(text: str, attachments: list[dict[str, Any]], notes: list[str]) -> str:
+def _user_content(
+    text: str,
+    attachments: list[dict[str, Any]],
+    notes: list[str],
+    *,
+    empty_image_prompt: str,
+) -> str:
     parts: list[str] = []
     if notes:
         parts.append("Attachment notes:\n" + "\n".join(f"- {n}" for n in notes))
     if (text or "").strip():
         parts.append(text.strip())
     elif attachments:
-        parts.append("Analyze the attached screenshot(s) for technical-support diagnosis.")
+        parts.append(empty_image_prompt)
     total = len(attachments)
     for i, att in enumerate(attachments, 1):
         parts.append(_ocr_block(att, i, total))
     return "\n\n".join(parts).strip()
+
+
+def _search_seed(text: str, attachments: list[dict[str, Any]]) -> str:
+    """Text that may leave the machine as search-query material. No image bytes or file paths."""
+    bits: list[str] = []
+    if (text or "").strip():
+        bits.append(text.strip())
+    for att in attachments:
+        ocr = (att.get("ocr_text") or "").strip()
+        if ocr:
+            bits.append(ocr[:2000])
+    if not bits and attachments:
+        bits.append("identify this product and current public retail prices")
+    return "\n".join(bits).strip()
 
 
 def assistant_system_prompt(assistant_context=None) -> str:
@@ -189,11 +212,16 @@ def _history_image_paths(history) -> list[str]:
 
 
 def assistant_chat(message, history, assistant_context=None) -> str:
-    from vision import attach_images
+    from vision import SCOPE_ASSISTANT, attach_images
 
     text, paths = normalize_user_message(message)
-    attachments, notes = attach_images(paths)
-    user_text = _user_content(text, attachments, notes)
+    attachments, notes = attach_images(paths, scope=SCOPE_ASSISTANT)
+    user_text = _user_content(
+        text,
+        attachments,
+        notes,
+        empty_image_prompt="Analyze the attached screenshot(s) for technical-support diagnosis.",
+    )
     if not user_text:
         return "Enter a question or attach a local screenshot."
 
@@ -210,7 +238,7 @@ def assistant_chat(message, history, assistant_context=None) -> str:
         prior = []
         prior_notes: list[str] = []
         try:
-            prior, prior_notes = attach_images(_history_image_paths(history))
+            prior, prior_notes = attach_images(_history_image_paths(history), scope=SCOPE_ASSISTANT)
         except Exception:
             prior = []
         prior_images = _encode_attachments(prior)
@@ -231,23 +259,48 @@ def assistant_chat(message, history, assistant_context=None) -> str:
 
 
 def web_chat(message, history) -> str:
+    from vision import SCOPE_GENERAL_CHAT, attach_images
     from websearch import source_footer, web_context, web_search
-    if not (message or "").strip():
-        return "Enter a question to search."
+
+    text, paths = normalize_user_message(message)
+    attachments, notes = attach_images(paths, scope=SCOPE_GENERAL_CHAT)
+    if not attachments:
+        try:
+            prior, prior_notes = attach_images(_history_image_paths(history), scope=SCOPE_GENERAL_CHAT)
+        except Exception:
+            prior, prior_notes = [], []
+        if prior:
+            attachments = prior
+            notes = list(notes) + ["Follow-up refers to the previous image(s)."] + list(prior_notes)
+
+    user_text = _user_content(
+        text,
+        attachments,
+        notes,
+        empty_image_prompt="Identify the product or subject in this image and look up current public prices and sources.",
+    )
+    seed = _search_seed(text, attachments)
+    if not user_text:
+        return "Enter a question or attach a local image."
+
     try:
-        results, queries, backend = web_search(message, history)
+        results, queries, backend = web_search(seed, history)
     except Exception as e:
-        results, queries, backend = [], [message], "auto"
+        results, queries, backend = [], [seed] if seed else [text], "auto"
         search_error = str(e)
     else:
         search_error = ""
 
-    msgs = [{"role": "system", "content": WEB_SYSTEM.format(today=date.today().isoformat())}]
+    msgs: list[dict[str, Any]] = [{"role": "system", "content": WEB_SYSTEM.format(today=date.today().isoformat())}]
     msgs.extend(_history_messages(history, 10, 12000))
+    user_msg: dict[str, Any] = {"role": "user", "content": user_text}
+    images = _encode_attachments(attachments)
+    if images:
+        user_msg["images"] = images
 
     if results:
         msgs.append({"role": "system", "content": "WEB SEARCH RESULTS:\n\n" + web_context(results)[:100_000]})
-        msgs.append({"role": "user", "content": message})
+        msgs.append(user_msg)
         try:
             answer = complete(msgs)
             return answer + source_footer(results, queries, backend)
@@ -258,7 +311,7 @@ def web_chat(message, history) -> str:
         "role": "system",
         "content": "The web search returned no usable results. Make clear that live search was unavailable/empty and answer only from local model knowledge if useful.",
     })
-    msgs.append({"role": "user", "content": message})
+    msgs.append(user_msg)
     try:
         answer = complete(msgs)
     except Exception as e:

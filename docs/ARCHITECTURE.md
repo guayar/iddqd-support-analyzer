@@ -13,14 +13,15 @@ Gradio UI (app.py)
   │
   ├─ Anonymize (optional module) ──> actions.anonymize (lazy) ──> analyzers/anonymizer
   │
-  ├─ Assistant (optional LLM module) ──> chats.assistant_chat ──> vision.py (local OCR) ──> llm.py
+  ├─ Assistant (optional module) ──> chats.assistant_chat ──> vision.py (scope=assistant) ──> llm.py
   │         └── latest Analyze result + optional PNG/JPEG/WEBP; no websearch
   │         └── pixels to Ollama when /api/show lists vision; OCR is auxiliary
   │         └── muted OLLAMA_MODEL env tag next to analysis-context status (not in the app header)
   │
-  ├─ General Chat (optional LLM module) ──> chats.web_chat ──> websearch.py ──> llm.py
+  ├─ General Chat (optional module) ──> chats.web_chat ──> vision.py (scope=general_chat) ──> websearch.py ──> llm.py
   │         └── never receives Analyze or Assistant context, images or OCR
-  │         └── muted OLLAMA_MODEL env tag + web-search hint; same local model, no runtime switcher
+  │         └── optional local photos; only text search queries leave the machine
+  │         └── muted OLLAMA_MODEL env tag + web-search hint; no runtime switcher
   │
   └─ Config (always) ──> modules.py ──> .iddqd-modules.json + process restart
 
@@ -42,11 +43,11 @@ Input
 
 - Analyzer does not invoke web search or require Ollama.
 - Assistant (optional) does not invoke web search. It receives the latest Analyze result and optional local screenshots plus OCR. **Clear analysis context** can detach it.
-- General Chat (optional) does not inherit Analyzer or Assistant context, screenshots or OCR (text-only).
-- Optional modules are off by default. Enabling them in Config requires a process restart. Tab order: Analyze → Anonymize → Assistant → General Chat → Config.
+- General Chat (optional) does not inherit Analyzer or Assistant context, screenshots or OCR. It may attach its own local images; only text search queries are sent to public providers.
+- Optional modules are off by default and enabled independently. Enabling them in Config requires a process restart. Tab order: Analyze → Anonymize → Assistant → General Chat → Config. A legacy `.iddqd-modules.json` value `llm` still turns on both chat modules.
 - `OLLAMA_MODEL` is the process env tag (default `qwen3.6:27b` if unset). Chats display that string; they do not parse model-file metadata or `ollama list`.
 - Model endpoints must be loopback or RFC1918 unless `ALLOW_REMOTE_LLM=true`.
-- Screenshot uploads are local files only (type/size/pixel limits, no URLs). Original pixels are sent to Ollama; OCR runs on a derived copy via local Tesseract.
+- Screenshot/photo uploads are local files only (type/size/pixel limits, no URLs). Original pixels are sent to Ollama; OCR runs on a derived copy via local Tesseract. Assistant and General Chat use separate OCR caches and never copy attachments between tabs.
 - `.env`, local logs, generated mappings and credential material are excluded from version control.
 - Local certificate/key formats (`*.pem`, `*.crt`, `*.cer`, `*.der`, `*.key`, `*.p12`, `*.pfx`, keystores) are excluded from version control.
 - The standalone signing-certificate input accepts public X.509 certificates only; private keys are rejected.

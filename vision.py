@@ -20,22 +20,31 @@ ALLOWED_FORMATS = {
     "WEBP": "image/webp",
 }
 
-_OCR_CACHE: dict[tuple[str, int, int], dict[str, Any]] = {}
+SCOPE_ASSISTANT = "assistant"
+SCOPE_GENERAL_CHAT = "general_chat"
+_OCR_CACHES: dict[str, dict[tuple[str, int, int], dict[str, Any]]] = {
+    SCOPE_ASSISTANT: {},
+    SCOPE_GENERAL_CHAT: {},
+}
 
 
 class VisionError(Exception):
-    """User-facing image problem for the Assistant attachment path."""
+    """User-facing image problem for a chat attachment path."""
 
 
-def clear_vision_cache() -> None:
-    _OCR_CACHE.clear()
+def clear_vision_cache(scope: str | None = None) -> None:
+    if scope is None:
+        for cache in _OCR_CACHES.values():
+            cache.clear()
+        return
+    _OCR_CACHES.setdefault(scope, {}).clear()
 
 
 def _reject_remote(raw: str) -> None:
     text = raw.strip()
     lowered = text.lower()
     if "://" in text or lowered.startswith(("http:", "https:", "file:", "//")):
-        raise VisionError("Remote image URLs are not allowed. Attach a local screenshot.")
+        raise VisionError("Remote image URLs are not allowed. Attach a local image.")
 
 
 def _open_validated(path: Path) -> Image.Image:
@@ -108,11 +117,12 @@ def _ocr_prepared(image: Image.Image) -> Image.Image:
     return work
 
 
-def ocr_image(path: str) -> dict[str, Any]:
+def ocr_image(path: str, scope: str = SCOPE_ASSISTANT) -> dict[str, Any]:
     """Local Tesseract OCR. Never raises for engine absence; returns an error string instead."""
+    cache = _OCR_CACHES.setdefault(scope, {})
     resolved = inspect_image(path)
     key = (resolved["path"], resolved["size"], resolved["width"] * resolved["height"])
-    cached = _OCR_CACHE.get(key)
+    cached = cache.get(key)
     if cached is not None:
         return cached
     result = {"text": "", "error": None, **resolved}
@@ -120,7 +130,7 @@ def ocr_image(path: str) -> dict[str, Any]:
         import pytesseract
     except Exception as exc:
         result["error"] = f"OCR library unavailable: {exc}"
-        _OCR_CACHE[key] = result
+        cache[key] = result
         return result
     try:
         with _open_validated(Path(resolved["path"])) as image:
@@ -143,18 +153,21 @@ def ocr_image(path: str) -> dict[str, Any]:
             result["error"] = "Tesseract is not installed locally."
         else:
             result["error"] = f"OCR failed: {exc}"
-    _OCR_CACHE[key] = result
+    cache[key] = result
     return result
 
 
-def attach_images(raw_paths: list[str]) -> tuple[list[dict[str, Any]], list[str]]:
+def attach_images(
+    raw_paths: list[str],
+    scope: str = SCOPE_ASSISTANT,
+) -> tuple[list[dict[str, Any]], list[str]]:
     """Validate, OCR and cap the number of images. Partial success is allowed."""
     attachments: list[dict[str, Any]] = []
     notes: list[str] = []
     seen: set[str] = set()
     for raw in raw_paths:
         if len(attachments) >= ASSISTANT_IMAGES_PER_MESSAGE:
-            notes.append(f"Only the first {ASSISTANT_IMAGES_PER_MESSAGE} screenshots were sent to the model.")
+            notes.append(f"Only the first {ASSISTANT_IMAGES_PER_MESSAGE} images were sent to the model.")
             break
         try:
             meta = inspect_image(raw)
@@ -164,6 +177,6 @@ def attach_images(raw_paths: list[str]) -> tuple[list[dict[str, Any]], list[str]
         if meta["path"] in seen:
             continue
         seen.add(meta["path"])
-        ocr = ocr_image(meta["path"])
+        ocr = ocr_image(meta["path"], scope=scope)
         attachments.append({**meta, "ocr_text": ocr.get("text") or "", "ocr_error": ocr.get("error")})
     return attachments, notes

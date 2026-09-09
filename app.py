@@ -10,7 +10,8 @@ from actions import write_decoded_artifact_download
 from config import APP_PORT, APP_TITLE, APP_VERSION, MAX_FILE_MB, OLLAMA_MODEL
 from modules import (
     PLUGIN_ANONYMIZE,
-    PLUGIN_LLM,
+    PLUGIN_ASSISTANT,
+    PLUGIN_GENERAL_CHAT,
     RUNNING_PLUGINS,
     plugin_enabled,
     read_saved_plugins,
@@ -24,7 +25,8 @@ CHAT_HEIGHT = 480
 CONTROL_HEIGHT = 128
 
 ANONYMIZE_ON = plugin_enabled(PLUGIN_ANONYMIZE)
-LLM_ON = plugin_enabled(PLUGIN_LLM)
+ASSISTANT_ON = plugin_enabled(PLUGIN_ASSISTANT)
+GENERAL_CHAT_ON = plugin_enabled(PLUGIN_GENERAL_CHAT)
 
 RESTART_HTML = (
     "<p class='psa-restart-warn'>Restart required for module changes to take effect.</p>"
@@ -359,8 +361,9 @@ def _hero_text() -> str:
     extras = []
     if ANONYMIZE_ON:
         extras.append("optional log anonymizer")
-    if LLM_ON:
+    if ASSISTANT_ON:
         extras.append("optional local assistant")
+    if GENERAL_CHAT_ON:
         extras.append("separate web-enabled general chat")
     extra = (" · " + " · ".join(extras)) if extras else ""
     return (
@@ -417,9 +420,9 @@ def analyze_with_assistant(files, pasted, mode, signing_cert_file=None):
 
 def clear_assistant_context():
     from chats import empty_assistant_history
-    from vision import clear_vision_cache
+    from vision import SCOPE_ASSISTANT, clear_vision_cache
 
-    clear_vision_cache()
+    clear_vision_cache(SCOPE_ASSISTANT)
     return None, _context_badge(None), empty_assistant_history()
 
 
@@ -440,9 +443,11 @@ def _anon_text_chosen(text):
     return None if should_clear_file_for_paste(text) else gr.update()
 
 
-def save_modules(anonymize_on: bool, llm_on: bool):
+def save_modules(anonymize_on: bool, assistant_on: bool, general_chat_on: bool):
     saved = write_saved_plugins(
-        ([PLUGIN_ANONYMIZE] if anonymize_on else []) + ([PLUGIN_LLM] if llm_on else [])
+        ([PLUGIN_ANONYMIZE] if anonymize_on else [])
+        + ([PLUGIN_ASSISTANT] if assistant_on else [])
+        + ([PLUGIN_GENERAL_CHAT] if general_chat_on else [])
     )
     return _restart_notice(saved)
 
@@ -552,8 +557,8 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                             outputs=[anon_summary, anon_preview, anon_mapping, anon_download],
                         )
 
-            if LLM_ON:
-                from chats import assistant_chat, web_chat
+            if ASSISTANT_ON:
+                from chats import assistant_chat
 
                 with gr.Tab("Assistant"):
                     with gr.Column(elem_classes=["psa-shell"]):
@@ -592,14 +597,18 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                             outputs=[assistant_context, context_badge, assistant_chatbot],
                         )
 
+            if GENERAL_CHAT_ON:
+                from chats import web_chat
+
                 with gr.Tab("General Chat"):
                     with gr.Column(elem_classes=["psa-shell"]):
                         gr.Markdown(
                             "### Web-enabled General Chat\n"
-                            "This tab is deliberately separate. It may send **search queries** to public search providers "
+                            "This tab is a **separate module**. It may send **text search queries** to public search providers "
                             "(Google, Brave, DuckDuckGo, Wikipedia and others; see `WEB_SEARCH_BACKEND`). "
-                            "It receives **no Analyzer or Assistant context**. Do not paste customer logs, credentials or other "
-                            "sensitive data here; use **Assistant** for that.",
+                            "Attach a local PNG/JPEG/WEBP (for example a product photo): pixels stay on this machine. "
+                            "It receives **no Analyzer or Assistant context, screenshots or OCR**. "
+                            "Do not paste customer logs, credentials or other sensitive data here; use **Assistant** for that.",
                             elem_classes=["psa-note"],
                         )
                         with gr.Column(elem_classes=["psa-chat"]):
@@ -607,7 +616,20 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                                 f"<p class='psa-llm-meta'>{_model_hint('Web search enabled')}</p>"
                             )
                             web_chatbot = gr.Chatbot(height=CHAT_HEIGHT, label="Chat", elem_id="web-chat")
-                            gr.ChatInterface(fn=web_chat, chatbot=web_chatbot, save_history=False, fill_height=False)
+                            gr.ChatInterface(
+                                fn=web_chat,
+                                multimodal=True,
+                                chatbot=web_chatbot,
+                                textbox=gr.MultimodalTextbox(
+                                    file_count="multiple",
+                                    file_types=[".png", ".jpg", ".jpeg", ".webp"],
+                                    sources=["upload"],
+                                    placeholder="Ask a public question or attach a local product photo…",
+                                    max_plain_text_length=20000,
+                                ),
+                                save_history=False,
+                                fill_height=False,
+                            )
 
             with gr.Tab("Config"):
                 with gr.Column(elem_classes=["psa-shell"]):
@@ -623,18 +645,36 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                         info="Local log and SAML pseudonymization. No language model.",
                         value=PLUGIN_ANONYMIZE in saved,
                     )
-                    llm_box = gr.Checkbox(
-                        label="Assistant and General Chat",
-                        info="Requires local Ollama. Assistant sees the latest Analyze result and local screenshots. General Chat can use the web and never receives that material.",
-                        value=PLUGIN_LLM in saved,
+                    assistant_box = gr.Checkbox(
+                        label="Assistant",
+                        info="Requires local Ollama. Sees the latest Analyze result and local screenshots. No web search.",
+                        value=PLUGIN_ASSISTANT in saved,
+                    )
+                    general_chat_box = gr.Checkbox(
+                        label="General Chat",
+                        info="Requires local Ollama. Public web search. Optional local images stay on this tab; only text queries leave the machine. Never receives Analyzer or Assistant material.",
+                        value=PLUGIN_GENERAL_CHAT in saved,
                     )
                     restart_md = gr.Markdown(_restart_notice(saved))
                     restart_btn = gr.Button("Restart application", variant="primary", elem_classes=["psa-primary"])
-                    anon_box.change(save_modules, inputs=[anon_box, llm_box], outputs=[restart_md])
-                    llm_box.change(save_modules, inputs=[anon_box, llm_box], outputs=[restart_md])
+                    anon_box.change(
+                        save_modules,
+                        inputs=[anon_box, assistant_box, general_chat_box],
+                        outputs=[restart_md],
+                    )
+                    assistant_box.change(
+                        save_modules,
+                        inputs=[anon_box, assistant_box, general_chat_box],
+                        outputs=[restart_md],
+                    )
+                    general_chat_box.change(
+                        save_modules,
+                        inputs=[anon_box, assistant_box, general_chat_box],
+                        outputs=[restart_md],
+                    )
                     restart_btn.click(restart_clicked)
 
-            if LLM_ON:
+            if ASSISTANT_ON:
                 run.click(
                     analyze_with_assistant,
                     inputs=[files, pasted, mode, signing_cert],

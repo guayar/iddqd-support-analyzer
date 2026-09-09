@@ -6,8 +6,11 @@ import sys
 from pathlib import Path
 
 PLUGIN_ANONYMIZE = "anonymize"
+PLUGIN_ASSISTANT = "assistant"
+PLUGIN_GENERAL_CHAT = "general_chat"
+# Pre-0.13 combined flag. Still accepted on read and expands to both chat modules.
 PLUGIN_LLM = "llm"
-KNOWN_PLUGINS = (PLUGIN_ANONYMIZE, PLUGIN_LLM)
+KNOWN_PLUGINS = (PLUGIN_ANONYMIZE, PLUGIN_ASSISTANT, PLUGIN_GENERAL_CHAT)
 
 _DEFAULT_MODULES_FILE = Path(__file__).resolve().parent / ".iddqd-modules.json"
 MODULES_FILE = Path(os.environ["IDDQD_MODULES_FILE"]) if os.environ.get("IDDQD_MODULES_FILE") else _DEFAULT_MODULES_FILE
@@ -15,6 +18,9 @@ MODULES_FILE = Path(os.environ["IDDQD_MODULES_FILE"]) if os.environ.get("IDDQD_M
 
 def normalize_plugins(values) -> tuple[str, ...]:
     wanted = {str(item).strip() for item in values or []}
+    if PLUGIN_LLM in wanted:
+        wanted.add(PLUGIN_ASSISTANT)
+        wanted.add(PLUGIN_GENERAL_CHAT)
     return tuple(name for name in KNOWN_PLUGINS if name in wanted)
 
 

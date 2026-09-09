@@ -35,6 +35,11 @@ assert "qwen3.6:27b" not in ui
 assert "qwen3.6:35b" not in ui
 assert "gemma4:31b" not in ui
 assert "Web search enabled" in ui
+assert 'label="Assistant"' in ui
+assert 'label="General Chat"' in ui
+assert "Assistant and General Chat" not in ui
+assert "PLUGIN_ASSISTANT" in ui
+assert "PLUGIN_GENERAL_CHAT" in ui
 assert OLLAMA_MODEL not in _hero_text()
 assert "Model:" not in _hero_text()
 

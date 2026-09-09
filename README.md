@@ -4,11 +4,11 @@
 
 Early-stage AI-assisted project. Not a production product — I am building it to run locally at work on real SAML traces and logs, not only as a learning playground.
 
-Local troubleshooting toolkit for SAML/SSO and log analysis. Optional anonymizer and local LLM chats.
+Local troubleshooting toolkit for SAML/SSO and log analysis (**v0.13.0**). Optional anonymizer, local Assistant (screenshots/OCR, no web search), and a separate General Chat (web search; local photos stay on that tab).
 
-**Current version:** `0.12.1`
+**Current version:** `0.13.0`
 
-The core product is a local, deterministic SAML and log analyzer. It does not require Ollama. Optional modules (Anonymize, Assistant + General Chat) are enabled from the **Config** tab and load after a restart.
+The core product is a local, deterministic SAML and log analyzer. It does not require Ollama. Optional modules (Anonymize, Assistant, General Chat) are enabled independently from the **Config** tab and load after a restart.
 
 ## Why I built this
 
@@ -150,25 +150,27 @@ Anonymizing fields inside signed SAML changes the signed bytes and therefore inv
 
 The anonymizer is not a certified DLP product; generated output should still be reviewed before external sharing, especially when custom SAML extension elements contain free-form business data. After each run a **residual leak scan** lists leftover emails, IPs, tokens, domains and user home paths that the first pass did not replace. Java/Maven logs also replace customer packages, project roots, process user names, Spring app names and Maven artifact names; stack frames from Spring/Apache and `*.java` / `*.jar` names stay intact.
 
-### Local Assistant (optional LLM module)
+### Local Assistant (optional module)
 
-Enable **Assistant and General Chat** on the Config tab, then restart. Requires local Ollama.
+Enable **Assistant** on the Config tab, then restart. Requires local Ollama. Independent of General Chat.
 
 The Assistant has no web-search path and no Mode switch. Ask it for technical help, a support-mail draft, or code in the same chat. Attach **local PNG/JPEG/WEBP screenshots** (terminal, stack traces, admin consoles; up to three per message). Original pixels go to Ollama when the model reports `vision`; a **local Tesseract OCR** extract is extra evidence and is labeled as imperfect. Follow-up turns without a new file re-send the last screenshot plus OCR. The latest Analyze result is available here automatically. A muted **Model:** line next to the analysis-context status shows the configured `OLLAMA_MODEL` tag (startup only; no in-app switcher). **Clear analysis context** removes that report, screenshot OCR cache and resets the Assistant chat. General Chat never receives the report, images or OCR.
 
-Ubuntu OCR: `sudo apt install tesseract-ocr tesseract-ocr-eng tesseract-ocr-pol`. Without Tesseract, screenshots still go to a vision-capable Ollama model. Without vision, OCR text can still be sent.
+Ubuntu OCR (Assistant and General Chat, optional): `sudo apt install tesseract-ocr tesseract-ocr-eng tesseract-ocr-pol`. Without Tesseract, images still go to a vision-capable Ollama model. Without vision, OCR text can still be sent.
 
-### General Chat (same optional LLM module)
+### General Chat (optional module)
 
-A deliberately separate web-enabled chat. It receives **no** Analyzer or Assistant context, including the Analyze report, screenshots and OCR. Search queries are generated locally, sent to public search providers through `ddgs`, and the returned pages are summarized by the local model. A muted line shows `OLLAMA_MODEL` and that web search is enabled. Text only — no image upload.
+Enable **General Chat** on the Config tab, then restart. Requires local Ollama. Independent of Assistant.
+
+A deliberately separate web-enabled chat. It receives **no** Analyzer or Assistant context, including the Analyze report, screenshots and OCR. Search queries are generated locally, sent to public search providers through `ddgs`, and the returned pages are summarized by the local model. You may attach a **local product photo** (PNG/JPEG/WEBP): pixels stay on this machine; only text queries (from your question plus local OCR) leave for search. A muted line shows `OLLAMA_MODEL` and that web search is enabled.
 
 ## Known limitations / work in progress
 
 - Local Gradio app on `127.0.0.1` for my own workstation (including at work), not a packaged or multi-user product. Reports are heuristics plus spec-backed SAML checks, not a substitute for an IdP/SP vendor’s own validator.
 - `EncryptedAssertion` is detected, not decrypted. The anonymizer is useful, not DLP; shareable output still needs a human pass.
 - Log timestamps are treated as record boundaries when the shape is recognizable; numeric dates such as `09/01/26` do not get a calendar `time_range` unless the same log makes day/month order unambiguous.
-- Optional chats need local Ollama. The displayed model name is the `OLLAMA_MODEL` env tag, not a label from the weight file and not `ollama list`. Coverage grows from real traces and failing cases, not from claiming a complete SAML or logging catalogue.
-- Local OCR is imperfect. Prefer the screenshot when OCR and pixels disagree. Cloud OCR is not used.
+- Optional chats need local Ollama. Assistant and General Chat are independent Config modules. The displayed model name is the `OLLAMA_MODEL` env tag, not a label from the weight file and not `ollama list`. Coverage grows from real traces and failing cases, not from claiming a complete SAML or logging catalogue.
+- Local OCR is imperfect. Prefer the image when OCR and pixels disagree. Cloud OCR is not used. OCR text from General Chat may be used to build public search queries.
 
 ## Privacy model
 
@@ -177,7 +179,7 @@ A deliberately separate web-enabled chat. It receives **no** Analyzer or Assista
 | Analyze | No | No | Logs, SAML traces, metadata, public signing certificates |
 | Anonymize (optional) | No | No | Sensitive logs and SAML traces |
 | Assistant (optional) | Yes | No | Technical/support material, screenshots, local OCR, plus the latest Analyze result |
-| General Chat (optional) | Yes | Yes | Non-sensitive public questions only |
+| General Chat (optional) | Yes | Yes | Non-sensitive public questions; optional local photos (pixels stay local; text queries may go to search) |
 | Config | No | No | Which optional modules to load after restart |
 
 The application binds to `127.0.0.1` by default and blocks non-local model endpoints unless explicitly enabled. Loopback and RFC1918 Ollama URLs count as local; public cloud endpoints need `ALLOW_REMOTE_LLM=true`.
@@ -186,14 +188,49 @@ Default UI is **Analyze** and **Config** only. Optional tabs appear only after t
 
 ## Requirements
 
-- Ubuntu / Linux
-- Python 3.12+
-- Optional LLM: [Ollama](https://ollama.com) plus any pulled model tag
-- Optional Assistant screenshots: `tesseract-ocr`, `tesseract-ocr-eng`, `tesseract-ocr-pol` (OCR only; vision still works without them)
+Install order: OS packages → `./run.sh` (creates `.venv` and installs `requirements.txt`) → optional Ollama/Tesseract only for the chat modules you enable in Config.
 
-Ollama is required only if the Assistant / General Chat module is enabled. Set `OLLAMA_MODEL` to the exact tag from `ollama list` (for example `qwen3.6:27b`, `gemma3`, `abc`). If the variable is unset, the process default is `qwen3.6:27b` — pulling a different model does not change that until you set the env and restart.
+### Always — Analyze and Config
 
-The Analyzer and validators do not require a GPU or Ollama. Development and local inference were tested with `qwen3.6:27b` on an **AMD Radeon AI PRO R9700** dedicated to the model (desktop graphics on the iGPU).
+| Need | Install |
+|---|---|
+| Ubuntu / Linux, Python 3.12+ | distro packages (`python3`, `python3-venv`) |
+| Python libraries | `./run.sh` (includes SAML/XML, Gradio, and also chat extras such as `ddgs`, `pillow`, `pytesseract` even when those tabs are off) |
+
+No GPU, no Ollama, no Tesseract. Binding defaults to `http://127.0.0.1:7860`.
+
+### Anonymize (optional Config module)
+
+Nothing extra beyond Analyze. Enable the checkbox, restart, refresh. No language model.
+
+### Assistant (optional Config module)
+
+| Need | Install |
+|---|---|
+| Ollama running locally | [ollama.com](https://ollama.com) |
+| A pulled model | `ollama pull <tag>` then set `OLLAMA_MODEL` to **that exact tag** and restart. If unset, the process uses `qwen3.6:27b` even if you pulled something else |
+| Screenshots (PNG/JPEG/WEBP) | already in the Python venv (`pillow`) |
+| OCR text on those screenshots | `sudo apt install tesseract-ocr tesseract-ocr-eng tesseract-ocr-pol` |
+
+Without Tesseract, screenshots still go to a vision-capable model. Without `vision` on the model, OCR text can still be sent. No web search.
+
+Tested inference: `qwen3.6:27b` on an **AMD Radeon AI PRO R9700** (desktop graphics on the iGPU).
+
+### General Chat (optional Config module)
+
+Same Ollama + `OLLAMA_MODEL` as Assistant if you enable both (one process, one tag). Independent checkbox — you can enable this tab without Assistant.
+
+| Need | Install |
+|---|---|
+| Ollama + pulled tag | same as Assistant |
+| Outbound HTTPS | public search via `ddgs` (queries only) |
+| Local product photos | venv `pillow`; optional Tesseract as above |
+
+Image bytes stay local. Search providers receive text queries (your question plus OCR), not the file.
+
+### Out of scope for every module
+
+Do not install cloud OCR, a remote LLM (unless you set `ALLOW_REMOTE_LLM=true`), or extra search CLIs. Switching models is `.env` / `OLLAMA_MODEL` plus restart, not an in-app menu.
 
 ## Quick start
 
@@ -228,7 +265,7 @@ The certificate is read for the current analysis only. It is not copied into the
 
 ## Configuration
 
-Use the **Config** tab to enable optional modules. Changes are saved immediately to a local `.iddqd-modules.json` file (gitignored). A red notice appears until you click **Restart application** and refresh the browser. Default UI is **Analyze** and **Config**.
+Use the **Config** tab to enable optional modules independently (**Anonymize**, **Assistant**, **General Chat**). Changes are saved immediately to a local `.iddqd-modules.json` file (gitignored). A red notice appears until you click **Restart application** and refresh the browser. Default UI is **Analyze** and **Config**. A previously saved combined `llm` plugin still enables both chat tabs.
 
 `config.example.env` contains the supported environment variables. Common settings:
 
@@ -240,9 +277,9 @@ APP_PORT=7860
 MAX_FILE_MB=150
 ```
 
-`OLLAMA_*` settings apply only when the LLM module is enabled. `OLLAMA_MODEL` is the exact Ollama tag sent to `/api/chat` and shown in Assistant / General Chat. It is not Qwen-only and is not read from the model file.
+`OLLAMA_*` settings apply only when Assistant or General Chat is enabled. `OLLAMA_MODEL` is the exact Ollama tag sent to `/api/chat` and shown on those tabs. It is not Qwen-only and is not read from the model file.
 
-Web-enabled General Chat (LLM module):
+Web-enabled General Chat:
 
 ```text
 WEB_SEARCH_RESULTS=6
@@ -252,7 +289,7 @@ WEB_SEARCH_REGION=wt-wt
 WEB_SEARCH_BACKEND=auto
 ```
 
-Assistant screenshots (LLM module; never sent to General Chat):
+Assistant and General Chat screenshots/photos (never shared across those tabs):
 
 ```text
 ASSISTANT_IMAGE_MAX_MB=8
@@ -299,9 +336,9 @@ The tests use synthetic SAML and log data only. Signature and anonymization test
 ├── actions.py          # Analyze use-case; Anonymize imported lazily
 ├── reporting.py        # markdown reports from analyzer JSON
 ├── modules.py          # optional-module registry and restart
-├── llm.py              # local Ollama client and endpoint policy (LLM module)
-├── vision.py           # Assistant screenshot validation and local OCR
-├── chats.py            # Assistant / General Chat (LLM module)
+├── llm.py              # local Ollama client and endpoint policy
+├── vision.py           # screenshot/photo validation and local OCR (separate caches per chat)
+├── chats.py            # Assistant / General Chat
 ├── websearch.py        # General Chat search/fetch only
 ├── uploads.py          # file size limits and text reads
 ├── config.py           # environment settings
@@ -317,4 +354,4 @@ The tests use synthetic SAML and log data only. Signature and anonymization test
 
 ## Versioning
 
-The project uses semantic versioning while it is pre-1.0. New functionality normally increments the minor version; compatibility fixes and focused improvements to an existing feature increment the patch version (`0.10.5` → `0.10.6`).
+The project uses semantic versioning while it is pre-1.0. New functionality normally increments the minor version; compatibility fixes and focused improvements to an existing feature increment the patch version (`0.12.1` → `0.13.0` for new modules). Keep `VERSION`, README **Current version**, and the latest `CHANGELOG.md` heading in lockstep.

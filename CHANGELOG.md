@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented here.
 
+## [0.13.0] - 2026-09-09
+
+### Added
+
+- Assistant and General Chat are separate Config modules (legacy saved `llm` still enables both)
+- General Chat accepts local PNG/JPEG/WEBP on its own path: pixels and OCR stay on this tab; only text search queries go to the public web
+
+### Changed
+
+- version bumped to `0.13.0`
+
+### Docs
+
+- README, architecture and `config.example.env` match 0.13.0: independent Assistant / General Chat modules, General Chat local photos with text-only web queries, separate OCR caches
+- README Requirements are grouped per module (always / Anonymize / Assistant / General Chat) with what to apt-install vs Ollama vs `./run.sh`
+- README opening blurb on the GitHub landing page includes **v0.13.0** and the split Assistant / General Chat modules
+
 ## [0.12.1] - 2026-09-09
 
 ### Added

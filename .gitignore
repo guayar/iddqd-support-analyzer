@@ -42,7 +42,9 @@ anonymized_*
 # IDE / OS
 .idea/
 .vscode/
-.cursor/
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
 .DS_Store
 Thumbs.db
 
