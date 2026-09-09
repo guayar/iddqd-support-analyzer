@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## [0.13.6] - 2026-09-09
+
+### Changed
+
+- Validation errors are only the timed top-right toast. The per-component Error pills (report, decoded files, anonymizer) are hidden.
+- version bumped to `0.13.6`
+
 ## [0.13.5] - 2026-09-09
 
 ### Changed

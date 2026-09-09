@@ -158,7 +158,7 @@ A deliberately separate web-enabled chat. It receives **no** Analyzer or Assista
 
 ## Known limitations
 
-- Local Gradio app on `127.0.0.1` for a private workstation, not a packaged or multi-user product. Reports are heuristics plus spec-backed SAML checks, not a substitute for an IdP/SP vendor’s own validator. Unexpected runtime errors are in the process terminal; validation messages (empty input, oversize file) still appear in the UI.
+- Local Gradio app on `127.0.0.1` for a private workstation, not a packaged or multi-user product. Reports are heuristics plus spec-backed SAML checks, not a substitute for an IdP/SP vendor’s own validator. Unexpected runtime errors are in the process terminal; validation messages (empty input, oversize file) are a timed toast.
 - `EncryptedAssertion` is detected, not decrypted. The anonymizer is useful, not DLP; shareable output still needs a human pass.
 - Log timestamps are treated as record boundaries when the shape is recognizable; numeric dates such as `09/01/26` do not get a calendar `time_range` unless the same log makes day/month order unambiguous.
 - Optional chats need local Ollama. Assistant and General Chat are independent Config modules. The displayed model name is the `OLLAMA_MODEL` env tag, not a label from the weight file and not `ollama list`. Coverage grows from real traces and failing cases, not from claiming a complete SAML or logging catalogue.

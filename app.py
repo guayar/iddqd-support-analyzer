@@ -38,6 +38,10 @@ CSS = """
     margin: 0 auto !important;
     padding: 18px 28px 42px !important;
 }
+.wrap:has(.error),
+.wrap:has(.validation-error) {
+    display: none !important;
+}
 .psa-page,
 #hero,
 .psa-shell {
@@ -411,11 +415,15 @@ def _restart_notice(saved: tuple[str, ...]) -> str:
     return RESTART_HTML
 
 
+def _ui_error(message: str):
+    raise gr.Error(message, duration=8, print_exception=False)
+
+
 def analyze(files, pasted, mode, signing_cert_file=None):
     try:
         markdown, raw_json, result = run_analyze(files, pasted, mode, signing_cert_file)
     except InputError as e:
-        raise gr.Error(str(e)) from e
+        _ui_error(str(e))
     return markdown, raw_json, result, write_decoded_artifact_download(result)
 
 
@@ -423,7 +431,7 @@ def send_to_assistant(latest_analysis):
     from chats import empty_assistant_history
 
     if not latest_analysis:
-        raise gr.Error("Analyze a log or SAML tracer first.")
+        _ui_error("Analyze a log or SAML tracer first.")
     return latest_analysis, _context_badge(latest_analysis), empty_assistant_history()
 
 
@@ -447,7 +455,7 @@ def anonymize(file, pasted):
     try:
         return run_anonymize(file, pasted)
     except InputError as e:
-        raise gr.Error(str(e)) from e
+        _ui_error(str(e))
 
 
 def _anon_file_chosen(file):
