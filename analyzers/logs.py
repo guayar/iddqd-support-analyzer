@@ -51,6 +51,50 @@ INLINE_EXC_RE = re.compile(
     r"(?:\.\s*Message:\s*(?P<msg>.*))?",
     re.I,
 )
+LEVEL_COLON_RE = re.compile(rf"(?i)\b(?P<level>{LEVEL_NAMES}):")
+SSHD_PID_RE = re.compile(r"\bsshd\[(?P<pid>\d+)\]")
+IPV4_RE = re.compile(r"\b(?P<ip>(?:\d{1,3}\.){3}\d{1,3})\b")
+REPEAT_RE = re.compile(r"message repeated (?P<n>\d+) times:\s*\[(?P<body>.*)\]\s*$", re.I)
+SSH_USER_RES = [
+    re.compile(r"invalid user\s+(?P<user>\S+)", re.I),
+    re.compile(r"Failed (?:password|none) for (?:invalid user )?(?P<user>\S+) from", re.I),
+    re.compile(r"failures? for (?P<user>\S+)", re.I),
+    re.compile(r"\buser=(?P<user>\S+)", re.I),
+]
+SSH_RULES = [
+    (re.compile(r"POSSIBLE BREAK-IN ATTEMPT", re.I), "CRITICAL", "security", "break_in"),
+    (re.compile(r"\bfatal:", re.I), "CRITICAL", "ssh", "fatal"),
+    (re.compile(r"Too many authentication failures", re.I), "ERROR", "security", "too_many_failures"),
+    (re.compile(r"No more user authentication methods available", re.I), "ERROR", "security-auth", "no_more_methods"),
+    (re.compile(r"PAM\b.*\bauthentication failures?\b", re.I), "ERROR", "security-auth", "pam_failures"),
+    (re.compile(r"\berror:", re.I), "ERROR", "ssh", "error"),
+    (re.compile(r"Failed password", re.I), "WARN", "security-auth", "failed_password"),
+    (re.compile(r"Failed none", re.I), "WARN", "security-auth", "failed_none"),
+    (re.compile(r"authentication failure", re.I), "WARN", "security-auth", "auth_failure"),
+    (re.compile(r"Invalid user", re.I), "WARN", "security-auth", "invalid_user"),
+]
+_AUTH_KINDS = {
+    "break_in",
+    "fatal",
+    "too_many_failures",
+    "no_more_methods",
+    "pam_failures",
+    "error",
+    "failed_password",
+    "failed_none",
+    "auth_failure",
+    "invalid_user",
+}
+_LEVEL_RANK = {
+    "CRITICAL": 0,
+    "FATAL": 1,
+    "SEVERE": 2,
+    "ERROR": 3,
+    "WARN": 4,
+    "WARNING": 4,
+}
+BRUTE_FORCE_MIN_SESSIONS = 5
+BRUTE_FORCE_GAP_SECONDS = 15 * 60
 
 
 class _TsPolicy(NamedTuple):
@@ -202,6 +246,236 @@ def _parse_ts(line: str, policy: _TsPolicy | None = None) -> datetime | None:
             dt = dt.replace(tzinfo=None)
         return dt
     return None
+
+
+def syslog_stamp(line: str) -> str | None:
+    """RFC3164 prefix (`MMM d HH:mm:ss` / `MMM dd HH:mm:ss`) as written, without a year."""
+    s = line.lstrip()
+    if s.startswith("["):
+        return None
+    m = TS_TOKEN_RE.match(s)
+    if not m or not m.group("syslog"):
+        return None
+    return m.group("syslog")
+
+
+def _syslog_sort_key(raw: str) -> tuple[int, int, int, int, int] | None:
+    m = re.match(
+        rf"(?P<mon>{_MON})\s+(?P<day>\d{{1,2}})\s+(?P<time>{_TIME})\b",
+        raw.strip(),
+        re.I,
+    )
+    if not m:
+        return None
+    hour, minute, second, _micro = _clock(m.group("time"))
+    return (_MONTH_NUM[m.group("mon")[:3].lower()], int(m.group("day")), hour, minute, second)
+
+
+def _syslog_internal_dt(raw: str) -> datetime | None:
+    key = _syslog_sort_key(raw)
+    if key is None:
+        return None
+    month, day, hour, minute, second = key
+    try:
+        return datetime(2000, month, day, hour, minute, second)
+    except ValueError:
+        return None
+
+
+def colon_severity(line: str) -> str | None:
+    m = LEVEL_COLON_RE.search(line)
+    if not m:
+        return None
+    return _normalize_level(m.group("level"))
+
+
+def ssh_rule(line: str) -> tuple[str, str, str] | None:
+    body = line
+    repeated = REPEAT_RE.search(line)
+    if repeated:
+        body = repeated.group("body")
+    for pat, level, category, kind in SSH_RULES:
+        if pat.search(body):
+            return level, category, kind
+    return None
+
+
+def _ssh_pid(line: str) -> str | None:
+    m = SSHD_PID_RE.search(line)
+    return m.group("pid") if m else None
+
+
+def _ssh_ip(line: str) -> str | None:
+    from_m = re.search(r"\bfrom (?P<ip>(?:\d{1,3}\.){3}\d{1,3})\b", line, re.I)
+    if from_m:
+        return from_m.group("ip")
+    by_m = re.search(r"\b(?:closed by|disconnect from) (?P<ip>(?:\d{1,3}\.){3}\d{1,3})\b", line, re.I)
+    if by_m:
+        return by_m.group("ip")
+    rhost = re.search(r"\brhost=(?P<host>\S+)", line, re.I)
+    if rhost:
+        host = rhost.group("host").rstrip(",")
+        if IPV4_RE.fullmatch(host):
+            return host
+    br = re.search(r"\[(?P<ip>(?:\d{1,3}\.){3}\d{1,3})\]", line)
+    if br:
+        return br.group("ip")
+    m = IPV4_RE.search(line)
+    return m.group("ip") if m else None
+
+
+def _ssh_user(line: str) -> str | None:
+    for pat in SSH_USER_RES:
+        m = pat.search(line)
+        if m:
+            return m.group("user")
+    return None
+
+
+def _worse_level(a: str | None, b: str | None) -> str:
+    if not a:
+        return b or "WARN"
+    if not b:
+        return a
+    return a if _LEVEL_RANK.get(a, 50) <= _LEVEL_RANK.get(b, 50) else b
+
+
+def _ssh_session_title(sess: dict[str, Any]) -> str:
+    kinds = sess["kinds"]
+    ip = sess.get("ip")
+    user = sess.get("user")
+    where = f" from {ip}" if ip else ""
+    who = f" for {user}" if user else ""
+    if "break_in" in kinds:
+        return f"SSH possible break-in attempt{where}{who}"
+    if "too_many_failures" in kinds:
+        return f"SSH too many authentication failures{who}{where}"
+    if "fatal" in kinds:
+        return f"SSH fatal{where}{who}"
+    if "no_more_methods" in kinds:
+        return f"SSH authentication methods exhausted{who}{where}"
+    if "failed_password" in kinds or "auth_failure" in kinds or "invalid_user" in kinds or "failed_none" in kinds:
+        return f"SSH authentication failure{who}{where}"
+    if "error" in kinds:
+        return f"SSH error{where}"
+    return f"SSH security event{where}"
+
+
+def _incident_from_session(sess: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "signature": _ssh_session_title(sess),
+        "count": 1,
+        "level": sess["level"],
+        "category": sess.get("category"),
+        "kind": "ssh_session",
+        "root_cause": None,
+        "top_exception": None,
+        "causes": [],
+        "exception_chain": [],
+        "exit_code": None,
+        "codes": {},
+        "first_line": sess["first_line"],
+        "sample": "\n".join(sess["lines"])[:SAMPLE_CHARS],
+    }
+
+
+def _brute_force_incidents(sessions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    by_ip: dict[str, list[dict[str, Any]]] = collections.defaultdict(list)
+    for sess in sessions:
+        ip = sess.get("ip")
+        if ip:
+            by_ip[ip].append(sess)
+    out: list[dict[str, Any]] = []
+    for ip, group in by_ip.items():
+        dated = []
+        for sess in group:
+            dt = _syslog_internal_dt(sess["stamp"]) if sess.get("stamp") else None
+            dated.append((dt, sess))
+        dated.sort(key=lambda x: (x[0] is None, x[0] or datetime.min, x[1]["first_line"]))
+        cluster: list[dict[str, Any]] = []
+        prev: datetime | None = None
+
+        def flush_cluster():
+            if len(cluster) < BRUTE_FORCE_MIN_SESSIONS:
+                return
+            first = cluster[0]
+            sample_lines = []
+            for s in cluster[:8]:
+                sample_lines.extend(s["lines"][:3])
+            out.append({
+                "signature": f"SSH brute-force from {ip} ({len(cluster)} authentication attempts)",
+                "count": len(cluster),
+                "level": "ERROR",
+                "category": "security-auth",
+                "kind": "brute_force",
+                "root_cause": None,
+                "top_exception": None,
+                "causes": [],
+                "exception_chain": [],
+                "exit_code": None,
+                "codes": {},
+                "first_line": first["first_line"],
+                "sample": "\n".join(sample_lines)[:SAMPLE_CHARS],
+            })
+
+        for dt, sess in dated:
+            if not cluster:
+                cluster = [sess]
+                prev = dt
+                continue
+            gap_ok = True
+            if dt is not None and prev is not None:
+                gap_ok = (dt - prev).total_seconds() <= BRUTE_FORCE_GAP_SECONDS
+            if gap_ok:
+                cluster.append(sess)
+                prev = dt or prev
+            else:
+                flush_cluster()
+                cluster = [sess]
+                prev = dt
+        flush_cluster()
+    return out
+
+
+def collect_ssh_incidents(lines: list[str]) -> tuple[list[dict[str, Any]], int, collections.Counter]:
+    sessions: dict[str, dict[str, Any]] = {}
+    extra_levels: collections.Counter = collections.Counter()
+    for idx, line in enumerate(lines, 1):
+        pid = _ssh_pid(line)
+        rule = ssh_rule(line)
+        if pid:
+            sess = sessions.setdefault(pid, {
+                "pid": pid,
+                "lines": [],
+                "first_line": idx,
+                "ip": None,
+                "user": None,
+                "kinds": set(),
+                "level": None,
+                "category": None,
+                "stamp": syslog_stamp(line),
+            })
+            sess["lines"].append(line)
+            ip = _ssh_ip(line)
+            if ip:
+                sess["ip"] = ip
+            user = _ssh_user(line)
+            if user:
+                sess["user"] = user
+            stamp = syslog_stamp(line)
+            if stamp:
+                sess["stamp"] = stamp
+            if rule:
+                level, category, kind = rule
+                sess["kinds"].add(kind)
+                sess["level"] = _worse_level(sess["level"], level)
+                sess["category"] = category
+        elif rule:
+            extra_levels[_normalize_level(rule[0])] += 1
+    auth_sessions = [s for s in sessions.values() if s["kinds"] & _AUTH_KINDS]
+    incidents = [_incident_from_session(s) for s in auth_sessions]
+    incidents.extend(_brute_force_incidents(auth_sessions))
+    return incidents, len(auth_sessions), extra_levels
 
 
 def _timestamp_at_start(line: str) -> _PrefixSpan | None:
@@ -437,6 +711,7 @@ def _incident_title(event: dict[str, Any], chain: dict[str, Any]) -> str:
 def analyze_log_text(text: str, filename: str | None = None) -> dict[str, Any]:
     lines = text.splitlines()
     timestamps = []
+    syslog_stamps: list[tuple[tuple[int, int, int, int, int], str]] = []
     levels = collections.Counter()
     codes = collections.Counter()
 
@@ -445,11 +720,40 @@ def analyze_log_text(text: str, filename: str | None = None) -> dict[str, Any]:
         ts = _parse_ts(line, policy)
         if ts:
             timestamps.append(ts)
+        raw = syslog_stamp(line)
+        if raw:
+            key = _syslog_sort_key(raw)
+            if key:
+                syslog_stamps.append((key, raw))
         rec = log_record_prefix(line)
         if rec:
             levels[rec["level"]] += 1
+        else:
+            colon = colon_severity(line)
+            if colon:
+                levels[colon] += 1
+            else:
+                rule = ssh_rule(line)
+                if rule:
+                    levels[_normalize_level(rule[0])] += 1
         for code in _code_list(line):
             codes[code] += 1
+
+    if timestamps:
+        time_range = {
+            "from": min(timestamps).isoformat(),
+            "to": max(timestamps).isoformat(),
+            "year_present": True,
+        }
+    elif syslog_stamps:
+        syslog_stamps.sort(key=lambda x: x[0])
+        time_range = {
+            "from": syslog_stamps[0][1],
+            "to": syslog_stamps[-1][1],
+            "year_present": False,
+        }
+    else:
+        time_range = {"from": None, "to": None}
 
     events = _split_events(lines)
     grouped: dict[tuple[str, str], dict[str, Any]] = {}
@@ -488,25 +792,34 @@ def analyze_log_text(text: str, filename: str | None = None) -> dict[str, Any]:
         v = dict(v)
         v["codes"] = dict(v["codes"])
         groups.append(v)
-    groups.sort(key=lambda x: (-len(x.get("exception_chain") or []), x["first_line"]))
+
+    ssh_incidents, ssh_event_count, _extra = collect_ssh_incidents(lines)
+    groups.extend(ssh_incidents)
+    groups.sort(
+        key=lambda x: (
+            0 if x.get("kind") == "brute_force" else 1,
+            _LEVEL_RANK.get(x.get("level") or "", 50),
+            x["first_line"],
+        )
+    )
+    groups = groups[:100]
 
     return {
         "kind": "log",
         "filename": filename,
         "line_count": len(lines),
-        "timestamped_lines": len(timestamps),
-        "time_range": {
-            "from": min(timestamps).isoformat() if timestamps else None,
-            "to": max(timestamps).isoformat() if timestamps else None,
-        },
+        "timestamped_lines": len(timestamps) + (len(syslog_stamps) if not timestamps else 0),
+        "time_range": time_range,
         "levels": dict(levels),
         "error_codes": dict(codes.most_common()),
-        "error_event_count": len(events),
+        "error_event_count": len(events) + ssh_event_count,
         "error_groups": groups[:100],
         "incidents": groups[:100],
         "limitations": [
             "The analyzer groups multiline ERROR/FATAL/SEVERE/CRITICAL records, Java exception chains and Maven [ERROR] blocks using generic log heuristics.",
-            "Numeric dates such as 09/01/26 are treated as record boundaries; time_range is filled only when day/month order is unambiguous in this log.",
+            "RFC3164/syslog stamps (`MMM d HH:mm:ss`) are used as written for time_range; a year is not invented when the source has none.",
+            "OpenSSH/auth lines are correlated by sshd PID into authentication attempts; repeated attempts from one IP in a short window can raise a brute-force incident. Connection closed by itself is not an error.",
+            "Numeric dates such as 09/01/26 are treated as record boundaries; ISO time_range is filled only when day/month order is unambiguous in this log.",
             "Product-specific message IDs can be added as optional profiles when representative log samples are available.",
         ],
     }

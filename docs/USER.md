@@ -79,8 +79,9 @@ If only a certificate embedded in `ds:KeyInfo` is available, the analyzer can ve
 
 ### Log analysis
 
-- timestamp range detection
-- severity counts from recognized log-record prefixes
+- timestamp range detection, including RFC3164/syslog stamps without inventing a year
+- severity counts from recognized log-record prefixes and case-insensitive `error:` / `fatal:` markers
+- OpenSSH/auth.log patterns correlated by `sshd` PID (and brute-force roll-up by source IP); `Connection closed` alone is not an incident
 - error/status code extraction
 - multiline incidents with Java exception chains and Maven `[ERROR]` blocks
 - root-cause extraction from `Caused by:` (not a separate incident)
@@ -169,7 +170,7 @@ A deliberately separate web-enabled chat. It receives **no** Analyzer or Assista
 
 - Local Gradio app on `127.0.0.1` for a private workstation, not a packaged or multi-user product. Reports are heuristics plus spec-backed SAML checks, not a substitute for an IdP/SP vendor’s own validator. Unexpected runtime errors are in the process terminal; validation messages (empty input, oversize file) are a timed toast.
 - `EncryptedAssertion` is detected, not decrypted. The anonymizer is useful, not DLP; shareable output still needs a human pass.
-- Log timestamps are treated as record boundaries when the shape is recognizable; numeric dates such as `09/01/26` do not get a calendar `time_range` unless the same log makes day/month order unambiguous.
+- Log timestamps are treated as record boundaries when the shape is recognizable; numeric dates such as `09/01/26` do not get a calendar `time_range` unless the same log makes day/month order unambiguous. RFC3164 stamps are shown as written (`Dec 24 06:55:46`); a year is not filled in when the source has none.
 - Optional chats need local Ollama. Assistant and General Chat are independent Config modules. The displayed model name is the `OLLAMA_MODEL` env tag, not a label from the weight file and not `ollama list`. Coverage grows from real traces and failing cases, not from claiming a complete SAML or logging catalogue.
 - Local OCR is imperfect. Prefer the image when OCR and pixels disagree. Cloud OCR is not used. OCR text from General Chat may be used to build public search queries.
 - Chat transcripts are height-capped so they scroll in-pane; the prompt does not grow the page. Analyze still page-scrolls.
@@ -302,6 +303,9 @@ The update script refuses to overwrite tracked local changes. Commit or stash th
 ```bash
 source .venv/bin/activate
 PYTHONPATH=. python tests/test_analyzers.py
+PYTHONPATH=. python tests/test_log_incidents.py
+PYTHONPATH=. python tests/test_log_timestamps.py
+PYTHONPATH=. python tests/test_log_syslog_ssh.py
 PYTHONPATH=. python tests/test_signature_validation.py
 PYTHONPATH=. python tests/test_anonymizer_saml.py
 PYTHONPATH=. python tests/test_anonymize_xml_audit.py

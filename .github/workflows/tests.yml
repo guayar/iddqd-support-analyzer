@@ -30,6 +30,7 @@ jobs:
         run: |
           PYTHONPATH=. python tests/test_log_incidents.py
           PYTHONPATH=. python tests/test_log_timestamps.py
+          PYTHONPATH=. python tests/test_log_syslog_ssh.py
           PYTHONPATH=. python tests/test_analyzers.py
           PYTHONPATH=. python tests/test_input_hardening.py
           PYTHONPATH=. python tests/test_signature_validation.py

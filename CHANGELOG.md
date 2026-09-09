@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## [0.14.0] - 2026-09-09
+
+### Added
+
+- Log analyzer recognizes RFC3164/syslog stamps (`MMM d HH:mm:ss` / `MMM dd HH:mm:ss`) in the timestamp range without inventing a year
+- Case-insensitive `error:` / `fatal:` (and other `LEVEL:`) markers, plus OpenSSH/auth patterns (`Failed password`, `Invalid user`, `POSSIBLE BREAK-IN ATTEMPT`, and related). Lines for one `sshd[pid]` become one authentication attempt; repeated attempts from the same IP in a short window can raise a brute-force incident. A lone `Connection closed` is not an error
+
+### Changed
+
+- Analyze certificate note sits directly under the input fields, above Analyze / Clear
+- version bumped to `0.14.0`
+
 ## [0.13.11] - 2026-09-09
 
 ### Added

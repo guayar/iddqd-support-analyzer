@@ -381,8 +381,12 @@ def render_log_report(result: dict[str, Any]) -> str:
         f"**File:** `{result.get('filename') or 'pasted text'}`  ",
         f"**Lines:** {result['line_count']:,}  ",
         f"**Timestamp range:** `{tr.get('from') or 'not detected'}` → `{tr.get('to') or 'not detected'}`",
-        "\n## Severity counts",
     ]
+    if tr.get("year_present") is False:
+        out.append("Year not present in source")
+    out.extend([
+        "\n## Severity counts",
+    ])
     if result["levels"]:
         out.extend(
             f"- {_severity_icon(k)} **{k}:** {v}"
@@ -398,7 +402,7 @@ def render_log_report(result: dict[str, Any]) -> str:
     groups = result.get("incidents") or result.get("error_groups") or []
     out.append(f"\n## Incidents ({len(groups)} unique; {result['error_event_count']} events)")
     if not groups:
-        out.append("No explicit ERROR/FATAL/SEVERE/CRITICAL events detected.")
+        out.append("No explicit ERROR/FATAL/SEVERE/CRITICAL or SSH authentication events detected.")
     for i, g in enumerate(groups[:30], 1):
         title = g.get("signature") or "Unknown error"
         out.append(f"\n### {i}. {title}")

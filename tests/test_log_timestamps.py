@@ -36,6 +36,11 @@ def test_syslog_is_a_boundary_but_not_a_calendar_time():
     assert _parse_ts(line) is None
     assert _timestamp_at_start(line) is not None
     assert is_new_log_record(line)
+    r = analyze_log_text(line + "\n")
+    assert r["time_range"]["from"] == "Sep 01 14:04:46"
+    assert r["time_range"]["to"] == "Sep 01 14:04:46"
+    assert r["time_range"]["year_present"] is False
+    assert "202" not in (r["time_range"]["from"] + r["time_range"]["to"])
 
 
 def test_bracketed_two_digit_year_is_a_record_boundary():

@@ -579,14 +579,14 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                             elem_classes=["psa-control", "psa-mode"],
                         )
 
-                    run = gr.Button("Analyze", variant="primary", elem_classes=["psa-primary"])
-                    clear_analyze_btn = gr.Button("Clear", elem_classes=["psa-clear"])
-
                     gr.Markdown(
                         "Standalone certificate upload is used only for SAML XML Signature verification. "
                         "Upload the **public X.509 certificate**; private keys are not required or accepted.",
                         elem_classes=["psa-note"],
                     )
+
+                    run = gr.Button("Analyze", variant="primary", elem_classes=["psa-primary"])
+                    clear_analyze_btn = gr.Button("Clear", elem_classes=["psa-clear"])
 
                     with gr.Column(elem_id="analysis-wrap"):
                         gr.HTML(COPY_REPORT_HTML, elem_id="copy-report-slot")
