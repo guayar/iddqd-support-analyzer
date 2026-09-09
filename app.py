@@ -138,70 +138,22 @@ CSS = """
 .psa-chat {
     display: flex !important;
     flex-direction: column !important;
-    flex: 1 1 auto !important;
-    min-height: 0 !important;
-    overflow: hidden !important;
-}
-.psa-chat-tab {
-    height: calc(100dvh - 6.75rem) !important;
-    max-height: calc(100dvh - 6.75rem) !important;
-    min-height: 0 !important;
-    overflow: hidden !important;
-    display: flex !important;
-    flex-direction: column !important;
-}
-.psa-chat-tab > div,
-.psa-chat-tab .gap,
-.psa-chat-tab .form,
-.psa-chat-tab .panel,
-.psa-chat > div,
-.psa-chat .interface,
-.psa-chat .column,
-.psa-chat .form,
-.psa-chat .gap {
-    min-height: 0 !important;
-}
-.psa-chat-tab > div {
-    display: flex !important;
-    flex-direction: column !important;
-    flex: 1 1 auto !important;
-    overflow: hidden !important;
-    height: 100% !important;
-    max-height: 100% !important;
-    min-height: 0 !important;
-}
-.psa-chat > div,
-.psa-chat .interface,
-.psa-chat .column {
-    display: flex !important;
-    flex-direction: column !important;
-    flex: 1 1 auto !important;
-    overflow: hidden !important;
-    height: 100% !important;
-    max-height: 100% !important;
+    gap: 8px !important;
 }
 .psa-chat-tab .psa-note,
 .psa-chat-tab .psa-assistant-controls,
 .psa-chat-tab .psa-llm-meta {
     flex: 0 0 auto !important;
-    overflow: auto !important;
-    max-height: 28vh !important;
 }
 #assistant-chat,
 #web-chat {
-    flex: 1 1 auto !important;
-    height: auto !important;
-    min-height: 0 !important;
-    max-height: none !important;
+    height: min(32rem, calc(100dvh - 22rem)) !important;
+    max-height: min(32rem, calc(100dvh - 22rem)) !important;
+    min-height: 12rem !important;
     overflow: hidden !important;
 }
-#assistant-chat .wrapper,
-#web-chat .wrapper,
 #assistant-chat .bubble-wrap,
 #web-chat .bubble-wrap {
-    height: 100% !important;
-    max-height: 100% !important;
-    min-height: 0 !important;
     overflow-y: auto !important;
 }
 .psa-chat textarea {
@@ -639,8 +591,7 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                             clear_ctx = gr.Button("Clear analysis context")
                         with gr.Column(elem_classes=["psa-chat"]):
                             assistant_chatbot = gr.Chatbot(
-                                height="100%",
-                                max_height="100%",
+                                height="min(32rem, calc(100dvh - 22rem))",
                                 resizable=False,
                                 label="Chat",
                                 elem_id="assistant-chat",
@@ -658,7 +609,7 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                                 ),
                                 additional_inputs=[assistant_context],
                                 save_history=False,
-                                fill_height=True,
+                                fill_height=False,
                             )
                         clear_ctx.click(
                             clear_assistant_context,
@@ -685,8 +636,7 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                                 f"<p class='psa-llm-meta'>{_model_hint('Web search enabled')}</p>"
                             )
                             web_chatbot = gr.Chatbot(
-                                height="100%",
-                                max_height="100%",
+                                height="min(32rem, calc(100dvh - 22rem))",
                                 resizable=False,
                                 label="Chat",
                                 elem_id="web-chat",
@@ -703,7 +653,7 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                                     max_plain_text_length=20000,
                                 ),
                                 save_history=False,
-                                fill_height=True,
+                                fill_height=False,
                             )
 
             with gr.Tab("Config"):

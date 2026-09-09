@@ -163,7 +163,7 @@ A deliberately separate web-enabled chat. It receives **no** Analyzer or Assista
 - Log timestamps are treated as record boundaries when the shape is recognizable; numeric dates such as `09/01/26` do not get a calendar `time_range` unless the same log makes day/month order unambiguous.
 - Optional chats need local Ollama. Assistant and General Chat are independent Config modules. The displayed model name is the `OLLAMA_MODEL` env tag, not a label from the weight file and not `ollama list`. Coverage grows from real traces and failing cases, not from claiming a complete SAML or logging catalogue.
 - Local OCR is imperfect. Prefer the image when OCR and pixels disagree. Cloud OCR is not used. OCR text from General Chat may be used to build public search queries.
-- Chat tabs are locked to the viewport height: long transcripts scroll inside the pane; the prompt box does not grow the page.
+- Chat transcripts are height-capped so they scroll in-pane; the prompt does not grow the page. Analyze still page-scrolls.
 
 ## Privacy model
 

@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## [0.13.3] - 2026-09-09
+
+### Fixed
+
+- Assistant and General Chat no longer stretch a full-viewport column with a huge empty gap. Only the transcript is height-capped; the prompt stays under the chat box.
+
+### Changed
+
+- version bumped to `0.13.3`
+
 ## [0.13.2] - 2026-09-09
 
 ### Fixed
