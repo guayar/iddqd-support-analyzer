@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## [0.14.1] - 2026-09-09
+
+### Changed
+
+- Log SSH incidents use correlated severity, not `max(line rule)`: reverse-DNS mismatch alone is WARN; the same `sshd` PID with failed authentication is ERROR; `fatal:` still counts as a source FATAL line and is not a CRITICAL incident
+- Brute-force clusters keep the 15-minute gap and no global IP merge. Five to nine slower attempts are suspected (WARN); ten or more, or five or more inside a 60-second window (`BRUTE_FORCE_RAPID_WINDOW_SECONDS`), are ERROR
+- Log report **Detected line severities** (source markers plus per-line classification) is separate from incident severity; incident unique counts are computed before the display cap
+- version bumped to `0.14.1`
+
 ## [0.14.0] - 2026-09-09
 
 ### Added

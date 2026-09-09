@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+INCIDENT_REPORT_DETAIL_CAP = 30
+
 
 def _severity_icon(level: str) -> str:
     lv = (level or "").upper()
@@ -385,7 +387,8 @@ def render_log_report(result: dict[str, Any]) -> str:
     if tr.get("year_present") is False:
         out.append("Year not present in source")
     out.extend([
-        "\n## Severity counts",
+        "\n## Detected line severities",
+        "Includes explicit source markers plus deterministic semantic classification of the line (for example `Failed password` → WARN). These counts are not incident severities.",
     ])
     if result["levels"]:
         out.extend(
@@ -400,10 +403,17 @@ def render_log_report(result: dict[str, Any]) -> str:
     else:
         out.append("- No explicit codes detected")
     groups = result.get("incidents") or result.get("error_groups") or []
-    out.append(f"\n## Incidents ({len(groups)} unique; {result['error_event_count']} events)")
+    unique = result.get("incident_unique_count", len(groups))
+    out.append(f"\n## Incidents ({unique} unique; {result['error_event_count']} events)")
+    shown = len(groups)
+    if shown < unique:
+        out.append(f"Showing first {shown} incidents")
+    detail_n = min(shown, INCIDENT_REPORT_DETAIL_CAP)
+    if groups and detail_n < unique:
+        out.append(f"Showing first {detail_n} incident details")
     if not groups:
         out.append("No explicit ERROR/FATAL/SEVERE/CRITICAL or SSH authentication events detected.")
-    for i, g in enumerate(groups[:30], 1):
+    for i, g in enumerate(groups[:INCIDENT_REPORT_DETAIL_CAP], 1):
         title = g.get("signature") or "Unknown error"
         out.append(f"\n### {i}. {title}")
         out.append(f"- **Severity:** {_severity_icon(g['level'])} {g['level']}")

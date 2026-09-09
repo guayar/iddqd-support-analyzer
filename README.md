@@ -2,7 +2,7 @@
 
 [![Tests](https://github.com/guayar/iddqd-support-analyzer/actions/workflows/tests.yml/badge.svg)](https://github.com/guayar/iddqd-support-analyzer/actions/workflows/tests.yml)
 
-**Current version:** `0.14.0`
+**Current version:** `0.14.1`
 
 Local workstation tool for SAML/SSO and `*.log` troubleshooting. The core **Analyze** path is deterministic (no Ollama). Optional modules load from **Config** after a restart. Early-stage, for a private Ubuntu box — not a packaged product.
 

@@ -80,8 +80,8 @@ If only a certificate embedded in `ds:KeyInfo` is available, the analyzer can ve
 ### Log analysis
 
 - timestamp range detection, including RFC3164/syslog stamps without inventing a year
-- severity counts from recognized log-record prefixes and case-insensitive `error:` / `fatal:` markers
-- OpenSSH/auth.log patterns correlated by `sshd` PID (and brute-force roll-up by source IP); `Connection closed` alone is not an incident
+- detected line severities: explicit source markers plus deterministic per-line classification (for example `Failed password` → WARN); this is not incident severity
+- OpenSSH/auth.log patterns correlated by `sshd` PID. Reverse-DNS mismatch (`POSSIBLE BREAK-IN ATTEMPT`) alone is WARN, not a proven break-in; the same PID with failed authentication is ERROR. Brute-force roll-up is by source IP with a 15-minute gap (no global merge). Five or more attempts in 60 seconds, or ten or more in a slower cluster, are ERROR; five to nine slower attempts are suspected (WARN). `Connection closed` alone is not an incident. Incident totals are counted before the displayed list is truncated.
 - error/status code extraction
 - multiline incidents with Java exception chains and Maven `[ERROR]` blocks
 - root-cause extraction from `Caused by:` (not a separate incident)
