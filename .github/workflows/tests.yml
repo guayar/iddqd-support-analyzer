@@ -24,7 +24,7 @@ jobs:
           python -m pip install -r requirements.txt
 
       - name: Compile
-        run: python -m py_compile app.py actions.py chats.py config.py llm.py modules.py reporting.py uploads.py websearch.py analyzers/*.py tests/*.py
+        run: python -m py_compile app.py actions.py chats.py config.py llm.py modules.py reporting.py uploads.py websearch.py vision.py analyzers/*.py tests/*.py
 
       - name: Run analyzer tests
         run: |
@@ -43,3 +43,4 @@ jobs:
           PYTHONPATH=. python tests/test_modules.py
           PYTHONPATH=. python tests/test_assistant_handoff.py
           PYTHONPATH=. python tests/test_chat_history.py
+          PYTHONPATH=. python tests/test_vision.py

@@ -393,7 +393,9 @@ def analyze_with_assistant(files, pasted, mode, signing_cert_file=None):
 
 def clear_assistant_context():
     from chats import empty_assistant_history
+    from vision import clear_vision_cache
 
+    clear_vision_cache()
     return None, _context_badge(None), empty_assistant_history()
 
 
@@ -533,10 +535,11 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                     with gr.Column(elem_classes=["psa-shell"]):
                         gr.Markdown(
                             "### Local Assistant\n"
-                            "Everything in this tab stays between the browser, this application and the local Ollama model. "
-                            "**No web search.** The latest Analyze result is available here automatically. "
+                            "Everything in this tab stays between the browser, this application, local OCR and the local Ollama model. "
+                            "**No web search.** Attach PNG/JPEG/WEBP screenshots (terminals, stack traces, admin consoles). "
+                            "The latest Analyze result is available here automatically. "
                             "**Clear analysis context** removes it and resets this chat. "
-                            "General Chat never receives that report — do not paste secrets there.",
+                            "General Chat never receives that report, screenshots or OCR.",
                             elem_classes=["psa-note"],
                         )
                         with gr.Column(elem_classes=["psa-assistant-controls"]):
@@ -546,7 +549,15 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                             assistant_chatbot = gr.Chatbot(height=CHAT_HEIGHT, label="Chat", elem_id="assistant-chat")
                             gr.ChatInterface(
                                 fn=assistant_chat,
+                                multimodal=True,
                                 chatbot=assistant_chatbot,
+                                textbox=gr.MultimodalTextbox(
+                                    file_count="multiple",
+                                    file_types=[".png", ".jpg", ".jpeg", ".webp"],
+                                    sources=["upload"],
+                                    placeholder="Ask a question or attach a local screenshot…",
+                                    max_plain_text_length=20000,
+                                ),
                                 additional_inputs=[assistant_context],
                                 save_history=False,
                                 fill_height=False,
@@ -587,7 +598,7 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                     )
                     llm_box = gr.Checkbox(
                         label="Assistant and General Chat",
-                        info="Requires local Ollama. Assistant sees the latest Analyze result. General Chat can use the web and never receives that report.",
+                        info="Requires local Ollama. Assistant sees the latest Analyze result and local screenshots. General Chat can use the web and never receives that material.",
                         value=PLUGIN_LLM in saved,
                     )
                     restart_md = gr.Markdown(_restart_notice(saved))

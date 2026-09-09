@@ -6,7 +6,7 @@ Early-stage AI-assisted project. Not a production product — I am building it t
 
 Local troubleshooting toolkit for SAML/SSO and log analysis. Optional anonymizer and local LLM chats.
 
-**Current version:** `0.11.23`
+**Current version:** `0.12.0`
 
 The core product is a local, deterministic SAML and log analyzer. It does not require Ollama. Optional modules (Anonymize, Assistant + General Chat) are enabled from the **Config** tab and load after a restart.
 
@@ -154,7 +154,9 @@ The anonymizer is not a certified DLP product; generated output should still be 
 
 Enable **Assistant and General Chat** on the Config tab, then restart. Requires local Ollama.
 
-The Assistant has no web-search path and no Mode switch. Ask it for technical help, a support-mail draft, or code in the same chat. The latest Analyze result is available here automatically. **Clear analysis context** removes that report and resets the Assistant chat. General Chat never receives it.
+The Assistant has no web-search path and no Mode switch. Ask it for technical help, a support-mail draft, or code in the same chat. Attach **local PNG/JPEG/WEBP screenshots** (terminal, stack traces, admin consoles). The model receives the original image plus a **local Tesseract OCR** extract, labeled as imperfect. The latest Analyze result is available here automatically. **Clear analysis context** removes that report, screenshot OCR cache and resets the Assistant chat. General Chat never receives the report, images or OCR.
+
+Ubuntu OCR: `sudo apt install tesseract-ocr tesseract-ocr-eng tesseract-ocr-pol`. Without Tesseract, screenshots still go to a vision-capable Ollama model.
 
 ### General Chat (same optional LLM module)
 
@@ -173,7 +175,7 @@ A deliberately separate web-enabled chat. It receives **no** Analyzer or Assista
 |---|---:|---:|---|
 | Analyze | No | No | Logs, SAML traces, metadata, public signing certificates |
 | Anonymize (optional) | No | No | Sensitive logs and SAML traces |
-| Assistant (optional) | Yes | No | Technical/support material, plus the latest Analyze result |
+| Assistant (optional) | Yes | No | Technical/support material, screenshots, local OCR, plus the latest Analyze result |
 | General Chat (optional) | Yes | Yes | Non-sensitive public questions only |
 | Config | No | No | Which optional modules to load after restart |
 
@@ -245,6 +247,7 @@ WEB_FETCH_RESULTS=3
 WEB_FETCH_CHARS=16000
 WEB_SEARCH_REGION=wt-wt
 WEB_SEARCH_BACKEND=auto
+ASSISTANT_IMAGE_MAX_MB=8
 ```
 
 Optional basic authentication can be enabled with `BASIC_AUTH_USER` and `BASIC_AUTH_PASS`.
@@ -270,6 +273,8 @@ PYTHONPATH=. python tests/test_layers.py
 PYTHONPATH=. python tests/test_nameid.py
 PYTHONPATH=. python tests/test_modules.py
 PYTHONPATH=. python tests/test_assistant_handoff.py
+PYTHONPATH=. python tests/test_chat_history.py
+PYTHONPATH=. python tests/test_vision.py
 ```
 
 The tests use synthetic SAML and log data only. Signature and anonymization tests generate ephemeral synthetic keys/certificates at runtime; no private key material is stored in the repository.
@@ -284,6 +289,7 @@ The tests use synthetic SAML and log data only. Signature and anonymization test
 ├── reporting.py        # markdown reports from analyzer JSON
 ├── modules.py          # optional-module registry and restart
 ├── llm.py              # local Ollama client and endpoint policy (LLM module)
+├── vision.py           # Assistant screenshot validation and local OCR
 ├── chats.py            # Assistant / General Chat (LLM module)
 ├── websearch.py        # General Chat search/fetch only
 ├── uploads.py          # file size limits and text reads

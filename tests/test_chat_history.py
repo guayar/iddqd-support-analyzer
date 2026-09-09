@@ -60,11 +60,12 @@ def test_assistant_second_turn_includes_prior_turns_and_analyze_json():
     assert msgs[0]["role"] == "system"
     assert "ANALYZER OUTPUT" in msgs[0]["content"]
     assert '"case": "A"' in msgs[0]["content"]
-    assert msgs[1:] == [
-        {"role": "user", "content": "What is the main issue in this analysis?"},
-        {"role": "assistant", "content": "The main issue is an expired certificate."},
-        {"role": "user", "content": "And what would you check next?"},
+    assert [(m["role"], m["content"]) for m in msgs[1:]] == [
+        ("user", "What is the main issue in this analysis?"),
+        ("assistant", "The main issue is an expired certificate."),
+        ("user", "And what would you check next?"),
     ]
+    assert not msgs[-1].get("images")
     assert assistant_system_prompt(ctx) == msgs[0]["content"]
 
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import date
+from typing import Any
 
 import requests
 
@@ -15,6 +16,10 @@ For programming questions, prioritize Java, TypeScript, Python and Playwright wh
 Do not invent APIs, command results, files, logs, or execution results.
 When drafting support mail: preserve the user's meaning and technical facts; do not invent completed checks, root causes, customer actions, dates, or results; avoid robotic phrasing; when useful structure as context/findings, what was verified, next step/request; do not expose implementation details.
 Do not claim code was executed unless execution output was actually provided.
+You may receive screenshots of terminals, logs, admin consoles or error dialogs.
+Use both the original image pixels and any LOCAL OCR EXTRACT.
+OCR is imperfect (0 vs O, 1 vs l vs I, punctuation, URLs). Prefer the image when OCR and pixels conflict.
+Never treat OCR as a second Analyzer. Never send images, OCR or Analyzer JSON to the public web.
 """
 
 WEB_SYSTEM = """You are a web-enabled general assistant. The language model itself runs locally, but for this chat the application deliberately searches the public web.
@@ -24,6 +29,7 @@ For technical questions, prefer official documentation, vendor documentation, re
 Do not fabricate facts or sources. If the search evidence is insufficient or conflicting, say so.
 Cite factual web-derived claims inline using source markers like [S1], [S2]. Do not invent markers that are not in the supplied material.
 This General Chat is intentionally separate from the private Analyzer/Assistant. Never imply you can see content from those tabs.
+You do not receive screenshots, OCR extracts or Analyzer reports.
 """
 
 
@@ -53,6 +59,93 @@ def _history_messages(history, limit: int, content_limit: int) -> list[dict[str,
     return msgs
 
 
+def _file_path(item: Any) -> str | None:
+    if item is None:
+        return None
+    if isinstance(item, dict):
+        nested = item.get("file")
+        if isinstance(nested, dict) and nested.get("path"):
+            return str(nested["path"])
+        if item.get("path"):
+            return str(item["path"])
+        return None
+    path = getattr(item, "path", None)
+    if path:
+        return str(path)
+    name = getattr(item, "name", None)
+    if name and not str(name).lower().startswith(("http://", "https://")):
+        return str(name)
+    return None
+
+
+def _content_paths(content: Any) -> list[str]:
+    paths: list[str] = []
+    if isinstance(content, dict):
+        path = _file_path(content)
+        if path:
+            paths.append(path)
+        files = content.get("files")
+        if isinstance(files, list):
+            for item in files:
+                p = _file_path(item) or (item if isinstance(item, str) else None)
+                if p:
+                    paths.append(p)
+        return paths
+    if isinstance(content, (list, tuple)):
+        for item in content:
+            paths.extend(_content_paths(item))
+    return paths
+
+
+def normalize_user_message(message: Any) -> tuple[str, list[str]]:
+    """Accept a plain string or Gradio 6 MultimodalPostprocess dict."""
+    if message is None:
+        return "", []
+    if isinstance(message, str):
+        return message, []
+    if isinstance(message, dict):
+        text = message.get("text")
+        if not isinstance(text, str):
+            text = _content_text(message)
+        files = message.get("files") or []
+        paths: list[str] = []
+        for item in files:
+            path = _file_path(item) or (item if isinstance(item, str) else None)
+            if path:
+                paths.append(path)
+        return text or "", paths
+    return _content_text(message), []
+
+
+def _ocr_block(att: dict[str, Any], index: int, total: int) -> str:
+    label = att.get("name") or f"screenshot-{index}"
+    header = f"USER IMAGE {index}/{total}: {label}"
+    if att.get("ocr_error"):
+        return f"{header}\nLOCAL OCR EXTRACT — unavailable ({att['ocr_error']}). Use the original image."
+    text = (att.get("ocr_text") or "").strip()
+    if not text:
+        return f"{header}\nLOCAL OCR EXTRACT — no text recognized. Use the original image."
+    return (
+        f"{header}\n"
+        "LOCAL OCR EXTRACT — may contain recognition errors; prefer the original image if they conflict.\n"
+        f"{text}"
+    )
+
+
+def _user_content(text: str, attachments: list[dict[str, Any]], notes: list[str]) -> str:
+    parts: list[str] = []
+    if notes:
+        parts.append("Attachment notes:\n" + "\n".join(f"- {n}" for n in notes))
+    if (text or "").strip():
+        parts.append(text.strip())
+    elif attachments:
+        parts.append("Analyze the attached screenshot(s) for technical-support diagnosis.")
+    total = len(attachments)
+    for i, att in enumerate(attachments, 1):
+        parts.append(_ocr_block(att, i, total))
+    return "\n\n".join(parts).strip()
+
+
 def assistant_system_prompt(assistant_context=None) -> str:
     if not assistant_context:
         return ASSISTANT_SYSTEM
@@ -61,6 +154,7 @@ def assistant_system_prompt(assistant_context=None) -> str:
         ASSISTANT_SYSTEM
         + "\n\nAttached analyzer JSON from the latest Analyze run "
         "(local only; you have no web-search tool). Use it when the user asks about this case. "
+        "Keep Analyzer JSON, screenshots and OCR extracts as separate evidence. "
         "Do not claim you searched the internet.\n\n"
         "ANALYZER OUTPUT:\n"
         + compact
@@ -71,10 +165,62 @@ def empty_assistant_history():
     return []
 
 
+def _encode_attachments(attachments: list[dict[str, Any]]) -> list[str]:
+    from vision import encode_image_png_base64
+
+    encoded: list[str] = []
+    for att in attachments:
+        try:
+            encoded.append(encode_image_png_base64(att["path"]))
+        except Exception:
+            continue
+    return encoded
+
+
+def _history_image_paths(history) -> list[str]:
+    paths: list[str] = []
+    for h in reversed(history or []):
+        if not (isinstance(h, dict) and h.get("role") == "user"):
+            continue
+        found = _content_paths(h.get("content"))
+        if found:
+            return found
+    return paths
+
+
 def assistant_chat(message, history, assistant_context=None) -> str:
-    msgs = [{"role": "system", "content": assistant_system_prompt(assistant_context)}]
+    from vision import attach_images
+
+    text, paths = normalize_user_message(message)
+    attachments, notes = attach_images(paths)
+    user_text = _user_content(text, attachments, notes)
+    if not user_text:
+        return "Enter a question or attach a local screenshot."
+
+    msgs: list[dict[str, Any]] = [{"role": "system", "content": assistant_system_prompt(assistant_context)}]
     msgs.extend(_history_messages(history, 20, 20000))
-    msgs.append({"role": "user", "content": message})
+    user_msg: dict[str, Any] = {"role": "user", "content": user_text}
+    current_images = _encode_attachments(attachments)
+    if current_images:
+        user_msg["images"] = current_images
+    msgs.append(user_msg)
+
+    # Follow-up visual context: re-send the previous user screenshots if this turn has none.
+    if not current_images:
+        prior = []
+        prior_notes: list[str] = []
+        try:
+            prior, prior_notes = attach_images(_history_image_paths(history))
+        except Exception:
+            prior = []
+        prior_images = _encode_attachments(prior)
+        if prior_images:
+            extra = ["Follow-up refers to the previous screenshot(s)."]
+            extra.extend(_ocr_block(att, i, len(prior)) for i, att in enumerate(prior, 1))
+            extra.extend(prior_notes)
+            msgs[-1]["content"] = (user_text + "\n\n" + "\n\n".join(extra)).strip()
+            msgs[-1]["images"] = prior_images
+
     try:
         return complete(msgs)
     except requests.RequestException as e:

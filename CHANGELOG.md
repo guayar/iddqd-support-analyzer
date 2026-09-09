@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## [0.12.0] - 2026-09-09
+
+### Added
+
+- Assistant accepts local PNG/JPEG/WEBP screenshots. Original pixels go to a vision-capable Ollama model; Tesseract OCR is extra local evidence and is labeled as imperfect
+- Screenshots, OCR and Analyzer JSON stay in Assistant only; General Chat remains text-only and cannot receive them
+- Image validation (type, size, pixels, no remote URLs); OCR cache; previous-screenshot follow-up; graceful OCR/vision absence
+
+### Changed
+
+- version bumped to `0.12.0`
+
 ## [0.11.23] - 2026-09-09
 
 ### Added
