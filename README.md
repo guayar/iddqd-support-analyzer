@@ -2,7 +2,7 @@
 
 [![Tests](https://github.com/guayar/iddqd-support-analyzer/actions/workflows/tests.yml/badge.svg)](https://github.com/guayar/iddqd-support-analyzer/actions/workflows/tests.yml)
 
-**Current version:** `0.14.1`
+**Current version:** `0.15.1`
 
 Local workstation tool for SAML/SSO and `*.log` troubleshooting. The core **Analyze** path is deterministic (no Ollama). Optional modules load from **Config** after a restart. Early-stage, for a private Ubuntu box — not a packaged product.
 
@@ -38,4 +38,5 @@ Analyze needs Python 3.12+ and `./run.sh`. Assistant / General Chat also need [O
 
 - [User guide](docs/USER.md) — modules, prerequisites, config, limitations, tests
 - [Architecture](docs/ARCHITECTURE.md)
+- [Third-party test data](docs/THIRD_PARTY_TEST_DATA.md)
 - [Changelog](CHANGELOG.md)

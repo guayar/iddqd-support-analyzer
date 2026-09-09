@@ -1,0 +1,11 @@
+# IDDQD-authored invariants. Input is python3-saml tests/data/requests/authn_request.xml (MIT, not authored by IDDQD).
+corpus: python3-saml
+dataset: python3-saml-authn
+upstream_path: tests/data/requests/authn_request.xml
+filename: authn_request.xml
+analyzer: saml
+review_status: policy
+expect:
+  kind: saml
+  summary_min:
+    authn_requests: 1

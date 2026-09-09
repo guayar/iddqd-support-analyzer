@@ -1,6 +1,6 @@
 # User guide
 
-Short landing page: [README](../README.md). Architecture: [ARCHITECTURE.md](ARCHITECTURE.md). Changelog: [../CHANGELOG.md](../CHANGELOG.md). Version: [../VERSION](../VERSION).
+Short landing page: [README](../README.md). Architecture: [ARCHITECTURE.md](ARCHITECTURE.md). Third-party test data: [THIRD_PARTY_TEST_DATA.md](THIRD_PARTY_TEST_DATA.md). Changelog: [../CHANGELOG.md](../CHANGELOG.md). Version: [../VERSION](../VERSION).
 
 ## Why this exists
 
@@ -80,7 +80,7 @@ If only a certificate embedded in `ds:KeyInfo` is available, the analyzer can ve
 ### Log analysis
 
 - timestamp range detection, including RFC3164/syslog stamps without inventing a year
-- detected line severities: explicit source markers plus deterministic per-line classification (for example `Failed password` → WARN); this is not incident severity
+- detected line severities: explicit source markers plus deterministic per-line classification (for example `Failed password` → WARN); this is not incident severity. Explicit FATAL/CRITICAL/SEVERE markers are listed under **Notable line findings** (line number, source marker, Relevant log) before Incidents, even when incident details are truncated. Semantic WARN is not listed as an explicit source marker.
 - OpenSSH/auth.log patterns correlated by `sshd` PID. Reverse-DNS mismatch (`POSSIBLE BREAK-IN ATTEMPT`) alone is WARN, not a proven break-in; the same PID with failed authentication is ERROR. Brute-force roll-up is by source IP with a 15-minute gap (no global merge). Five or more attempts in 60 seconds, or ten or more in a slower cluster, are ERROR; five to nine slower attempts are suspected (WARN). `Connection closed` alone is not an incident. Incident totals are counted before the displayed list is truncated.
 - error/status code extraction
 - multiline incidents with Java exception chains and Maven `[ERROR]` blocks
@@ -306,6 +306,7 @@ PYTHONPATH=. python tests/test_analyzers.py
 PYTHONPATH=. python tests/test_log_incidents.py
 PYTHONPATH=. python tests/test_log_timestamps.py
 PYTHONPATH=. python tests/test_log_syslog_ssh.py
+PYTHONPATH=. python tests/test_regression_manifest.py
 PYTHONPATH=. python tests/test_signature_validation.py
 PYTHONPATH=. python tests/test_anonymizer_saml.py
 PYTHONPATH=. python tests/test_anonymize_xml_audit.py
@@ -320,12 +321,23 @@ PYTHONPATH=. python tests/test_vision.py
 
 The tests use synthetic SAML and log data only. Signature and anonymization tests generate ephemeral synthetic keys/certificates at runtime; no private key material is stored in the repository.
 
+Optional third-party regression corpora (Loghub, python3-saml fixtures) are **not** required for those tests and are not in git. Developers who want them:
+
+```bash
+python scripts/fetch_regression_data.py
+python scripts/run_regression_corpus.py
+```
+
+Attribution, licenses, and pins: [THIRD_PARTY_TEST_DATA.md](THIRD_PARTY_TEST_DATA.md).
+
 ## Project structure
 
 ```text
 .
 ├── analyzers/          # deterministic SAML and log engines; anonymizer is optional
-├── docs/               # user guide and architecture (landing README stays short)
+├── docs/               # user guide, architecture, third-party test-data notes
+├── scripts/            # git hooks; optional regression-corpus fetch/runner
+├── testdata/external/  # gitignored fetched corpora (see THIRD_PARTY_TEST_DATA.md)
 ├── tests/
 ├── actions.py          # Analyze use-case; Anonymize imported lazily
 ├── reporting.py        # markdown reports from analyzer JSON

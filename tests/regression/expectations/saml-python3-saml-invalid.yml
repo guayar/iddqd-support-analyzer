@@ -1,0 +1,10 @@
+# IDDQD-authored invariants. Input is python3-saml tests/data/responses/invalids/no_id.xml.base64 (MIT, not authored by IDDQD).
+corpus: python3-saml
+dataset: python3-saml-invalid-no-id
+upstream_path: tests/data/responses/invalids/no_id.xml.base64
+filename: no_id.xml.base64
+analyzer: saml
+review_status: policy
+expect:
+  kind: saml
+  must_not_crash_only: true

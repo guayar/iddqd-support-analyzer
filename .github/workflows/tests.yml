@@ -24,13 +24,14 @@ jobs:
           python -m pip install -r requirements.txt
 
       - name: Compile
-        run: python -m py_compile app.py actions.py chats.py config.py llm.py modules.py reporting.py uploads.py websearch.py vision.py analyzers/*.py tests/*.py
+        run: python -m py_compile app.py actions.py chats.py config.py llm.py modules.py reporting.py uploads.py websearch.py vision.py analyzers/*.py tests/*.py scripts/*.py
 
       - name: Run analyzer tests
         run: |
           PYTHONPATH=. python tests/test_log_incidents.py
           PYTHONPATH=. python tests/test_log_timestamps.py
           PYTHONPATH=. python tests/test_log_syslog_ssh.py
+          PYTHONPATH=. python tests/test_regression_manifest.py
           PYTHONPATH=. python tests/test_analyzers.py
           PYTHONPATH=. python tests/test_input_hardening.py
           PYTHONPATH=. python tests/test_signature_validation.py

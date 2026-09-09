@@ -106,6 +106,16 @@ BRUTE_FORCE_MIN_SESSIONS = 5
 BRUTE_FORCE_GAP_SECONDS = 15 * 60
 BRUTE_FORCE_RAPID_WINDOW_SECONDS = 60
 INCIDENT_RESULT_CAP = 100
+# Display caps for explicit source markers only (not semantic SSH_RULES).
+LINE_FINDING_CAPS = {
+    "FATAL": 200,
+    "CRITICAL": 100,
+    "SEVERE": 100,
+    "ERROR": 5,
+}
+LINE_FINDING_CONTEXT_LOOKBACK = 40
+LINE_FINDING_CONTEXT_MAX = 8
+_LINE_FINDING_ORDER = {"FATAL": 0, "CRITICAL": 1, "SEVERE": 2, "ERROR": 3}
 
 
 class _TsPolicy(NamedTuple):
@@ -314,6 +324,21 @@ def ssh_rule(line: str) -> tuple[str, str, str] | None:
 def _ssh_pid(line: str) -> str | None:
     m = SSHD_PID_RE.search(line)
     return m.group("pid") if m else None
+
+
+def _source_line_context(lines: list[str], idx: int, pid: str | None) -> list[str]:
+    """Same-PID lines up to and including the finding (1-based idx). Isolated line if no PID."""
+    if not pid:
+        return [lines[idx - 1]]
+    start = max(1, idx - LINE_FINDING_CONTEXT_LOOKBACK)
+    ctx = [
+        lines[i - 1]
+        for i in range(start, idx + 1)
+        if _ssh_pid(lines[i - 1]) == pid
+    ]
+    if not ctx:
+        return [lines[idx - 1]]
+    return ctx[-LINE_FINDING_CONTEXT_MAX:]
 
 
 def _ssh_ip(line: str) -> str | None:
@@ -754,7 +779,9 @@ def analyze_log_text(text: str, filename: str | None = None) -> dict[str, Any]:
     codes = collections.Counter()
 
     policy = _ts_policy(lines)
-    for line in lines:
+    line_findings: list[dict[str, Any]] = []
+    finding_shown = collections.Counter()
+    for idx, line in enumerate(lines, 1):
         ts = _parse_ts(line, policy)
         if ts:
             timestamps.append(ts)
@@ -763,19 +790,39 @@ def analyze_log_text(text: str, filename: str | None = None) -> dict[str, Any]:
             key = _syslog_sort_key(raw)
             if key:
                 syslog_stamps.append((key, raw))
+        source_level = None
         rec = log_record_prefix(line)
         if rec:
             levels[rec["level"]] += 1
+            source_level = rec["level"]
         else:
             colon = colon_severity(line)
             if colon:
                 levels[colon] += 1
+                source_level = colon
             else:
                 rule = ssh_rule(line)
                 if rule:
                     levels[_normalize_level(rule[0])] += 1
+        cap = LINE_FINDING_CAPS.get(source_level or "")
+        if cap and finding_shown[source_level] < cap:
+            finding_shown[source_level] += 1
+            pid = _ssh_pid(line)
+            rule = ssh_rule(line)
+            line_findings.append({
+                "line": idx,
+                "source_level": source_level,
+                "semantic_level": _normalize_level(rule[0]) if rule else None,
+                "kind": "explicit_source_marker",
+                "component": f"sshd[{pid}]" if pid else None,
+                "message": line,
+                "context": _source_line_context(lines, idx, pid),
+            })
         for code in _code_list(line):
             codes[code] += 1
+    line_findings.sort(
+        key=lambda f: (_LINE_FINDING_ORDER.get(f["source_level"] or "", 50), f["line"])
+    )
 
     if timestamps:
         time_range = {
@@ -850,6 +897,7 @@ def analyze_log_text(text: str, filename: str | None = None) -> dict[str, Any]:
         "timestamped_lines": len(timestamps) + (len(syslog_stamps) if not timestamps else 0),
         "time_range": time_range,
         "levels": dict(levels),
+        "line_findings": line_findings,
         "error_codes": dict(codes.most_common()),
         "error_event_count": len(events) + ssh_event_count,
         "incident_unique_count": incident_unique_count,
@@ -860,6 +908,7 @@ def analyze_log_text(text: str, filename: str | None = None) -> dict[str, Any]:
             "RFC3164/syslog stamps (`MMM d HH:mm:ss`) are used as written for time_range; a year is not invented when the source has none.",
             "OpenSSH/auth lines are correlated by sshd PID into authentication attempts; repeated attempts from one IP can raise a brute-force incident when the gap between attempts is at most 15 minutes. Five or more attempts in a 60-second window, or ten or more in a slower cluster, are ERROR; five to nine slower attempts are suspected (WARN). Connection closed by itself is not an error. Reverse-DNS mismatch is not treated as a proven break-in.",
             "Line severity counts mix explicit source markers with deterministic per-line classification; they are not the same as incident severity.",
+            "Explicit FATAL/CRITICAL/SEVERE source markers are listed under Notable line findings with source line numbers, independently of the incident display cap. A few explicit ERROR examples may be included; semantic WARN lines (for example Failed password) are not listed there.",
             "Incident totals are computed before the displayed list is truncated.",
             "Numeric dates such as 09/01/26 are treated as record boundaries; ISO time_range is filled only when day/month order is unambiguous in this log.",
             "Product-specific message IDs can be added as optional profiles when representative log samples are available.",

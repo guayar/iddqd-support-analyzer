@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented here.
 
+## [0.15.1] - 2026-09-09
+
+### Changed
+
+- Log report lists explicit FATAL/CRITICAL/SEVERE source markers under **Notable line findings** (source line, marker, PID context) before Incidents, independently of the incident-detail cap. `fatal:` is still not a CRITICAL incident. FATAL uses a distinct icon from ERROR
+- version bumped to `0.15.1`
+
+## [0.15.0] - 2026-09-09
+
+### Added
+
+- Optional third-party regression corpora (Loghub 2k samples, python3-saml fixtures) via a pinned manifest and `scripts/fetch_regression_data.py`. Files stay gitignored under `testdata/external`; unit tests do not require them. Attribution: `docs/THIRD_PARTY_TEST_DATA.md`
+- version bumped to `0.15.0`
+
 ## [0.14.1] - 2026-09-09
 
 ### Changed

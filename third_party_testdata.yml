@@ -1,0 +1,71 @@
+# IDDQD Support Analyzer — third-party regression corpus manifest.
+# This file is authored by IDDQD. The datasets it names are not.
+# External files are fetched locally and are not redistributed in this repository.
+
+version: 1
+external_root: testdata/external
+
+sources:
+  loghub:
+    name: Loghub
+    purpose: Heterogeneous public log samples for deterministic log-analyzer regression
+    upstream_repository: https://github.com/logpai/loghub
+    github_repo: logpai/loghub
+    upstream_ref: master
+    source_commit: dd61d0952749ee7963bde24220d1be5ede023033
+    license: other
+    license_spdx: NOASSERTION
+    license_name: Loghub dataset terms (research or academic work)
+    license_url: https://github.com/logpai/loghub/blob/dd61d0952749ee7963bde24220d1be5ede023033/LICENSE
+    license_file: LICENSE
+    citation_url: https://github.com/logpai/loghub/blob/dd61d0952749ee7963bde24220d1be5ede023033/CITATION
+    local_destination: testdata/external/loghub
+    redistribution_policy: local-only
+    notes: "Upstream LICENSE (verified 2026-09-09) allows research or academic work, requires the license notice on copies, and asks that usage refer to https://github.com/logpai/loghub and cite the ISSRE 2023 paper where applicable. Not MIT/Apache-2.0/CC. Zenodo full archives are not fetched. SoftManiaTech/sample_log_files is a fork; IDDQD uses logpai/loghub only."
+    files:
+      - upstream_path: LICENSE
+        sha256: 9ffa6ae259833cdc6e7ed8a0219fec72ef6455fb457b3c44096cb1ac1f0696d4
+      - upstream_path: CITATION
+        sha256: 4ea0e875e2b201b11e0c1ca9cdf0a1d10396c821a846304e05ad2e1f04eea35d
+      - upstream_path: OpenSSH/OpenSSH_2k.log
+        sha256: 1e4912727fa88245113d41b16a0cd25ceadba7f931e1c406542885b91254264f
+      - upstream_path: OpenSSH/README.md
+        sha256: 49ba1285a035cbc6928bb4446a925687f1835739f5cf76da55b1a65d765770fc
+      - upstream_path: Apache/Apache_2k.log
+        sha256: c7efa3eb686e3a96bd2f8f4457b2a7887e9cf2f3649327f1b4e87af841363ce8
+      - upstream_path: Apache/README.md
+        sha256: 48c1dfcbcaa2394768aa813c19a69a3086da5536498394b0069081e85dcbe583
+      - upstream_path: Linux/Linux_2k.log
+        sha256: b3e20bc1afe732ab1bf3ed1de4bf9c809e4194e02f7dea911d918e5342e8e173
+      - upstream_path: Linux/README.md
+        sha256: c79c90d192b4d3aab4559a75c9e84deb186acd092cfa35fae74c2eff47e530a8
+
+  python3-saml:
+    name: python3-saml test fixtures
+    purpose: Public SAML toolkit fixtures for deterministic SAML-analyzer regression
+    upstream_repository: https://github.com/SAML-Toolkits/python3-saml
+    github_repo: SAML-Toolkits/python3-saml
+    upstream_ref: master
+    source_commit: 52d2ac8da3f35262755f6e1c32ba7c62a6011fe1
+    license: MIT
+    license_spdx: MIT
+    license_name: MIT License
+    license_url: https://github.com/SAML-Toolkits/python3-saml/blob/52d2ac8da3f35262755f6e1c32ba7c62a6011fe1/LICENSE
+    license_file: LICENSE
+    copyright: Copyright (c) 2010-2022 OneLogin, Inc. Copyright (c) 2023 IAM Digital Services, SL.
+    local_destination: testdata/external/python3-saml
+    redistribution_policy: local-only
+    notes: "Fetched locally under MIT. Not IDDQD-authored. tests/certs and private keys are not fetched. Metadata XML may embed public X.509 certificates. Encrypted-assertion decryption samples are not in the default fetch list."
+    files:
+      - upstream_path: LICENSE
+        sha256: 4b46356797681888e14c42870a03f0cf4caae0e6c9d4a042adf0b8052548cc17
+      - upstream_path: tests/data/requests/authn_request.xml
+        sha256: d1753837985d5e0d4afe4b8f813d34a60bb1c760aff0d34697b4f54cb947f16e
+      - upstream_path: tests/data/requests/authn_request.xml.base64
+        sha256: 58ad7604da00ff388f144bfe9ae164e8b5062b7df12341debefe95476e43adcb
+      - upstream_path: tests/data/responses/valid_unsigned_response.xml
+        sha256: 9d23ff221c77f6478bfbd8a999bb2bd6ae2000e8588064fedfa81671c129ac5d
+      - upstream_path: tests/data/responses/invalids/no_id.xml.base64
+        sha256: 95627243808074b02c9df6ce1f90ee5d2278f17b0ab19745f9cafdcc3c1866cf
+      - upstream_path: tests/data/metadata/idp_metadata.xml
+        sha256: a1942fa209669c83153a735df6a7b0f791d61f57932ed5cced64fab799550c4b

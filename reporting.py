@@ -8,7 +8,11 @@ INCIDENT_REPORT_DETAIL_CAP = 30
 
 def _severity_icon(level: str) -> str:
     lv = (level or "").upper()
-    if lv in {"ERROR", "FATAL", "SEVERE", "CRITICAL"}:
+    if lv == "FATAL":
+        return "🛑"
+    if lv == "CRITICAL":
+        return "🔴"
+    if lv in {"ERROR", "SEVERE"}:
         return "❌"
     if lv in {"WARN", "WARNING"}:
         return "⚠️"
@@ -19,6 +23,13 @@ def _severity_icon(level: str) -> str:
     if lv == "TRACE":
         return "▫️"
     return "•"
+
+
+def _relevant_log_block(sample: str) -> str:
+    return (
+        "\n<details>\n<summary>Relevant log</summary>\n\n"
+        f"```text\n{sample}\n```\n\n</details>"
+    )
 
 
 def _severity_sort_key(level: str) -> tuple[int, str]:
@@ -402,6 +413,22 @@ def render_log_report(result: dict[str, Any]) -> str:
         out.extend(f"- `{k}` — {v} occurrence(s)" for k, v in list(result["error_codes"].items())[:40])
     else:
         out.append("- No explicit codes detected")
+    findings = result.get("line_findings") or []
+    if findings:
+        out.extend([
+            "\n## Notable line findings",
+            "Explicit source markers (for example `fatal:`). These are not incident severities.",
+        ])
+        for i, f in enumerate(findings, 1):
+            src = f.get("source_level") or "UNKNOWN"
+            out.append(f"\n### {i}. Explicit {src} source marker")
+            out.append(f"- **Source severity:** {_severity_icon(src)} {src}")
+            out.append(f"- **Line:** {f.get('line')}")
+            if f.get("component"):
+                out.append(f"- **Component:** `{f['component']}`")
+            ctx_lines = f.get("context") or ([f.get("message")] if f.get("message") else [])
+            sample = "\n".join(x for x in ctx_lines if x)[:50_000]
+            out.append(_relevant_log_block(sample))
     groups = result.get("incidents") or result.get("error_groups") or []
     unique = result.get("incident_unique_count", len(groups))
     out.append(f"\n## Incidents ({unique} unique; {result['error_event_count']} events)")
@@ -431,10 +458,7 @@ def render_log_report(result: dict[str, Any]) -> str:
             out.append("\n**Exception chain**\n")
             out.append("\n".join([f"`{short[0]}`"] + [f"→ `{c}`" for c in short[1:]]))
         sample = (g.get("sample") or "")[:50_000]
-        out.append(
-            "\n<details>\n<summary>Relevant log</summary>\n\n"
-            f"```text\n{sample}\n```\n\n</details>"
-        )
+        out.append(_relevant_log_block(sample))
         causes = g.get("causes") or []
         if causes:
             out.append(f"\n**Caused by ({len(causes)})**\n")

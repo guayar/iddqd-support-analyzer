@@ -10,7 +10,7 @@ from analyzers.logs import (
     ssh_rule,
     syslog_stamp,
 )
-from reporting import render_log_report
+from reporting import INCIDENT_REPORT_DETAIL_CAP, _severity_icon, render_log_report
 
 
 def _failed_password(pid: int, ip: str, stamp: str) -> str:
@@ -57,6 +57,22 @@ def test_lowercase_fatal_colon_does_not_create_critical_incident():
     assert sessions
     assert all(g["level"] != "CRITICAL" for g in r["incidents"])
     assert sessions[0]["level"] == "ERROR"
+    findings = [f for f in r["line_findings"] if f["source_level"] == "FATAL"]
+    assert len(findings) == 1
+    assert findings[0]["line"] == 1
+    assert findings[0]["kind"] == "explicit_source_marker"
+    assert findings[0]["component"] == "sshd[21]"
+    md = render_log_report(r)
+    assert "🛑 **FATAL:** 1" in md
+    assert "❌ **FATAL:**" not in md
+    assert "## Notable line findings" in md
+    assert md.index("## Notable line findings") < md.index("## Incidents")
+    assert "- **Line:** 1" in md
+    assert "<summary>Relevant log</summary>" in md
+    assert "fatal: Write failed: Connection reset by peer [preauth]" in md
+    assert _severity_icon("FATAL") != _severity_icon("ERROR")
+    assert _severity_icon("FATAL") == "🛑"
+    assert _severity_icon("ERROR") == "❌"
 
 
 def test_failed_password_semantic():
@@ -66,6 +82,10 @@ def test_failed_password_semantic():
     r = analyze_log_text(line + "\n")
     assert r["levels"].get("WARN", 0) >= 1
     assert r["error_event_count"] >= 1
+    assert not any(f["source_level"] == "WARN" for f in r.get("line_findings") or [])
+    md = render_log_report(r)
+    assert "Explicit WARN source marker" not in md
+    assert "## Notable line findings" not in md
 
 
 def test_authentication_failure_semantic():
@@ -265,6 +285,69 @@ def test_brute_force_from_repeated_source_ip():
     assert brute[0]["level"] == "ERROR"
 
 
+def test_fatal_finding_pid_context_excludes_other_pids():
+    text = (
+        "Dec 24 11:03:51 box sshd[25457]: pam_unix(sshd:auth): authentication failure; "
+        "logname= uid=0 euid=0 tty=ssh ruser= rhost=183.62.140.253  user=root\n"
+        "Dec 24 11:03:53 box sshd[25457]: Failed password for root from 183.62.140.253 port 53245 ssh2\n"
+        "Dec 24 11:03:53 box sshd[25457]: fatal: Write failed: Connection reset by peer [preauth]\n"
+        "Dec 24 11:03:53 box sshd[25463]: Failed password for root from 183.62.140.253 port 55138 ssh2\n"
+    )
+    r = analyze_log_text(text)
+    assert r["levels"].get("FATAL", 0) == 1
+    f = r["line_findings"][0]
+    assert f["line"] == 3
+    assert f["source_level"] == "FATAL"
+    assert f["component"] == "sshd[25457]"
+    ctx = "\n".join(f["context"])
+    assert "Failed password for root from 183.62.140.253 port 53245 ssh2" in ctx
+    assert "fatal: Write failed: Connection reset by peer [preauth]" in ctx
+    assert "sshd[25463]" not in ctx
+    md = render_log_report(r)
+    assert "sshd[25463]" not in md.split("## Incidents")[0]
+
+
+def test_fatal_finding_visible_past_incident_detail_cap():
+    lines = [
+        _failed_password(100 + i, f"10.0.0.{i + 1}", "Dec 24 06:55:46")
+        for i in range(40)
+    ]
+    lines.append(
+        "Dec 24 11:03:53 box sshd[99999]: Failed password for root from 10.9.9.9 port 53245 ssh2"
+    )
+    lines.append(
+        "Dec 24 11:03:53 box sshd[99999]: fatal: Write failed: Connection reset by peer [preauth]"
+    )
+    r = analyze_log_text("\n".join(lines) + "\n")
+    assert r["levels"]["FATAL"] == 1
+    assert r["levels"]["WARN"] == 41
+    assert r["incident_unique_count"] > INCIDENT_REPORT_DETAIL_CAP
+    findings = [f for f in r["line_findings"] if f["source_level"] == "FATAL"]
+    assert findings[0]["line"] == 42
+    md = render_log_report(r)
+    assert f"Showing first {INCIDENT_REPORT_DETAIL_CAP} incident details" in md
+    notable, _, _ = md.partition("## Incidents")
+    assert "## Notable line findings" in notable
+    assert "- **Line:** 42" in notable
+    assert "fatal: Write failed: Connection reset by peer [preauth]" in notable
+    assert "<summary>Relevant log</summary>" in notable
+    assert "Failed password for root from 10.9.9.9 port 53245 ssh2" in notable
+    assert "🛑 **FATAL:** 1" in md
+
+
+def test_explicit_critical_source_marker_is_notable():
+    line = "2026-09-09 10:00:00 CRITICAL datastore unavailable"
+    r = analyze_log_text(line + "\n")
+    assert r["levels"].get("CRITICAL", 0) == 1
+    assert r["line_findings"][0]["source_level"] == "CRITICAL"
+    assert r["line_findings"][0]["line"] == 1
+    assert r["line_findings"][0]["kind"] == "explicit_source_marker"
+    md = render_log_report(r)
+    assert "🔴 **CRITICAL:** 1" in md
+    assert "Explicit CRITICAL source marker" in md
+    assert _severity_icon("CRITICAL") == "🔴"
+
+
 if __name__ == "__main__":
     test_rfc3164_two_digit_day()
     test_rfc3164_one_digit_day_extra_whitespace()
@@ -287,4 +370,7 @@ if __name__ == "__main__":
     test_warn_auth_lines_can_aggregate_to_error_brute_force()
     test_display_cap_does_not_change_unique_count()
     test_brute_force_from_repeated_source_ip()
+    test_fatal_finding_pid_context_excludes_other_pids()
+    test_fatal_finding_visible_past_incident_detail_cap()
+    test_explicit_critical_source_marker_is_notable()
     print("LOG SYSLOG/SSH TESTS OK")

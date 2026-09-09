@@ -1,0 +1,15 @@
+# IDDQD-authored invariants. Input is Loghub OpenSSH/OpenSSH_2k.log (not authored by IDDQD).
+corpus: loghub
+dataset: OpenSSH
+upstream_path: OpenSSH/OpenSSH_2k.log
+filename: OpenSSH_2k.log
+analyzer: log
+review_status: policy
+expect:
+  kind: log
+  year_present: false
+  no_critical_incidents: true
+  when_text_contains:
+    "POSSIBLE BREAK-IN ATTEMPT":
+      levels_must_not_contain:
+        - CRITICAL

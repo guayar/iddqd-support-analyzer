@@ -1,0 +1,10 @@
+# IDDQD-authored invariants. Input is Loghub Apache/Apache_2k.log (not authored by IDDQD).
+# Timestamp extraction for Apache bracket dates is not asserted yet (analyzer may not fill time_range).
+corpus: loghub
+dataset: Apache
+upstream_path: Apache/Apache_2k.log
+filename: Apache_2k.log
+analyzer: log
+review_status: draft
+expect:
+  kind: log

@@ -30,7 +30,10 @@ env/
 
 # Runtime / generated data
 *.log
+!tests/fixtures/**/*.log
 logs/
+!tests/fixtures/logs/
+!tests/fixtures/logs/**
 uploads/
 output/
 outputs/
@@ -51,3 +54,7 @@ Thumbs.db
 *.tar
 *.tar.gz
 *.bak
+
+# Fetched third-party regression corpora (not authored by IDDQD)
+testdata/external/*
+!testdata/external/.gitkeep

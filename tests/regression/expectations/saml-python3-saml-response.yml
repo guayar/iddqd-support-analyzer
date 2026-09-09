@@ -1,0 +1,11 @@
+# IDDQD-authored invariants. Input is python3-saml tests/data/responses/valid_unsigned_response.xml (MIT, not authored by IDDQD).
+corpus: python3-saml
+dataset: python3-saml-response
+upstream_path: tests/data/responses/valid_unsigned_response.xml
+filename: valid_unsigned_response.xml
+analyzer: saml
+review_status: policy
+expect:
+  kind: saml
+  summary_min:
+    responses: 1

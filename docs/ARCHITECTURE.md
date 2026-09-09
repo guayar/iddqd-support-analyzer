@@ -2,7 +2,7 @@
 
 ## Design goal
 
-Short landing page: [../README.md](../README.md). User guide: [USER.md](USER.md).
+Short landing page: [../README.md](../README.md). User guide: [USER.md](USER.md). Third-party test data: [THIRD_PARTY_TEST_DATA.md](THIRD_PARTY_TEST_DATA.md).
 
 The core Analyzer is deterministic first. Protocol parsing, required-field checks, identifier comparisons, timestamps, endpoint mappings and validation findings are produced by code rather than delegated to the language model.
 
@@ -11,7 +11,8 @@ Gradio UI (app.py)
   │
   ├─ Analyze (always) ──> actions.analyze ──> analyzers/saml,logs ──> reporting
   │         └── Auto-detect routes each artifact; SAML files stay one correlated bundle
-  │         └── log incidents: source-line vs semantic-line vs correlated SSH incident severity; RFC3164/syslog + OpenSSH auth
+  │         └── log incidents: source-line vs semantic-line vs correlated SSH incident severity; RFC3164/syslog + OpenSSH auth; notable explicit FATAL/CRITICAL lines kept in the report independently of the incident-detail cap
+  │         └── optional fetched third-party corpora stay under testdata/external (not required to run Analyze)
   │         └── Clear resets uploads, paste, cert, report; mode and Assistant chat stay
   │
   ├─ Anonymize (optional module) ──> actions.anonymize (lazy) ──> analyzers/anonymizer
