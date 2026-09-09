@@ -38,8 +38,9 @@ CSS = """
     margin: 0 auto !important;
     padding: 18px 28px 42px !important;
 }
-.wrap:has(.error),
-.wrap:has(.validation-error) {
+.block .wrap.default:has(> .error),
+.block .wrap.center:has(> .error),
+.block .wrap.default:has(> .validation-error) {
     display: none !important;
 }
 .psa-page,

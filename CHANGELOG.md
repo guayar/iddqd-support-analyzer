@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## [0.13.9] - 2026-09-09
+
+### Fixed
+
+- Empty Analyze/Anonymize no longer hides the whole page. The timed toast stays; only the per-output Error overlay is suppressed.
+
+### Changed
+
+- version bumped to `0.13.9`
+
 ## [0.13.8] - 2026-09-09
 
 ### Added
