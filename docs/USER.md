@@ -12,7 +12,7 @@ Built to learn SAML and support-style log analysis by implementing the checks, i
 
 - raw `AuthnRequest`, `Response` and standalone `Assertion` XML
 - HTTP-POST Base64 decoding
-- HTTP-Redirect URL decoding, Base64 decoding and raw-DEFLATE decompression
+- HTTP-Redirect URL decoding, Base64 decoding and raw-DEFLATE decompression (output capped at `MAX_FILE_MB`)
 - download of each transport-decoded SAML document (raw XML, source filename preserved)
 - SP and IdP metadata parsing (`EntityDescriptor` / `EntitiesDescriptor`)
 - full Response and Assertion field extraction
@@ -250,6 +250,8 @@ ALLOW_REMOTE_LLM=false
 APP_PORT=7860
 MAX_FILE_MB=150
 ```
+
+`MAX_FILE_MB` also caps decompressed SAML from Redirect/Base64 (zlib, raw DEFLATE, gzip), including pasted text, not only uploaded files. Signature and anonymizer XML parsing disables DTDs, entity expansion and network fetches.
 
 `OLLAMA_*` settings apply only when Assistant or General Chat is enabled. `OLLAMA_MODEL` is the exact Ollama tag sent to `/api/chat` and shown on those tabs. It is not Qwen-only and is not read from the model file.
 

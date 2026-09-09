@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## [0.13.4] - 2026-09-09
+
+### Fixed
+
+- Signature-path SAML/metadata XML is parsed with the same hardened lxml settings as the anonymizer (no entity expansion, no network, no DTD, no huge trees)
+- Redirect/Base64 DEFLATE, zlib and gzip inflation is capped at `MAX_FILE_MB` (paste included), including the anonymizer decode path
+
+### Changed
+
+- version bumped to `0.13.4`
+
 ## [0.13.3] - 2026-09-09
 
 ### Fixed

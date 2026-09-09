@@ -13,6 +13,8 @@ from urllib.parse import parse_qsl, quote_plus, unquote, unquote_plus, urlencode
 
 from lxml import etree
 
+from .xml_safe import decompress_limited, lxml_fromstring
+
 # The anonymizer is deterministic within one run: repeated input values receive the
 # same pseudonym. SAML is handled structurally so protocol/namespace URIs are not
 # mistaken for customer domains.
@@ -539,7 +541,7 @@ def _decode_saml_payload(value: str) -> tuple[str, str] | None:
         payloads: list[tuple[bytes, str]] = [(raw, "BASE64")]
         for wbits in (-15, zlib.MAX_WBITS):
             try:
-                payloads.append((zlib.decompress(raw, wbits), "DEFLATE_BASE64"))
+                payloads.append((decompress_limited(raw, wbits), "DEFLATE_BASE64"))
             except Exception:
                 pass
         for payload, transport in payloads:
@@ -754,16 +756,8 @@ def _anonymize_saml_xml(xml: str, mapper: _Mapper) -> tuple[str, bool, dict[str,
     if "<!DOCTYPE" in xml.upper():
         return _anonymize_patterns(xml, mapper), False, {}
 
-    parser = etree.XMLParser(
-        resolve_entities=False,
-        no_network=True,
-        load_dtd=False,
-        remove_blank_text=False,
-        recover=False,
-        huge_tree=False,
-    )
     try:
-        root = etree.fromstring(xml.encode("utf-8"), parser=parser)
+        root = lxml_fromstring(xml)
     except Exception:
         return _anonymize_patterns(xml, mapper), False, {}
 

@@ -76,3 +76,5 @@ If metadata is unavailable but an embedded certificate is present, the analyzer 
 For SAML assertions and protocol messages, SAML Core 2.0 §5.4.2 is applied strictly: the signature must contain exactly one `ds:Reference`, and its URI must be the same-document fragment `#<ID>` of the signed SAML root element.
 
 Encrypted SAML content is a separate concern. `EncryptedAssertion` is detected, but decryption is not performed. Decryption would require the SP private key and is intentionally outside the signature-verification path.
+
+Untrusted SAML and metadata XML on the signature and anonymizer paths is parsed with entity resolution, DTDs and network access disabled. Transport inflation (Redirect DEFLATE / zlib / gzip) is capped at `MAX_FILE_MB`.

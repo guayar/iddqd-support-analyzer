@@ -6,6 +6,7 @@ import re
 from typing import Any
 
 from .saml import NS, _extract_candidates, _skip_xml_prologue
+from .xml_safe import lxml_fromstring
 
 DS_NS = "http://www.w3.org/2000/09/xmldsig#"
 MD_NS = "urn:oasis:names:tc:SAML:2.0:metadata"
@@ -160,7 +161,7 @@ def _parse_lxml_documents(text: str):
             continue
         xml = _skip_xml_prologue(candidate[start:].strip())
         try:
-            root = etree.fromstring(xml.encode("utf-8"))
+            root = lxml_fromstring(xml)
         except Exception:
             continue
 

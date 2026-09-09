@@ -14,6 +14,7 @@ from typing import Any
 from defusedxml import ElementTree as ET
 
 from .saml_validation import BEARER_METHOD, validate_saml
+from .xml_safe import decompress_limited
 
 NS = {
     "samlp": "urn:oasis:names:tc:SAML:2.0:protocol",
@@ -227,7 +228,7 @@ def _decode_saml_payload(value: str) -> list[tuple[str, str]]:
 
             for wbits, label in ((-15, "raw DEFLATE"), (zlib.MAX_WBITS, "zlib"), (16 + zlib.MAX_WBITS, "gzip")):
                 try:
-                    inflated = zlib.decompress(data, wbits)
+                    inflated = decompress_limited(data, wbits)
                 except Exception:
                     continue
                 xml = _decode_bytes_as_xml(inflated)
