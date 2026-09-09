@@ -12,6 +12,10 @@ All notable changes to this project are documented here.
 
 - version bumped to `0.12.1`
 
+### Docs
+
+- README, architecture and `config.example.env` describe any Ollama tag via `OLLAMA_MODEL`, Assistant screenshot/OCR limits, and that the UI label is the env string rather than a Qwen-only or file-embedded name
+
 ## [0.12.0] - 2026-09-09
 
 ### Added

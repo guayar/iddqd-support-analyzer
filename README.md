@@ -154,20 +154,21 @@ The anonymizer is not a certified DLP product; generated output should still be 
 
 Enable **Assistant and General Chat** on the Config tab, then restart. Requires local Ollama.
 
-The Assistant has no web-search path and no Mode switch. Ask it for technical help, a support-mail draft, or code in the same chat. Attach **local PNG/JPEG/WEBP screenshots** (terminal, stack traces, admin consoles). The model receives the original image plus a **local Tesseract OCR** extract, labeled as imperfect. The latest Analyze result is available here automatically. A muted **Model:** line next to the analysis-context status shows the configured `OLLAMA_MODEL` tag (startup only; no in-app switcher). **Clear analysis context** removes that report, screenshot OCR cache and resets the Assistant chat. General Chat never receives the report, images or OCR.
+The Assistant has no web-search path and no Mode switch. Ask it for technical help, a support-mail draft, or code in the same chat. Attach **local PNG/JPEG/WEBP screenshots** (terminal, stack traces, admin consoles; up to three per message). Original pixels go to Ollama when the model reports `vision`; a **local Tesseract OCR** extract is extra evidence and is labeled as imperfect. Follow-up turns without a new file re-send the last screenshot plus OCR. The latest Analyze result is available here automatically. A muted **Model:** line next to the analysis-context status shows the configured `OLLAMA_MODEL` tag (startup only; no in-app switcher). **Clear analysis context** removes that report, screenshot OCR cache and resets the Assistant chat. General Chat never receives the report, images or OCR.
 
-Ubuntu OCR: `sudo apt install tesseract-ocr tesseract-ocr-eng tesseract-ocr-pol`. Without Tesseract, screenshots still go to a vision-capable Ollama model.
+Ubuntu OCR: `sudo apt install tesseract-ocr tesseract-ocr-eng tesseract-ocr-pol`. Without Tesseract, screenshots still go to a vision-capable Ollama model. Without vision, OCR text can still be sent.
 
 ### General Chat (same optional LLM module)
 
-A deliberately separate web-enabled chat. It receives **no** Analyzer or Assistant context, including the Analyze report. Search queries are generated locally, sent to public search providers through `ddgs`, and the returned pages are summarized by the local model. A muted line shows `OLLAMA_MODEL` and that web search is enabled.
+A deliberately separate web-enabled chat. It receives **no** Analyzer or Assistant context, including the Analyze report, screenshots and OCR. Search queries are generated locally, sent to public search providers through `ddgs`, and the returned pages are summarized by the local model. A muted line shows `OLLAMA_MODEL` and that web search is enabled. Text only — no image upload.
 
 ## Known limitations / work in progress
 
 - Local Gradio app on `127.0.0.1` for my own workstation (including at work), not a packaged or multi-user product. Reports are heuristics plus spec-backed SAML checks, not a substitute for an IdP/SP vendor’s own validator.
 - `EncryptedAssertion` is detected, not decrypted. The anonymizer is useful, not DLP; shareable output still needs a human pass.
 - Log timestamps are treated as record boundaries when the shape is recognizable; numeric dates such as `09/01/26` do not get a calendar `time_range` unless the same log makes day/month order unambiguous.
-- Optional chats need local Ollama. Coverage grows from real traces and failing cases, not from claiming a complete SAML or logging catalogue.
+- Optional chats need local Ollama. The displayed model name is the `OLLAMA_MODEL` env tag, not a label from the weight file and not `ollama list`. Coverage grows from real traces and failing cases, not from claiming a complete SAML or logging catalogue.
+- Local OCR is imperfect. Prefer the screenshot when OCR and pixels disagree. Cloud OCR is not used.
 
 ## Privacy model
 
@@ -179,18 +180,20 @@ A deliberately separate web-enabled chat. It receives **no** Analyzer or Assista
 | General Chat (optional) | Yes | Yes | Non-sensitive public questions only |
 | Config | No | No | Which optional modules to load after restart |
 
-The application binds to `127.0.0.1` by default and blocks non-local model endpoints unless explicitly enabled.
+The application binds to `127.0.0.1` by default and blocks non-local model endpoints unless explicitly enabled. Loopback and RFC1918 Ollama URLs count as local; public cloud endpoints need `ALLOW_REMOTE_LLM=true`.
 
-Default UI is **Analyze** and **Config** only. Optional tabs appear only after they are enabled and the application is restarted.
+Default UI is **Analyze** and **Config** only. Optional tabs appear only after they are enabled and the application is restarted. Tab order with modules on: Analyze → Anonymize → Assistant → General Chat → Config.
 
 ## Requirements
 
 - Ubuntu / Linux
 - Python 3.12+
+- Optional LLM: [Ollama](https://ollama.com) plus any pulled model tag
+- Optional Assistant screenshots: `tesseract-ocr`, `tesseract-ocr-eng`, `tesseract-ocr-pol` (OCR only; vision still works without them)
 
-Ollama and a locally installed **Qwen** model (`OLLAMA_MODEL`, default `qwen3.6:27b`) are required only if the Assistant / General Chat module is enabled.
+Ollama is required only if the Assistant / General Chat module is enabled. Set `OLLAMA_MODEL` to the exact tag from `ollama list` (for example `qwen3.6:27b`, `gemma3`, `abc`). If the variable is unset, the process default is `qwen3.6:27b` — pulling a different model does not change that until you set the env and restart.
 
-The Analyzer and validators do not require a GPU or Ollama. Local chat uses whichever Qwen tag you pull in Ollama. Development and local inference were tested with `qwen3.6:27b` on an **AMD Radeon AI PRO R9700** dedicated to the model (desktop graphics on the iGPU).
+The Analyzer and validators do not require a GPU or Ollama. Development and local inference were tested with `qwen3.6:27b` on an **AMD Radeon AI PRO R9700** dedicated to the model (desktop graphics on the iGPU).
 
 ## Quick start
 
@@ -237,9 +240,9 @@ APP_PORT=7860
 MAX_FILE_MB=150
 ```
 
-`OLLAMA_*` settings apply only when the LLM module is enabled. `OLLAMA_MODEL` is a Qwen tag (default `qwen3.6:27b`).
+`OLLAMA_*` settings apply only when the LLM module is enabled. `OLLAMA_MODEL` is the exact Ollama tag sent to `/api/chat` and shown in Assistant / General Chat. It is not Qwen-only and is not read from the model file.
 
-Web-enabled General Chat settings (LLM module):
+Web-enabled General Chat (LLM module):
 
 ```text
 WEB_SEARCH_RESULTS=6
@@ -247,7 +250,15 @@ WEB_FETCH_RESULTS=3
 WEB_FETCH_CHARS=16000
 WEB_SEARCH_REGION=wt-wt
 WEB_SEARCH_BACKEND=auto
+```
+
+Assistant screenshots (LLM module; never sent to General Chat):
+
+```text
 ASSISTANT_IMAGE_MAX_MB=8
+ASSISTANT_IMAGE_MAX_PIXELS=12000000
+ASSISTANT_IMAGES_PER_MESSAGE=3
+OCR_TIMEOUT_SECONDS=5
 ```
 
 Optional basic authentication can be enabled with `BASIC_AUTH_USER` and `BASIC_AUTH_PASS`.
