@@ -1,0 +1,13 @@
+#!/bin/sh
+# Remove injected Cursor/agent Co-authored-by trailers from a git message file.
+# Used by commit-msg and prepare-commit-msg.
+set -eu
+file=${1:-}
+[ -n "$file" ] && [ -f "$file" ] || exit 0
+tmp="${file}.strip.$$"
+awk '
+  tolower($0) ~ /cursoragent@cursor\.com/ { next }
+  /^[Cc]o-authored-by:[[:space:]]*[Cc]ursor([[:space:]]|$)/ { next }
+  { print }
+' "$file" > "$tmp"
+mv "$tmp" "$file"
