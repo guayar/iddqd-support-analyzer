@@ -37,7 +37,8 @@ Input
   │
   ├─ *.log ───────> parse ──> group errors / codes / stacks ─────────> report
   │
-  └─ log anonymizer ──> deterministic pseudonymization ───────────────────> output
+  └─ log anonymizer ──> deterministic pseudonymization ──> anonymized copy
+            └── optional SAML XML audit: exact decoded XML (sensitive) + post-transform XML
 ```
 
 ## Security boundaries
@@ -52,7 +53,7 @@ Input
 - `.env`, local logs, generated mappings and credential material are excluded from version control.
 - Local certificate/key formats (`*.pem`, `*.crt`, `*.cer`, `*.der`, `*.key`, `*.p12`, `*.pfx`, keystores) are excluded from version control.
 - The standalone signing-certificate input accepts public X.509 certificates only; private keys are rejected.
-- The anonymizer is pattern-based and should not be treated as a certified DLP control. A residual leak scan runs on the anonymized text.
+- The anonymizer is pattern-based and should not be treated as a certified DLP control. A residual leak scan runs on the anonymized text. Original decoded SAML XML offered for QA contains source data and is not for external sharing.
 
 ## SAML validation model
 

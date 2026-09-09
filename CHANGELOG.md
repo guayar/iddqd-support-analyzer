@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## [0.13.8] - 2026-09-09
+
+### Added
+
+- Anonymize can download the exact decoded SAML XML inspected before transformation (sensitive, not for sharing) and the post-transform XML before re-encoding, named like `stem.response_01.decoded.xml`
+
+### Changed
+
+- version bumped to `0.13.8`
+
 ## [0.13.7] - 2026-09-09
 
 ### Fixed

@@ -48,9 +48,11 @@ assert "No explicit ERROR/FATAL/SEVERE/CRITICAL events detected." in log_report
 summary = render_anonymize_summary({"counts": {"IP": 1}, "replacements": 1})
 assert "**IP:** 1" in summary
 
-anon_md, anon_text, mapping, out_path = anonymize(None, "user 10.1.2.3 failed")
+anon_md, anon_text, mapping, out_path, decoded_dl, xml_dl = anonymize(None, "user 10.1.2.3 failed")
 assert "10.1.2.3" not in anon_text
 assert Path(out_path).read_text(encoding="utf-8") == anon_text
+assert decoded_dl is None
+assert xml_dl is None
 assert "IP_001" in anon_text
 assert '"mapping"' in mapping
 

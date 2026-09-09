@@ -506,6 +506,20 @@ def render_anonymize_summary(result: dict[str, Any]) -> str:
             summary.append(f"- … {len(residual) - 40} more")
     else:
         summary.append("No leftover email / IP / token / domain matches from the residual scan.")
+    audit = result.get("xml_audit_artifacts") or []
+    if audit:
+        summary.append("\n## SAML XML audit downloads")
+        summary.append(
+            "**Original decoded XML contains source data. Do not share those files.** "
+            "Use them only to verify decode → replace → anonymized XML. "
+            "The anonymized XML files are the post-transform documents (before re-encoding)."
+        )
+        for item in audit:
+            summary.append(
+                f"- `{item.get('decoded_export_name')}` — original decoded `{item.get('document_type')}` "
+                f"({item.get('transport')})"
+            )
+            summary.append(f"- `{item.get('anonymized_export_name')}` — after anonymization")
     summary.append(
         "\n> Stable pseudonyms are used within this run, e.g. the same IP always maps to the same `IP_###`. "
         "Review the preview before external sharing; this tool is not a certified DLP engine."

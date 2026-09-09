@@ -119,6 +119,14 @@ recompress when required
 Base64 / URL encode again
 ```
 
+After a run you can download three layers for QA:
+
+- the **full anonymized copy** (re-encoded Base64/Redirect when that was the input)
+- **original decoded XML** — exact bytes inspected before transformation; **contains source data, not for external sharing**
+- **anonymized XML** after the tree transform, before re-encoding
+
+Files are named `{source}.{type}_{nn}.decoded.xml` / `.anonymized.xml`. Multiple documents come as a zip. Original decoded files are labeled in the UI as sensitive.
+
 SAML is anonymized structurally rather than by applying generic domain regexes to the XML. This means standard protocol identifiers remain intact, including SAML URNs, XML namespaces, XML Schema URLs, XMLDSig namespaces, algorithms, bindings, NameID formats and AuthnContext values.
 
 The SAML-aware layer pseudonymizes values such as:
@@ -292,6 +300,7 @@ source .venv/bin/activate
 PYTHONPATH=. python tests/test_analyzers.py
 PYTHONPATH=. python tests/test_signature_validation.py
 PYTHONPATH=. python tests/test_anonymizer_saml.py
+PYTHONPATH=. python tests/test_anonymize_xml_audit.py
 PYTHONPATH=. python tests/test_saml_anonymizer.py
 PYTHONPATH=. python tests/test_layers.py
 PYTHONPATH=. python tests/test_nameid.py

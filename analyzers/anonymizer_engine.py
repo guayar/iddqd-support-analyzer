@@ -514,6 +514,75 @@ def _looks_like_saml_xml(text: str) -> bool:
     )
 
 
+_AUDIT_ROOT_RE = re.compile(
+    r"<(?:[A-Za-z_][\w.-]*:)?(AuthnRequest|Response|Assertion|LogoutRequest|LogoutResponse|"
+    r"EntityDescriptor|EntitiesDescriptor)\b",
+    re.I,
+)
+_AUDIT_SLUG = {
+    "AuthnRequest": "authnrequest",
+    "Response": "response",
+    "Assertion": "assertion",
+    "LogoutRequest": "logoutrequest",
+    "LogoutResponse": "logoutresponse",
+    "EntityDescriptor": "metadata",
+    "EntitiesDescriptor": "metadata",
+}
+
+
+def _audit_stem(source_name: str | None) -> str:
+    raw = (source_name or "pasted").strip()
+    if raw in {"pasted text", "pasted-log.txt"}:
+        return "pasted"
+    name = raw.replace("\\", "/").rsplit("/", 1)[-1]
+    stem = name.rsplit(".", 1)[0] if "." in name else name
+    stem = re.sub(r"[^A-Za-z0-9._-]+", "_", stem).strip("._")
+    return (stem or "pasted")[:80]
+
+
+def _document_type_from_xml(xml: str) -> str:
+    match = _AUDIT_ROOT_RE.search(xml or "")
+    if not match:
+        return "SAML"
+    found = match.group(1)
+    canonical = {name.lower(): name for name in _AUDIT_SLUG}
+    return canonical.get(found.lower(), found)
+
+
+def _append_xml_audit(
+    artifacts: list[dict[str, Any]],
+    seen: set[str],
+    decoded_xml: str,
+    anonymized_xml: str,
+    transport: str,
+) -> None:
+    if not decoded_xml or decoded_xml in seen:
+        return
+    seen.add(decoded_xml)
+    artifacts.append({
+        "transport": transport,
+        "document_type": _document_type_from_xml(decoded_xml),
+        "decoded_xml": decoded_xml,
+        "anonymized_xml": anonymized_xml,
+    })
+
+
+def _assign_xml_audit_names(items: list[dict[str, Any]], source_name: str | None) -> list[dict[str, Any]]:
+    stem = _audit_stem(source_name)
+    counts: dict[str, int] = {}
+    named: list[dict[str, Any]] = []
+    for item in items:
+        slug = _AUDIT_SLUG.get(str(item.get("document_type") or ""), "saml")
+        counts[slug] = counts.get(slug, 0) + 1
+        n = counts[slug]
+        row = dict(item)
+        row["source_name"] = source_name or "pasted text"
+        row["decoded_export_name"] = f"{stem}.{slug}_{n:02d}.decoded.xml"
+        row["anonymized_export_name"] = f"{stem}.{slug}_{n:02d}.anonymized.xml"
+        named.append(row)
+    return named
+
+
 def _decode_base64(value: str) -> bytes | None:
     compact = re.sub(r"\s+", "", value)
     if len(compact) < 16:
@@ -785,7 +854,12 @@ def _embedded_saml_spans(text: str) -> list[tuple[int, int]]:
     return sorted(outer)
 
 
-def _anonymize_embedded_saml_xml(text: str, mapper: _Mapper) -> tuple[str, int]:
+def _anonymize_embedded_saml_xml(
+    text: str,
+    mapper: _Mapper,
+    audit: list[dict[str, Any]],
+    seen: set[str],
+) -> tuple[str, int]:
     """Structurally anonymize SAML XML documents embedded in logs or multi-doc pastes.
 
     A tracer bundle is not one well-formed XML document, so a whole-input parse fails.
@@ -799,7 +873,9 @@ def _anonymize_embedded_saml_xml(text: str, mapper: _Mapper) -> tuple[str, int]:
     structured_count = 0
     for start, end in spans:
         pieces.append(text[last:start])
-        anonymized, structured, _stats = _anonymize_saml_xml(text[start:end], mapper)
+        original_xml = text[start:end]
+        anonymized, structured, _stats = _anonymize_saml_xml(original_xml, mapper)
+        _append_xml_audit(audit, seen, original_xml, anonymized, "embedded XML")
         pieces.append(anonymized)
         if structured:
             structured_count += 1
@@ -808,7 +884,12 @@ def _anonymize_embedded_saml_xml(text: str, mapper: _Mapper) -> tuple[str, int]:
     return "".join(pieces), structured_count
 
 
-def _anonymize_encoded_saml(text: str, mapper: _Mapper) -> tuple[str, int, set[str], int]:
+def _anonymize_encoded_saml(
+    text: str,
+    mapper: _Mapper,
+    audit: list[dict[str, Any]],
+    seen: set[str],
+) -> tuple[str, int, set[str], int]:
     changed = 0
     transports: set[str] = set()
     structured_count = 0
@@ -821,6 +902,7 @@ def _anonymize_encoded_saml(text: str, mapper: _Mapper) -> tuple[str, int, set[s
             return match.group(0)
         xml, transport = decoded
         anonymized_xml, structured, _stats = _anonymize_saml_xml(xml, mapper)
+        _append_xml_audit(audit, seen, xml, anonymized_xml, transport)
         if structured:
             structured_count += 1
         encoded = _encode_saml_payload(anonymized_xml, transport)
@@ -844,6 +926,7 @@ def _anonymize_encoded_saml(text: str, mapper: _Mapper) -> tuple[str, int, set[s
             return original
         xml, transport = decoded
         anonymized_xml, structured, _stats = _anonymize_saml_xml(xml, mapper)
+        _append_xml_audit(audit, seen, xml, anonymized_xml, transport)
         if structured:
             structured_count += 1
         changed += 1
@@ -854,7 +937,7 @@ def _anonymize_encoded_saml(text: str, mapper: _Mapper) -> tuple[str, int, set[s
     return out, changed, transports, structured_count
 
 
-def anonymize_text(text: str) -> dict[str, Any]:
+def anonymize_text(text: str, source_name: str | None = None) -> dict[str, Any]:
     """Return anonymized text plus deterministic mapping and summary.
 
     SAML-aware behavior:
@@ -872,11 +955,14 @@ def anonymize_text(text: str) -> dict[str, Any]:
     saml_transports: set[str] = set()
     structured_count = 0
     attempted_raw_saml = False
+    xml_audit: list[dict[str, Any]] = []
+    xml_audit_seen: set[str] = set()
 
     stripped = text.strip()
     if _looks_like_saml_xml(stripped) and stripped.startswith("<"):
         attempted_raw_saml = True
         saml_out, structured, _stats = _anonymize_saml_xml(stripped, mapper)
+        _append_xml_audit(xml_audit, xml_audit_seen, stripped, saml_out, "raw XML")
         if structured:
             left = text[: len(text) - len(text.lstrip())]
             right = text[len(text.rstrip()):]
@@ -888,9 +974,11 @@ def anonymize_text(text: str) -> dict[str, Any]:
         out = text
 
     if structured_count == 0:
-        out, encoded_saml_count, saml_transports, structured_encoded_count = _anonymize_encoded_saml(out, mapper)
+        out, encoded_saml_count, saml_transports, structured_encoded_count = _anonymize_encoded_saml(
+            out, mapper, xml_audit, xml_audit_seen
+        )
         structured_count += structured_encoded_count
-        out, embedded_count = _anonymize_embedded_saml_xml(out, mapper)
+        out, embedded_count = _anonymize_embedded_saml_xml(out, mapper, xml_audit, xml_audit_seen)
         structured_count += embedded_count
         if embedded_count:
             attempted_raw_saml = True
@@ -928,5 +1016,6 @@ def anonymize_text(text: str) -> dict[str, Any]:
         "structured_saml_payloads_anonymized": structured_count,
         "residual_findings": residual,
         "residual_count": len(residual),
+        "xml_audit_artifacts": _assign_xml_audit_names(xml_audit, source_name),
         "limitations": limitations,
     }

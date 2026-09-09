@@ -23,7 +23,7 @@ text, filename = read_text_file_and_paste(file_only, None)
 assert filename == "error.txt"
 assert "1.1.1.1" in text
 assert "10.9.8.7" not in text
-md, out, _mapping, _path = anonymize(file_only, "")
+md, out, _mapping, _path, _decoded, _xml = anonymize(file_only, "")
 assert "1.1.1.1" not in out
 assert "IP_" in out
 
@@ -31,7 +31,7 @@ assert "IP_" in out
 text, filename = read_text_file_and_paste(None, PASTE)
 assert filename is None
 assert "10.9.8.7" in text
-md, out, _mapping, _path = anonymize(None, PASTE)
+md, out, _mapping, _path, _decoded, _xml = anonymize(None, PASTE)
 assert "10.9.8.7" not in out
 
 # 3. paste then file — UI clears paste when a file is chosen

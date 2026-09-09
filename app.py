@@ -572,6 +572,14 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                             elem_id="anon-preview",
                         )
                         anon_download = gr.File(label="Download anonymized copy", interactive=False)
+                        anon_decoded_download = gr.File(
+                            label="Original decoded SAML (contains source data — do not share)",
+                            interactive=False,
+                        )
+                        anon_xml_download = gr.File(
+                            label="Anonymized SAML XML (after transform, before re-encode)",
+                            interactive=False,
+                        )
 
                         with gr.Accordion("Local replacement map — do NOT share this with the anonymized log", open=False):
                             anon_mapping = gr.Code(label="Mapping JSON", language="json")
@@ -581,7 +589,14 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                         anon_run.click(
                             anonymize,
                             inputs=[anon_file, anon_pasted],
-                            outputs=[anon_summary, anon_preview, anon_mapping, anon_download],
+                            outputs=[
+                                anon_summary,
+                                anon_preview,
+                                anon_mapping,
+                                anon_download,
+                                anon_decoded_download,
+                                anon_xml_download,
+                            ],
                         )
 
             if ASSISTANT_ON:

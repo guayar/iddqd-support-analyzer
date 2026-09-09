@@ -131,7 +131,28 @@ def write_decoded_artifact_download(result: dict[str, Any] | None) -> str | None
     return str(zip_path)
 
 
-def anonymize(file, pasted) -> tuple[str, str, str, str]:
+def write_anonymize_audit_download(
+    items: list[dict[str, Any]],
+    *,
+    xml_key: str,
+    name_key: str,
+    zip_name: str,
+) -> str | None:
+    if not items:
+        return None
+    out_dir = Path(tempfile.mkdtemp(prefix="iddqd_anon_audit_"))
+    if len(items) == 1:
+        path = out_dir / items[0][name_key]
+        path.write_bytes(items[0][xml_key].encode("utf-8"))
+        return str(path)
+    zip_path = out_dir / zip_name
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        for item in items:
+            zf.writestr(item[name_key], item[xml_key].encode("utf-8"))
+    return str(zip_path)
+
+
+def anonymize(file, pasted) -> tuple[str, str, str, str, str | None, str | None]:
     from analyzers.anonymizer import anonymize_text
     from reporting import render_anonymize_summary
 
@@ -139,7 +160,7 @@ def anonymize(file, pasted) -> tuple[str, str, str, str]:
     if not text.strip():
         raise InputError("Upload a log or paste text first.")
 
-    result = anonymize_text(text)
+    result = anonymize_text(text, source_name=filename or "pasted-log.txt")
     summary = render_anonymize_summary(result)
 
     base = Path(filename or "pasted-log.txt")
@@ -159,4 +180,17 @@ def anonymize(file, pasted) -> tuple[str, str, str, str]:
         indent=2,
         ensure_ascii=False,
     )
-    return summary, result["text"], mapping_json, str(out_path)
+    audit = list(result.get("xml_audit_artifacts") or [])
+    decoded_path = write_anonymize_audit_download(
+        audit,
+        xml_key="decoded_xml",
+        name_key="decoded_export_name",
+        zip_name="original-decoded-saml-SENSITIVE.zip",
+    )
+    anonymized_xml_path = write_anonymize_audit_download(
+        audit,
+        xml_key="anonymized_xml",
+        name_key="anonymized_export_name",
+        zip_name="anonymized-saml-xml.zip",
+    )
+    return summary, result["text"], mapping_json, str(out_path), decoded_path, anonymized_xml_path
