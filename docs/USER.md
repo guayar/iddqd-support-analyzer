@@ -343,4 +343,15 @@ The tests use synthetic SAML and log data only. Signature and anonymization test
 
 ## Versioning
 
-The project uses semantic versioning while it is pre-1.0. New functionality normally increments the minor version; compatibility fixes and focused improvements to an existing feature increment the patch version. Keep `VERSION`, README **Current version**, and the latest `CHANGELOG.md` heading in lockstep. The GitHub About box has no version number; refresh it only when capabilities change.
+The project uses semantic versioning while it is pre-1.0. New functionality normally increments the minor version; compatibility fixes and focused improvements to an existing feature increment the patch version.
+
+When behavior, UI, modules, env vars or security boundaries change, update docs in the same change:
+
+1. `VERSION`
+2. `CHANGELOG.md` — new heading matching `VERSION`
+3. `README.md` — short GitHub landing page only (`**Current version:**`, purpose, capability summary, start command, links into `docs/`). Finding-code catalogues, env dumps and install tables belong in this guide, not on the landing README.
+4. This file for user-facing detail. `docs/ARCHITECTURE.md` and `config.example.env` when architecture or env vars changed.
+
+The README `**Current version:**` string must equal `VERSION`. The latest changelog heading must equal `VERSION`. Do not bump the version for a docs-only follow-up of a change that already shipped that version; still fix stale wording.
+
+The GitHub About box has no version number. Refresh it only when user-facing functionality changes (new or removed modules, privacy/search/vision boundaries, what the tool is). Skip About for patch-only or docs-only version bumps.
