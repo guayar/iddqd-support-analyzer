@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## [0.13.10] - 2026-09-09
+
+### Changed
+
+- Display theme (Light / Dark / System) is remembered across application restarts (`UI_THEME` default plus browser storage). Gradio Screen Studio recording is disabled; run history is off.
+- version bumped to `0.13.10`
+
 ## [0.13.9] - 2026-09-09
 
 ### Fixed

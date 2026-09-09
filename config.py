@@ -20,3 +20,5 @@ ASSISTANT_IMAGE_MAX_BYTES = int(os.getenv("ASSISTANT_IMAGE_MAX_MB", "8")) * 1024
 ASSISTANT_IMAGE_MAX_PIXELS = int(os.getenv("ASSISTANT_IMAGE_MAX_PIXELS", "12000000"))
 ASSISTANT_IMAGES_PER_MESSAGE = int(os.getenv("ASSISTANT_IMAGES_PER_MESSAGE", "3"))
 OCR_TIMEOUT_SECONDS = int(os.getenv("OCR_TIMEOUT_SECONDS", "5"))
+_UI_THEME = os.getenv("UI_THEME", "system").strip().lower()
+UI_THEME = _UI_THEME if _UI_THEME in {"light", "dark", "system"} else "system"

@@ -50,6 +50,7 @@ Input
 - `OLLAMA_MODEL` is the process env tag (default `qwen3.6:27b` if unset). Chats display that string; they do not parse model-file metadata or `ollama list`.
 - Model endpoints must be loopback or RFC1918 unless `ALLOW_REMOTE_LLM=true`.
 - Screenshot/photo uploads are local files only (type/size/pixel limits, no URLs). Original pixels are sent to Ollama; OCR runs on a derived copy via local Tesseract. Assistant and General Chat use separate OCR caches and never copy attachments between tabs.
+- Gradio Screen Studio (browser-tab recording) is disabled. Run history is off so Analyze/Anonymize payloads are not stored in the Gradio runs UI.
 - `.env`, local logs, generated mappings and credential material are excluded from version control.
 - Local certificate/key formats (`*.pem`, `*.crt`, `*.cer`, `*.der`, `*.key`, `*.p12`, `*.pfx`, keystores) are excluded from version control.
 - The standalone signing-certificate input accepts public X.509 certificates only; private keys are rejected.

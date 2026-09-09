@@ -2,7 +2,7 @@ from pathlib import Path
 import base64
 
 from actions import analyze, anonymize
-from config import APP_VERSION
+from config import APP_VERSION, UI_THEME
 from llm import endpoint_is_local
 from reporting import render_anonymize_summary, render_log_report, render_saml_report
 from uploads import InputError
@@ -63,5 +63,6 @@ assert not endpoint_is_local("not-a-url")
 
 assert APP_VERSION == Path("VERSION").read_text(encoding="utf-8").strip()
 assert APP_VERSION
+assert UI_THEME in {"light", "dark", "system"}
 
 print("LAYER TESTS OK")

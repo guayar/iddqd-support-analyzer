@@ -257,9 +257,12 @@ OLLAMA_MODEL=qwen3.6:27b
 ALLOW_REMOTE_LLM=false
 APP_PORT=7860
 MAX_FILE_MB=150
+UI_THEME=system
 ```
 
 `MAX_FILE_MB` also caps decompressed SAML from Redirect/Base64 (zlib, raw DEFLATE, gzip), including pasted text, not only uploaded files. Signature and anonymizer XML parsing disables DTDs, entity expansion and network fetches.
+
+`UI_THEME` is `light`, `dark` or `system` (default). Choosing Light/Dark/System in Settings is stored in the browser and restored after a process restart. Gradio Screen Studio (tab recording) is disabled.
 
 `OLLAMA_*` settings apply only when Assistant or General Chat is enabled. `OLLAMA_MODEL` is the exact Ollama tag sent to `/api/chat` and shown on those tabs. It is not Qwen-only and is not read from the model file.
 

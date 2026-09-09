@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import html
+import json
 import os
 
 import gradio as gr
 
 from actions import analyze as run_analyze
 from actions import write_decoded_artifact_download
-from config import APP_PORT, APP_TITLE, APP_VERSION, MAX_FILE_MB, OLLAMA_MODEL
+from config import APP_PORT, APP_TITLE, APP_VERSION, MAX_FILE_MB, OLLAMA_MODEL, UI_THEME
 from modules import (
     PLUGIN_ANONYMIZE,
     PLUGIN_ASSISTANT,
@@ -41,6 +42,10 @@ CSS = """
 .block .wrap.default:has(> .error),
 .block .wrap.center:has(> .error),
 .block .wrap.default:has(> .validation-error) {
+    display: none !important;
+}
+.banner-wrap:has(.record-button),
+.banner-wrap:has(.beta-tag) {
     display: none !important;
 }
 .psa-page,
@@ -333,6 +338,46 @@ footer button.settings::before {{
 
 COPY_REPORT_JS = """
 () => {
+  const media = navigator.mediaDevices;
+  if (media && typeof media.getDisplayMedia === "function") {
+    media.getDisplayMedia = function () {
+      return Promise.reject(new DOMException("Screen recording is disabled.", "NotAllowedError"));
+    };
+  }
+
+  const themeKey = "iddqd-ui-theme";
+  const fallback = __UI_THEME__;
+  const url = new URL(window.location.href);
+  const fromUrl = url.searchParams.get("__theme");
+  if (fromUrl === "light" || fromUrl === "dark") {
+    try { localStorage.setItem(themeKey, fromUrl); } catch (e) {}
+  }
+  document.addEventListener("click", (event) => {
+    const btn = event.target && event.target.closest && event.target.closest(".theme-button");
+    if (!btn) return;
+    const label = (btn.textContent || "").trim().toLowerCase();
+    if (label === "light" || label === "dark" || label === "system") {
+      try { localStorage.setItem(themeKey, label); } catch (e) {}
+    }
+  }, true);
+  let saved = null;
+  try { saved = localStorage.getItem(themeKey); } catch (e) { saved = null; }
+  if (saved !== "light" && saved !== "dark" && saved !== "system") {
+    saved = fallback;
+  }
+  const current = fromUrl || "system";
+  if (saved === "system") {
+    if (fromUrl) {
+      url.searchParams.delete("__theme");
+      window.location.replace(url.toString());
+      return;
+    }
+  } else if (saved !== current) {
+    url.searchParams.set("__theme", saved);
+    window.location.replace(url.toString());
+    return;
+  }
+
   if (window.__psaCopyReportBound) return;
   window.__psaCopyReportBound = true;
   document.addEventListener("click", async (event) => {
@@ -366,7 +411,7 @@ COPY_REPORT_JS = """
     }, 1500);
   });
 }
-"""
+""".replace("__UI_THEME__", json.dumps(UI_THEME))
 
 COPY_REPORT_HTML = """
 <button type="button" id="psa-copy-report" class="psa-copy-report" title="Copy report" aria-label="Copy report">
@@ -751,4 +796,6 @@ if __name__ == "__main__":
         footer_links=["settings"],
         css=CSS,
         max_file_size=f"{MAX_FILE_MB}mb",
+        pwa=False,
+        run_history=False,
     )
