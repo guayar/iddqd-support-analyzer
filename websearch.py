@@ -5,8 +5,25 @@ import json
 from ddgs import DDGS
 
 from chats import _content_text
-from config import WEB_FETCH_CHARS, WEB_FETCH_RESULTS, WEB_SEARCH_REGION, WEB_SEARCH_RESULTS
+from config import WEB_FETCH_CHARS, WEB_FETCH_RESULTS, WEB_SEARCH_BACKEND, WEB_SEARCH_REGION, WEB_SEARCH_RESULTS
 from llm import complete
+
+# Text engines supported by ddgs 9.x. "auto"/"all" use every engine in this set.
+TEXT_SEARCH_BACKENDS = (
+    "brave",
+    "duckduckgo",
+    "google",
+    "grokipedia",
+    "mojeek",
+    "startpage",
+    "wikipedia",
+    "yahoo",
+)
+_BACKEND_ALIASES = {
+    "ddg": "duckduckgo",
+    "duck": "duckduckgo",
+    "wiki": "wikipedia",
+}
 
 
 def history_text(history, limit: int = 6) -> str:
@@ -52,8 +69,23 @@ LATEST REQUEST:
     return [message.strip()]
 
 
-def web_search(message: str, history) -> tuple[list[dict[str, str]], list[str]]:
+def resolve_search_backend(raw: str | None = None) -> str:
+    """Return a ddgs backend string: 'auto' or a comma-separated known engine list."""
+    text = (raw if raw is not None else WEB_SEARCH_BACKEND).strip().lower()
+    parts = [p.strip() for p in text.split(",") if p.strip()]
+    if not parts or "auto" in parts or "all" in parts:
+        return "auto"
+    ordered: list[str] = []
+    for part in parts:
+        name = _BACKEND_ALIASES.get(part, part)
+        if name in TEXT_SEARCH_BACKENDS and name not in ordered:
+            ordered.append(name)
+    return ",".join(ordered) if ordered else "auto"
+
+
+def web_search(message: str, history) -> tuple[list[dict[str, str]], list[str], str]:
     queries = search_queries(message, history)
+    backend = resolve_search_backend()
     merged: list[dict[str, str]] = []
     seen: set[str] = set()
     ddgs = DDGS(timeout=10)
@@ -65,7 +97,7 @@ def web_search(message: str, history) -> tuple[list[dict[str, str]], list[str]]:
                 region=WEB_SEARCH_REGION,
                 safesearch="moderate",
                 max_results=WEB_SEARCH_RESULTS,
-                backend="auto",
+                backend=backend,
             )
         except Exception:
             results = []
@@ -95,7 +127,7 @@ def web_search(message: str, history) -> tuple[list[dict[str, str]], list[str]]:
         except Exception:
             item["content"] = ""
 
-    return merged, queries
+    return merged, queries, backend
 
 
 def web_context(results: list[dict[str, str]]) -> str:
@@ -109,11 +141,14 @@ def web_context(results: list[dict[str, str]]) -> str:
     return "\n\n---\n\n".join(blocks)
 
 
-def source_footer(results: list[dict[str, str]], queries: list[str]) -> str:
+def source_footer(results: list[dict[str, str]], queries: list[str], backend: str | None = None) -> str:
     lines = ["\n\n---\n**Web sources used by this chat**"]
     for idx, item in enumerate(results, 1):
         safe_title = item["title"].replace("[", "\\[").replace("]", "\\]")
         lines.append(f"- [S{idx}] [{safe_title}]({item['url']})")
+    if backend:
+        engines = TEXT_SEARCH_BACKENDS if backend in {"auto", "all"} else tuple(x for x in backend.split(",") if x)
+        lines.append("\nSearch engines: " + ", ".join(f"`{name}`" for name in engines))
     if queries:
         lines.append(
             "\n<details><summary>Search queries sent to the web</summary>\n\n"

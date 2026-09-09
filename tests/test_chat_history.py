@@ -74,10 +74,28 @@ def test_websearch_history_text_uses_gradio_blocks():
     assert "The main issue is an expired certificate." in text
 
 
+def test_search_backend_resolution():
+    from websearch import resolve_search_backend, source_footer
+
+    assert resolve_search_backend("auto") == "auto"
+    assert resolve_search_backend("all") == "auto"
+    assert resolve_search_backend("google, brave, google, ddg") == "google,brave,duckduckgo"
+    assert resolve_search_backend("nope, bing") == "auto"
+    footer = source_footer(
+        [{"title": "Doc", "url": "https://example.com/doc"}],
+        ["saml bearer"],
+        "google,brave",
+    )
+    assert "`google`" in footer
+    assert "`brave`" in footer
+    assert "Search engines:" in footer
+
+
 if __name__ == "__main__":
     test_gradio_blocks_are_flattened()
     test_string_content_still_works()
     test_non_text_blocks_are_skipped()
     test_assistant_second_turn_includes_prior_turns_and_analyze_json()
     test_websearch_history_text_uses_gradio_blocks()
+    test_search_backend_resolution()
     print("CHAT HISTORY TESTS OK")

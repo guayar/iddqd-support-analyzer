@@ -89,9 +89,9 @@ def web_chat(message, history) -> str:
     if not (message or "").strip():
         return "Enter a question to search."
     try:
-        results, queries = web_search(message, history)
+        results, queries, backend = web_search(message, history)
     except Exception as e:
-        results, queries = [], [message]
+        results, queries, backend = [], [message], "auto"
         search_error = str(e)
     else:
         search_error = ""
@@ -104,9 +104,9 @@ def web_chat(message, history) -> str:
         msgs.append({"role": "user", "content": message})
         try:
             answer = complete(msgs)
-            return answer + source_footer(results, queries)
+            return answer + source_footer(results, queries, backend)
         except Exception as e:
-            return f"Local LLM error after successful web search: `{e}`" + source_footer(results, queries)
+            return f"Local LLM error after successful web search: `{e}`" + source_footer(results, queries, backend)
 
     msgs.append({
         "role": "system",

@@ -561,7 +561,8 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                     with gr.Column(elem_classes=["psa-shell"]):
                         gr.Markdown(
                             "### Web-enabled General Chat\n"
-                            "This tab is deliberately separate. It may send **search queries** to public search providers. "
+                            "This tab is deliberately separate. It may send **search queries** to public search providers "
+                            "(Google, Brave, DuckDuckGo, Wikipedia and others; see `WEB_SEARCH_BACKEND`). "
                             "It receives **no Analyzer or Assistant context**. Do not paste customer logs, credentials or other "
                             "sensitive data here; use **Assistant** for that.",
                             elem_classes=["psa-note"],

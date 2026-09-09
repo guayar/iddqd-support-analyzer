@@ -15,3 +15,4 @@ WEB_SEARCH_RESULTS = int(os.getenv("WEB_SEARCH_RESULTS", "6"))
 WEB_FETCH_RESULTS = int(os.getenv("WEB_FETCH_RESULTS", "3"))
 WEB_FETCH_CHARS = int(os.getenv("WEB_FETCH_CHARS", "16000"))
 WEB_SEARCH_REGION = os.getenv("WEB_SEARCH_REGION", "wt-wt")
+WEB_SEARCH_BACKEND = os.getenv("WEB_SEARCH_BACKEND", "auto").strip() or "auto"

@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## [0.11.23] - 2026-09-09
+
+### Added
+
+- General Chat search backends are configurable via `WEB_SEARCH_BACKEND` (`auto` or a comma list of ddgs text engines: Brave, DuckDuckGo, Google, Grokipedia, Mojeek, Startpage, Wikipedia, Yahoo). Default `auto` already queries that set. The reply footer lists the engines used.
+
+### Changed
+
+- version bumped to `0.11.23`
+
 ## [0.11.22] - 2026-09-08
 
 ### Added
