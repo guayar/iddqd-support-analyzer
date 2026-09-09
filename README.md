@@ -6,7 +6,7 @@ Early-stage AI-assisted project. Not a production product — I am building it t
 
 Local troubleshooting toolkit for SAML/SSO and log analysis. Optional anonymizer and local LLM chats.
 
-**Current version:** `0.12.0`
+**Current version:** `0.12.1`
 
 The core product is a local, deterministic SAML and log analyzer. It does not require Ollama. Optional modules (Anonymize, Assistant + General Chat) are enabled from the **Config** tab and load after a restart.
 
@@ -154,13 +154,13 @@ The anonymizer is not a certified DLP product; generated output should still be 
 
 Enable **Assistant and General Chat** on the Config tab, then restart. Requires local Ollama.
 
-The Assistant has no web-search path and no Mode switch. Ask it for technical help, a support-mail draft, or code in the same chat. Attach **local PNG/JPEG/WEBP screenshots** (terminal, stack traces, admin consoles). The model receives the original image plus a **local Tesseract OCR** extract, labeled as imperfect. The latest Analyze result is available here automatically. **Clear analysis context** removes that report, screenshot OCR cache and resets the Assistant chat. General Chat never receives the report, images or OCR.
+The Assistant has no web-search path and no Mode switch. Ask it for technical help, a support-mail draft, or code in the same chat. Attach **local PNG/JPEG/WEBP screenshots** (terminal, stack traces, admin consoles). The model receives the original image plus a **local Tesseract OCR** extract, labeled as imperfect. The latest Analyze result is available here automatically. A muted **Model:** line next to the analysis-context status shows the configured `OLLAMA_MODEL` tag (startup only; no in-app switcher). **Clear analysis context** removes that report, screenshot OCR cache and resets the Assistant chat. General Chat never receives the report, images or OCR.
 
 Ubuntu OCR: `sudo apt install tesseract-ocr tesseract-ocr-eng tesseract-ocr-pol`. Without Tesseract, screenshots still go to a vision-capable Ollama model.
 
 ### General Chat (same optional LLM module)
 
-A deliberately separate web-enabled chat. It receives **no** Analyzer or Assistant context, including the Analyze report. Search queries are generated locally, sent to public search providers through `ddgs`, and the returned pages are summarized by the local model.
+A deliberately separate web-enabled chat. It receives **no** Analyzer or Assistant context, including the Analyze report. Search queries are generated locally, sent to public search providers through `ddgs`, and the returned pages are summarized by the local model. A muted line shows `OLLAMA_MODEL` and that web search is enabled.
 
 ## Known limitations / work in progress
 

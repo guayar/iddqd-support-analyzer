@@ -15,9 +15,11 @@ Gradio UI (app.py)
   │
   ├─ Assistant (optional LLM module) ──> chats.assistant_chat ──> vision.py (local OCR) ──> llm.py
   │         └── latest Analyze result + optional screenshots; no websearch
+  │         └── muted OLLAMA_MODEL tag next to analysis-context status (not in the app header)
   │
   ├─ General Chat (optional LLM module) ──> chats.web_chat ──> websearch.py ──> llm.py
   │         └── never receives Analyze or Assistant context
+  │         └── muted OLLAMA_MODEL tag + web-search hint; same local model, no runtime switcher
   │
   └─ Config (always) ──> modules.py ──> .iddqd-modules.json + process restart
 

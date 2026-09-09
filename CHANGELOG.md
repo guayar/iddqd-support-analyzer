@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## [0.12.1] - 2026-09-09
+
+### Added
+
+- Assistant and General Chat show the configured `OLLAMA_MODEL` tag as muted secondary text (next to analysis-context status, and with a web-search hint in General Chat). Informational only; switching still happens at startup. The Analyze header does not show the model.
+
+### Changed
+
+- version bumped to `0.12.1`
+
 ## [0.12.0] - 2026-09-09
 
 ### Added

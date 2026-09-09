@@ -3,7 +3,8 @@ from __future__ import annotations
 import inspect
 from pathlib import Path
 
-from app import analyze, analyze_with_assistant, clear_assistant_context, send_to_assistant
+from app import analyze, analyze_with_assistant, clear_assistant_context, send_to_assistant, _hero_text
+from config import OLLAMA_MODEL
 from chats import assistant_system_prompt, empty_assistant_history, assistant_chat, web_chat
 
 analysis_a = {"kind": "saml", "case": "A", "findings": [{"code": "X"}]}
@@ -29,12 +30,21 @@ assert "Open in Assistant" not in plain
 assert "Attach latest analysis" not in plain
 assert "Support Mail" not in ui
 assert "psa-assistant-mode" not in ui
+assert "OLLAMA_MODEL" in ui
+assert "qwen3.6:27b" not in ui
+assert "qwen3.6:35b" not in ui
+assert "gemma4:31b" not in ui
+assert "Web search enabled" in ui
+assert OLLAMA_MODEL not in _hero_text()
+assert "Model:" not in _hero_text()
 
 # B: Analyze-with-assistant sync attaches that analysis and starts a clean chat.
 ctx, badge, history = send_to_assistant(analysis_a)
 assert ctx == analysis_a
 assert "Analysis context attached" in badge
 assert "psa-context-on" in badge
+assert f"Model: {OLLAMA_MODEL}" in badge
+assert "psa-model" in badge
 assert history == empty_assistant_history() == []
 attached = assistant_system_prompt(ctx)
 assert "ANALYZER OUTPUT" in attached
@@ -53,10 +63,11 @@ ctx, badge, history = clear_assistant_context()
 assert ctx is None
 assert "No analysis context attached" in badge
 assert "psa-context-off" in badge
+assert f"Model: {OLLAMA_MODEL}" in badge
 assert history == []
 assert "ANALYZER OUTPUT" not in assistant_system_prompt(ctx)
 
-# H: General Chat has no analysis argument.
+# H: General Chat has no analysis argument; model hint is informational only.
 assert "assistant_context" not in inspect.signature(web_chat).parameters
 assert "analysis_state" not in inspect.signature(web_chat).parameters
 

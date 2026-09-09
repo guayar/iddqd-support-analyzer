@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import html
 import os
 
 import gradio as gr
 
 from actions import analyze as run_analyze
 from actions import write_decoded_artifact_download
-from config import APP_PORT, APP_TITLE, APP_VERSION, MAX_FILE_MB
+from config import APP_PORT, APP_TITLE, APP_VERSION, MAX_FILE_MB, OLLAMA_MODEL
 from modules import (
     PLUGIN_ANONYMIZE,
     PLUGIN_LLM,
@@ -261,17 +262,33 @@ CSS = """
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
-    gap: 10px !important;
+    flex-wrap: wrap !important;
+    gap: 10px 18px !important;
     margin: 6px 0 2px 0 !important;
     font-size: 16px !important;
     font-weight: 500 !important;
     line-height: 1.3 !important;
+}
+.psa-context-status {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 10px !important;
 }
 .psa-context-light {
     width: 12px !important;
     height: 12px !important;
     border-radius: 50% !important;
     flex-shrink: 0 !important;
+}
+.psa-model {
+    font-size: 13px !important;
+    font-weight: 400 !important;
+    color: #6b7280 !important;
+    line-height: 1.3 !important;
+}
+.psa-llm-meta {
+    margin: 0 0 4px 0 !important;
+    text-align: center !important;
 }
 .psa-context-off {
     background: #9ca3af !important;
@@ -352,14 +369,21 @@ def _hero_text() -> str:
     )
 
 
+def _model_hint(extra: str = "") -> str:
+    suffix = f" · {html.escape(extra)}" if extra else ""
+    return f"<span class='psa-model'>Model: {html.escape(OLLAMA_MODEL)}{suffix}</span>"
+
+
 def _context_badge(attached) -> str:
     on = bool(attached)
     state = "on" if on else "off"
     label = "Analysis context attached" if on else "No analysis context attached"
     return (
         f"<p class='psa-context'>"
+        f"<span class='psa-context-status'>"
         f"<span class='psa-context-light psa-context-{state}' aria-hidden='true'></span>"
-        f"{label}</p>"
+        f"{label}</span>"
+        f"{_model_hint()}</p>"
     )
 
 
@@ -579,6 +603,9 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                             elem_classes=["psa-note"],
                         )
                         with gr.Column(elem_classes=["psa-chat"]):
+                            gr.HTML(
+                                f"<p class='psa-llm-meta'>{_model_hint('Web search enabled')}</p>"
+                            )
                             web_chatbot = gr.Chatbot(height=CHAT_HEIGHT, label="Chat", elem_id="web-chat")
                             gr.ChatInterface(fn=web_chat, chatbot=web_chatbot, save_history=False, fill_height=False)
 
