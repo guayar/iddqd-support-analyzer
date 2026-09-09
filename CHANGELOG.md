@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## [0.13.7] - 2026-09-09
+
+### Fixed
+
+- Analyze/Anonymize paste fields, report pane, copy button and Analyzer radio chips follow the Gradio theme instead of a forced white background (dark layout)
+
+### Changed
+
+- version bumped to `0.13.7`
+
 ## [0.13.6] - 2026-09-09
 
 ### Changed

@@ -107,14 +107,14 @@ CSS = """
     padding: 0 !important;
     border: 1px solid var(--border-color-primary) !important;
     border-radius: 6px !important;
-    background: white !important;
-    color: #4b5563 !important;
+    background: var(--block-background-fill) !important;
+    color: var(--body-text-color) !important;
     cursor: pointer !important;
     box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08) !important;
 }
 .psa-copy-report:hover {
-    color: #111827 !important;
-    border-color: #9ca3af !important;
+    color: var(--body-text-color) !important;
+    border-color: var(--color-accent) !important;
 }
 .psa-copy-report svg {
     width: 16px !important;
@@ -134,7 +134,8 @@ CSS = """
 #analysis {
     min-height: 210px !important;
     padding: 14px 48px 14px 16px !important;
-    background: white !important;
+    background: var(--block-background-fill) !important;
+    color: var(--body-text-color) !important;
     border: 1px solid var(--border-color-primary) !important;
     border-radius: 8px !important;
     overflow: auto !important;
@@ -170,12 +171,14 @@ CSS = """
     height: 198px !important;
     min-height: 198px !important;
     resize: none !important;
-    background: white !important;
+    background: var(--input-background-fill) !important;
+    color: var(--body-text-color) !important;
 }
 #anon-preview textarea {
     height: 480px !important;
     min-height: 480px !important;
-    background: white !important;
+    background: var(--input-background-fill) !important;
+    color: var(--body-text-color) !important;
 }
 .psa-shell .form,
 .psa-shell .panel,
@@ -224,7 +227,8 @@ CSS = """
     padding: 8px 12px !important;
     border: 1px solid var(--border-color-primary) !important;
     border-radius: 8px !important;
-    background: white !important;
+    background: var(--background-fill-primary) !important;
+    color: var(--body-text-color) !important;
     font-size: 14px !important;
     font-weight: 500 !important;
     line-height: 1.2 !important;
@@ -249,16 +253,16 @@ CSS = """
     margin: 0 !important;
     padding: 0 !important;
     flex-shrink: 0 !important;
-    border: 2px solid #9ca3af !important;
+    border: 2px solid var(--border-color-primary) !important;
     border-radius: 50% !important;
-    background: white !important;
+    background: var(--input-background-fill) !important;
     background-image: none !important;
     box-shadow: none !important;
     position: relative !important;
 }
 .psa-mode input[type="radio"]:checked {
     border-color: var(--color-accent) !important;
-    background-color: white !important;
+    background-color: var(--input-background-fill) !important;
     background-image: none !important;
 }
 .psa-mode input[type="radio"]:checked::after {
@@ -273,7 +277,7 @@ CSS = """
     transform: translate(-50%, -50%) !important;
 }
 .psa-restart-warn {
-    color: #b91c1c !important;
+    color: var(--error-text-color, #b91c1c) !important;
     font-weight: 600 !important;
 }
 .psa-assistant-controls {
