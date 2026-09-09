@@ -194,7 +194,8 @@ CSS = """
 .psa-shell > div {
     background: transparent;
 }
-.psa-primary {
+.psa-primary,
+.psa-clear {
     min-height: 48px !important;
     width: 100% !important;
 }
@@ -491,6 +492,14 @@ def analyze_with_assistant(files, pasted, mode, signing_cert_file=None):
     return markdown, raw_json, result, download, ctx, badge, history
 
 
+def clear_analyze():
+    return None, "", None, "", "", None, None
+
+
+def clear_analyze_with_assistant():
+    return (*clear_analyze(), None, _context_badge(None))
+
+
 def clear_assistant_context():
     from chats import empty_assistant_history
     from vision import SCOPE_ASSISTANT, clear_vision_cache
@@ -571,6 +580,7 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                         )
 
                     run = gr.Button("Analyze", variant="primary", elem_classes=["psa-primary"])
+                    clear_analyze_btn = gr.Button("Clear", elem_classes=["psa-clear"])
 
                     gr.Markdown(
                         "Standalone certificate upload is used only for SAML XML Signature verification. "
@@ -778,8 +788,28 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                     inputs=[files, pasted, mode, signing_cert],
                     outputs=[report, raw, analysis_state, decoded_download, assistant_context, context_badge, assistant_chatbot],
                 )
+                clear_analyze_btn.click(
+                    clear_analyze_with_assistant,
+                    inputs=[],
+                    outputs=[
+                        files,
+                        pasted,
+                        signing_cert,
+                        report,
+                        raw,
+                        analysis_state,
+                        decoded_download,
+                        assistant_context,
+                        context_badge,
+                    ],
+                )
             else:
                 run.click(analyze, inputs=[files, pasted, mode, signing_cert], outputs=[report, raw, analysis_state, decoded_download])
+                clear_analyze_btn.click(
+                    clear_analyze,
+                    inputs=[],
+                    outputs=[files, pasted, signing_cert, report, raw, analysis_state, decoded_download],
+                )
 
             demo.load(fn=None, js=COPY_REPORT_JS)
 

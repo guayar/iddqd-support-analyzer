@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## [0.13.11] - 2026-09-09
+
+### Added
+
+- Analyze **Clear** resets uploads, paste, optional signing certificate, report, decoded artifacts and JSON. Analyzer mode is left unchanged. If Assistant is on, the attached analysis is dropped; the chat transcript is not.
+
+### Changed
+
+- version bumped to `0.13.11`
+
 ## [0.13.10] - 2026-09-09
 
 ### Changed

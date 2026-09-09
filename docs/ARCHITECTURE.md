@@ -12,6 +12,7 @@ Gradio UI (app.py)
   ├─ Analyze (always) ──> actions.analyze ──> analyzers/saml,logs ──> reporting
   │         └── Auto-detect routes each artifact; SAML files stay one correlated bundle
   │         └── log incidents: multiline records + Java exception chains
+  │         └── Clear resets uploads, paste, cert, report; mode and Assistant chat stay
   │
   ├─ Anonymize (optional module) ──> actions.anonymize (lazy) ──> analyzers/anonymizer
   │
