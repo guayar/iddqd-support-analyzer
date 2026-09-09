@@ -2,6 +2,8 @@
 
 ## Design goal
 
+Short landing page: [../README.md](../README.md). User guide: [USER.md](USER.md).
+
 The core Analyzer is deterministic first. Protocol parsing, required-field checks, identifier comparisons, timestamps, endpoint mappings and validation findings are produced by code rather than delegated to the language model.
 
 ```text
