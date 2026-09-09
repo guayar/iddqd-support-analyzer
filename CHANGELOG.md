@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## [0.13.5] - 2026-09-09
+
+### Changed
+
+- Unexpected Gradio exceptions stay in the process terminal. Validation still uses in-app `gr.Error` (empty input, file too large).
+- version bumped to `0.13.5`
+
 ## [0.13.4] - 2026-09-09
 
 ### Fixed

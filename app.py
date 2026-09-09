@@ -719,7 +719,7 @@ if __name__ == "__main__":
         server_name="127.0.0.1",
         server_port=APP_PORT,
         auth=auth,
-        show_error=True,
+        show_error=False,
         footer_links=["settings"],
         css=CSS,
         max_file_size=f"{MAX_FILE_MB}mb",
