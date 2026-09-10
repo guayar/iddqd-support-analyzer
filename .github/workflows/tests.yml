@@ -36,6 +36,7 @@ jobs:
           PYTHONPATH=. python tests/test_log_syslog_ssh.py
           PYTHONPATH=. python tests/test_regression_manifest.py
           PYTHONPATH=. python tests/test_analyzers.py
+          PYTHONPATH=. python tests/test_saml_clock_skew.py
           PYTHONPATH=. python tests/test_input_hardening.py
           PYTHONPATH=. python tests/test_signature_validation.py
           PYTHONPATH=. python tests/test_anonymizer_residual.py

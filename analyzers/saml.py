@@ -13,7 +13,14 @@ from typing import Any
 
 from defusedxml import ElementTree as ET
 
-from .saml_validation import BEARER_METHOD, validate_saml
+from .saml_validation import (
+    BEARER_METHOD,
+    _now_utc,
+    _skew_note,
+    instant_expired,
+    instant_not_yet_valid,
+    validate_saml,
+)
 from .xml_safe import decompress_limited
 
 NS = {
@@ -755,25 +762,26 @@ def _bearer_in_response_to(assertion: dict[str, Any]) -> list[tuple[int, str | N
 
 def _time_checks(assertion: dict[str, Any]) -> list[dict[str, Any]]:
     checks = []
-    now = datetime.now(timezone.utc)
+    now = _now_utc()
     cond = assertion.get("conditions") or {}
     nb = _parse_time(cond.get("NotBefore"))
     noa = _parse_time(cond.get("NotOnOrAfter"))
+    skew_note = _skew_note()
     if nb:
         checks.append({
             "check": "Assertion Conditions NotBefore",
-            "status": "MATCH" if now >= nb else "MISMATCH",
+            "status": "MATCH" if not instant_not_yet_valid(now, nb) else "MISMATCH",
             "left": now.isoformat(),
             "right": cond.get("NotBefore"),
-            "note": "MATCH means the assertion is not premature at analyzer runtime. Clock skew is not applied by this validator.",
+            "note": "MATCH means the assertion is not premature at analyzer runtime. " + skew_note,
         })
     if noa:
         checks.append({
             "check": "Assertion Conditions NotOnOrAfter",
-            "status": "MATCH" if now < noa else "MISMATCH",
+            "status": "MATCH" if not instant_expired(now, noa) else "MISMATCH",
             "left": now.isoformat(),
             "right": cond.get("NotOnOrAfter"),
-            "note": "MATCH means the assertion has not expired at analyzer runtime. Clock skew is not applied by this validator.",
+            "note": "MATCH means the assertion has not expired at analyzer runtime. " + skew_note,
         })
     for idx, sc in enumerate((assertion.get("subject") or {}).get("confirmations") or [], 1):
         s_noa_s = (sc.get("data") or {}).get("NotOnOrAfter")
@@ -781,10 +789,10 @@ def _time_checks(assertion: dict[str, Any]) -> list[dict[str, Any]]:
         if s_noa:
             checks.append({
                 "check": f"SubjectConfirmation #{idx} NotOnOrAfter",
-                "status": "MATCH" if now < s_noa else "MISMATCH",
+                "status": "MATCH" if not instant_expired(now, s_noa) else "MISMATCH",
                 "left": now.isoformat(),
                 "right": s_noa_s,
-                "note": "MATCH means this subject confirmation has not expired at analyzer runtime. Clock skew is not applied.",
+                "note": "MATCH means this subject confirmation has not expired at analyzer runtime. " + skew_note,
             })
     return checks
 
@@ -1106,7 +1114,7 @@ def analyze_saml_input(text: str) -> dict[str, Any]:
             "A standard SAML Response contains Assertion XML directly; the analyzer decodes whole Base64 SAMLRequest/SAMLResponse payloads and standalone Base64 Assertions, but intentionally does not recursively decode arbitrary Base64 text nodes such as X509 certificates.",
             "EncryptedAssertion is detected but cannot be decrypted without the SP private key.",
             "EncryptedAttribute and EncryptedID are detected; XML Encryption algorithms and KeyInfo presence are reported, but plaintext is not recovered without the corresponding private key.",
-            "Time validity is evaluated against the analyzer machine's current UTC time and does not apply configurable clock skew yet; historical samples will therefore correctly appear expired today.",
+            "Time validity is evaluated against the analyzer machine's current UTC time with configurable clock skew (SAML_CLOCK_SKEW_SECONDS, default 120). The window is NotBefore minus skew through NotOnOrAfter plus skew. Set 0 for no extra tolerance. Traces that expired hours or years ago still expire.",
             "Standards validation combines SAML 2.0 Core requirements with Web Browser SSO profile rules where the supplied documents indicate an SSO Response. Binding-dependent checks are only hard errors when the binding can be inferred; otherwise they are warnings.",
         ],
     }

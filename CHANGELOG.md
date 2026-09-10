@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## [0.17.5] - 2026-09-10
+
+### Changed
+
+- SAML time checks apply configurable clock skew (`SAML_CLOCK_SKEW_SECONDS`, default 120) to Conditions, bearer confirmation, session, and metadata `validUntil`. `0` keeps a strict now comparison
+- version bumped to `0.17.5`
+
 ## [0.17.4] - 2026-09-10
 
 ### Changed

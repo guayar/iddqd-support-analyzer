@@ -9,6 +9,9 @@ OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3.6:27b")
 ALLOW_REMOTE_LLM = os.getenv("ALLOW_REMOTE_LLM", "false").lower() == "true"
 MAX_FILE_MB = int(os.getenv("MAX_FILE_MB", "50"))
+# SAML Conditions / bearer / session / metadata validUntil vs analyzer UTC.
+# Window is NotBefore − S … NotOnOrAfter + S. 0 = no extra tolerance.
+SAML_CLOCK_SKEW_SECONDS = max(0, int(os.getenv("SAML_CLOCK_SKEW_SECONDS", "120")))
 SIGNING_CERT_MAX_BYTES = 5 * 1024 * 1024
 APP_PORT = int(os.getenv("APP_PORT", "7860"))
 WEB_SEARCH_RESULTS = int(os.getenv("WEB_SEARCH_RESULTS", "6"))
