@@ -23,6 +23,18 @@ Default tabs: Analyze + Config. Order with everything on: Analyze → Anonymize 
 | Assistant | Local Ollama | No |
 | General Chat | Local Ollama | Yes (search queries) |
 
+## Demo
+
+Paste a log or a SAML tracer, Auto-detect, Analyze. Samples below are synthetic (`example.com` / documentation IPs).
+
+**OpenSSH / auth.log** — reverse-DNS warning, failed passwords, `fatal: Too many authentication failures`, brute-force roll-up:
+
+![Analyze OpenSSH log](docs/assets/analyze-demo.gif)
+
+**SAML** — AuthnRequest + Response + SP/IdP metadata with ACS, Audience and Recipient mismatches:
+
+![Analyze SAML with mismatches](docs/assets/analyze-saml-demo.gif)
+
 ## Start
 
 ```bash
