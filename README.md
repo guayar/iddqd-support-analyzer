@@ -4,11 +4,13 @@
 
 **Current version:** `0.15.2`
 
-Local workstation tool for SAML/SSO and `*.log` troubleshooting. The core **Analyze** path is deterministic (no Ollama). Optional modules load from **Config** after a restart. Early-stage, for a private Ubuntu box — not a packaged product.
+Local workstation tool for SAML/SSO and `*.log` troubleshooting. The core **Analyze** path is deterministic and does not use an LLM. Optional modules (anonymize, local chat) load from **Config** after a restart. Early-stage; built for my Ubuntu workstation, not a packaged product.
+
+I own the requirements, validation rules, tests and spec interpretation; implementation is AI-assisted.
 
 ## What it does
 
-- **Analyze** — decode SAML (POST/Redirect), check protocol/profile rules, XML signatures and metadata trust, correlate Request/Response/Assertion/metadata, parse Java/Maven/OpenSSH syslog-style logs, copy or clear the report
+- **Analyze** — SAML decoding (POST/Redirect), protocol/profile checks, XML signatures, metadata trust and Request/Response/Assertion correlation; Java/Maven/OpenSSH log parsing
 - **Anonymize** — local pseudonymization of logs and SAML so a copy can be shared (not DLP; review the residual leak scan)
 - **Assistant** — local Ollama only: support/tech help, screenshots + OCR, latest Analyze JSON; no web search
 - **General Chat** — separate module: local by default; public web search only when the turn needs current/external info
