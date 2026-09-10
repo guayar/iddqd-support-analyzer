@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import inspect
 import time
 
 from analyzers.log_ssh import SSH_SESSION_STORE_CAP, SshCorrelator, ssh_line_hint
 from analyzers.logs import (
     GROUP_STORE_CAP,
+    LINE_FAMILY_TYPES,
     LogScanTimeout,
     _looks_like_java_event,
     _split_record,
@@ -90,6 +92,14 @@ def test_scan_100k_repeated_apache_stays_under_budget():
     assert elapsed < 30, f"100k-line scan took {elapsed:.1f}s"
 
 
+def test_line_families_are_a_registry_not_named_branches():
+    assert SshCorrelator in LINE_FAMILY_TYPES
+    src = inspect.getsource(analyze_log_text)
+    assert "ssh_hit" not in src
+    assert "LINE_FAMILY_TYPES" in src
+    assert "fam.hint(line)" in src
+
+
 if __name__ == "__main__":
     test_ssh_hint_skips_non_sshd()
     test_prefix_parsed_once_shape()
@@ -98,4 +108,5 @@ if __name__ == "__main__":
     test_ssh_session_store_cap_counts_overflow_without_storing()
     test_scan_time_budget_aborts()
     test_scan_100k_repeated_apache_stays_under_budget()
+    test_line_families_are_a_registry_not_named_branches()
     print("LOG ENGINE TESTS OK")

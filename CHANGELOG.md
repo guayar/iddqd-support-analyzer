@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## [0.17.4] - 2026-09-10
+
+### Changed
+
+- Shared log scan dispatches stateful families through `LogFamily` / `LINE_FAMILY_TYPES` (hint, on_line, flush). OpenSSH is the first entry; new families append to the registry instead of adding named branches in `analyze_log_text`
+- version bumped to `0.17.4`
+
 ## [0.17.3] - 2026-09-10
 
 ### Changed

@@ -11,16 +11,25 @@ import re
 import sys
 import time
 from datetime import datetime
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, Protocol
 
-from .log_ssh import (
-    BRUTE_FORCE_GAP_SECONDS,
-    BRUTE_FORCE_RAPID_WINDOW_SECONDS,
-    SshCorrelator,
-    ssh_line_hint,
-    ssh_pid as _ssh_pid,
-    ssh_rule,
-)
+from .log_ssh import SshCorrelator, ssh_pid as _ssh_pid
+
+
+class LogFamily(Protocol):
+    """Stateful line family on the shared scan. Hints must stay cheap (substring / prefix)."""
+
+    def hint(self, line: str) -> bool: ...
+    def on_line(self, idx: int, line: str, stamp: str | None) -> None: ...
+    def flush(self) -> tuple[list[dict[str, Any]], int]: ...
+    def overflow_unique(self) -> int: ...
+    def line_rule(self, line: str) -> tuple[str, str, str] | None: ...
+    def finding_component(self, line: str) -> str | None: ...
+    def context_pid(self, line: str) -> str | None: ...
+
+
+# New SSH-style families: implement LogFamily, append here. Do not add a full-file pass.
+LINE_FAMILY_TYPES: tuple[type[LogFamily], ...] = (SshCorrelator,)
 
 
 class LogScanTimeout(Exception):
@@ -787,7 +796,7 @@ def analyze_log_text(
     line_findings: list[dict[str, Any]] = []
     finding_shown = collections.Counter()
     events = _ErrorEventAssembler()
-    ssh = SshCorrelator()
+    line_families: list[LogFamily] = [cls() for cls in LINE_FAMILY_TYPES]
     grouped: dict[tuple[str, str], dict[str, Any]] = {}
     unique_seen: set[tuple[str, str]] = set()
     event_count = 0
@@ -823,7 +832,9 @@ def analyze_log_text(
                     syslog_max = item
         source_level = None
         rule = None
-        ssh_hit = ssh_line_hint(line)
+        matched = [fam for fam in line_families if fam.hint(line)]
+        for fam in matched:
+            fam.on_line(idx, line, raw)
         if rec:
             levels[rec["level"]] += 1
             source_level = rec["level"]
@@ -832,22 +843,30 @@ def analyze_log_text(
             if colon:
                 levels[colon] += 1
                 source_level = colon
-            elif ssh_hit:
-                rule = ssh_rule(line)
-                if rule:
-                    levels[_normalize_level(rule[0])] += 1
+            else:
+                for fam in matched:
+                    rule = fam.line_rule(line)
+                    if rule:
+                        levels[_normalize_level(rule[0])] += 1
+                        break
         cap = LINE_FINDING_CAPS.get(source_level or "")
         if cap and finding_shown[source_level] < cap:
             finding_shown[source_level] += 1
-            pid = _ssh_pid(line) if ssh_hit else None
-            if rule is None and pid:
-                rule = ssh_rule(line)
+            pid = None
+            component = None
+            for fam in matched:
+                if pid is None:
+                    pid = fam.context_pid(line)
+                if component is None:
+                    component = fam.finding_component(line)
+                if rule is None:
+                    rule = fam.line_rule(line)
             line_findings.append({
                 "line": idx,
                 "source_level": source_level,
                 "semantic_level": _normalize_level(rule[0]) if rule else None,
                 "kind": "explicit_source_marker",
-                "component": f"sshd[{pid}]" if pid else None,
+                "component": component,
                 "message": line,
                 "context": _source_line_context(lines, idx, pid),
             })
@@ -873,11 +892,16 @@ def analyze_log_text(
             aux_counts[aux] += 1
         for ev in events.push(idx, line, rec, new_record):
             on_error_event(ev)
-        if ssh_hit:
-            ssh.on_line(idx, line, raw)
     for ev in events.finish():
         on_error_event(ev)
-    ssh_incidents, ssh_event_count = ssh.flush()
+    family_incidents: list[dict[str, Any]] = []
+    family_event_count = 0
+    family_overflow = 0
+    for fam in line_families:
+        inc, n = fam.flush()
+        family_incidents.extend(inc)
+        family_event_count += n
+        family_overflow += fam.overflow_unique()
     line_findings.sort(
         key=lambda f: (_LINE_FINDING_ORDER.get(f["source_level"] or "", 50), f["line"])
     )
@@ -904,7 +928,7 @@ def analyze_log_text(
         v["codes"] = dict(v["codes"])
         groups.append(v)
 
-    groups.extend(ssh_incidents)
+    groups.extend(family_incidents)
     groups.sort(
         key=lambda x: (
             0 if x.get("kind") == "brute_force" else 1,
@@ -913,7 +937,7 @@ def analyze_log_text(
         )
     )
     incident_unique_count = (
-        len(unique_seen) + len(ssh_incidents) + len(ssh.overflow_auth_pids)
+        len(unique_seen) + len(family_incidents) + family_overflow
     )
     shown = groups[:INCIDENT_RESULT_CAP]
     stored_occurrences = sum(codes.values())
@@ -950,7 +974,7 @@ def analyze_log_text(
         "vendor_code_list_truncated": unique_n > VENDOR_CODE_REPORT_CAP,
         "vendor_code_json_truncated": unique_n > VENDOR_CODE_JSON_CAP,
         "vendor_code_details": details_out,
-        "error_event_count": event_count + ssh_event_count,
+        "error_event_count": event_count + family_event_count,
         "incident_unique_count": incident_unique_count,
         "error_groups": shown,
         "incidents": shown,
@@ -963,6 +987,6 @@ def analyze_log_text(
             "Explicit FATAL/CRITICAL/SEVERE source markers are listed under Notable line findings with source line numbers, independently of the incident display cap. A few explicit ERROR examples may be included; semantic WARN lines (for example Failed password) are not listed there.",
             "Incident totals are computed before the displayed list is truncated. Stored incident details are capped; unique counts still include every signature.",
             "Numeric dates such as 09/01/26 are treated as record boundaries; ISO time_range is filled only when day/month order is unambiguous in this log.",
-            "A new log family should attach a cheap line hint and a correlator on the shared scan, not a separate full-file pass. Product-specific message IDs can be added as profiles when samples exist.",
+            "A new stateful log family implements LogFamily (cheap hint, on_line, flush) and is appended to LINE_FAMILY_TYPES. Do not add a separate full-file pass or a named branch in the shared scan. PREFIX-NUMBER vendors stay a single generic detector. Product-specific message IDs can be added as profiles when samples exist.",
         ],
     }

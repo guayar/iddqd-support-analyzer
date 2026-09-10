@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-from analyzers.logs import (
+from analyzers.log_ssh import (
     BRUTE_FORCE_GAP_SECONDS,
     BRUTE_FORCE_RAPID_WINDOW_SECONDS,
+    ssh_rule,
+)
+from analyzers.logs import (
     INCIDENT_RESULT_CAP,
     _parse_ts,
     analyze_log_text,
     colon_severity,
-    ssh_rule,
     syslog_stamp,
 )
 from reporting import INCIDENT_REPORT_DETAIL_CAP, _severity_icon, render_log_report

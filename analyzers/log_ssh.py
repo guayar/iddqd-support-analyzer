@@ -278,6 +278,22 @@ class SshCorrelator:
         self.sessions: dict[str, dict[str, Any]] = {}
         self.overflow_auth_pids: set[str] = set()
 
+    def hint(self, line: str) -> bool:
+        return ssh_line_hint(line)
+
+    def line_rule(self, line: str) -> tuple[str, str, str] | None:
+        return ssh_rule(line)
+
+    def finding_component(self, line: str) -> str | None:
+        pid = ssh_pid(line)
+        return f"sshd[{pid}]" if pid else None
+
+    def context_pid(self, line: str) -> str | None:
+        return ssh_pid(line)
+
+    def overflow_unique(self) -> int:
+        return len(self.overflow_auth_pids)
+
     def on_line(self, idx: int, line: str, stamp: str | None) -> None:
         pid = ssh_pid(line)
         if not pid:
