@@ -27,6 +27,10 @@ LEVEL_NAMES = r"TRACE|DEBUG|INFO|WARN(?:ING)?|ERROR|FATAL|SEVERE|CRITICAL"
 ERROR_LEVELS = {"ERROR", "FATAL", "SEVERE", "CRITICAL"}
 BRACKET_RE = re.compile(rf"^\[(?P<level>{LEVEL_NAMES})\](?P<rest>.*)$", re.I)
 TS_LEVEL_RE = re.compile(rf"^(?P<pad>\s+)(?P<level>{LEVEL_NAMES})\b")
+TS_BRACKET_LEVEL_RE = re.compile(
+    rf"^\s*\[(?P<level>{LEVEL_NAMES}|NOTICE)\](?P<rest>.*)$",
+    re.I,
+)
 BARE_ERROR_RE = re.compile(r"^(?P<level>ERROR|FATAL|SEVERE|CRITICAL)(?:[:\s]|$)")
 CAUSE_LINE_RE = re.compile(r"^(?P<prefix>Caused by:\s+)(?P<body>.+)$", re.I)
 SUPPRESSED_LINE_RE = re.compile(r"^(?P<prefix>Suppressed:\s+)(?P<body>.+)$", re.I)
@@ -598,7 +602,11 @@ def _timestamp_at_start(line: str) -> _PrefixSpan | None:
 
 def _normalize_level(level: str) -> str:
     level = level.upper()
-    return "WARN" if level == "WARNING" else level
+    if level == "WARNING":
+        return "WARN"
+    if level == "NOTICE":
+        return "INFO"
+    return level
 
 
 def _first_vendor_code(line: str) -> str | None:
@@ -671,6 +679,13 @@ def log_record_prefix(line: str) -> dict[str, Any] | None:
         lm = TS_LEVEL_RE.match(rest)
         if lm:
             return {"level": _normalize_level(lm.group("level")), "style": "timestamped", "rest": rest[lm.end():]}
+        bm_ts = TS_BRACKET_LEVEL_RE.match(rest)
+        if bm_ts:
+            return {
+                "level": _normalize_level(bm_ts.group("level")),
+                "style": "timestamp_bracket",
+                "rest": bm_ts.group("rest") or "",
+            }
         return None
     bm2 = BARE_ERROR_RE.match(stripped)
     if bm2:
@@ -709,14 +724,13 @@ def _is_stack_continuation(line: str) -> bool:
     return False
 
 
-def _split_events(lines: list[str]) -> list[dict[str, Any]]:
-    events: list[dict[str, Any]] = []
+def _iter_error_events(lines: list[str]):
     current: dict[str, Any] | None = None
 
     def flush():
         nonlocal current
         if current:
-            events.append(current)
+            yield current
             current = None
 
     for idx, line in enumerate(lines, 1):
@@ -725,11 +739,11 @@ def _split_events(lines: list[str]) -> list[dict[str, Any]]:
             if current and current.get("style") == "bracket" and _is_maven_advisory(line):
                 current["lines"].append(line)
                 continue
-            flush()
+            yield from flush()
             current = {"start_line": idx, "lines": [line], "level": rec["level"], "style": rec["style"]}
             continue
         if rec or _timestamp_at_start(line):
-            flush()
+            yield from flush()
             continue
         if current and len(current["lines"]) < MAX_EVENT_LINES and _is_stack_continuation(line):
             current["lines"].append(line)
@@ -737,9 +751,12 @@ def _split_events(lines: list[str]) -> list[dict[str, Any]]:
         if current and not line.strip():
             current["lines"].append(line)
             continue
-        flush()
-    flush()
-    return events
+        yield from flush()
+    yield from flush()
+
+
+def _split_events(lines: list[str]) -> list[dict[str, Any]]:
+    return list(_iter_error_events(lines))
 
 
 def _exc_class(body: str) -> str | None:
@@ -802,8 +819,10 @@ def _header_message(first_line: str) -> str:
         rest = (rec.get("rest") or "").strip()
         rest = re.sub(r"\s*->\s*\[Help\s+\d+\]\s*$", "", rest, flags=re.I)
         return rest
-    if rec and rec["style"] == "timestamped" and " : " in first_line:
-        return first_line.rsplit(" : ", 1)[-1].strip()
+    if rec and rec["style"] in {"timestamped", "timestamp_bracket"}:
+        if rec["style"] == "timestamped" and " : " in first_line:
+            return first_line.rsplit(" : ", 1)[-1].strip()
+        return (rec.get("rest") or "").strip()
     if rec and rec["style"] == "bare":
         return (rec.get("rest") or "").strip()
     return first_line.strip()
@@ -824,6 +843,8 @@ def _normalize_for_group(text: str) -> str:
     t = " ".join(text.split())
     t = re.sub(r"defined in file \[[^\]]+\]", "defined in file [<path>]", t)
     t = re.sub(r"\([^)]+\.java:\d+\)", "()", t)
+    t = re.sub(r"\[client [^\]]+\]", "[client <ip>]", t)
+    t = re.sub(r"\bchild \d+\b", "child <id>", t)
     return t[:500]
 
 
@@ -845,6 +866,8 @@ def _grouping_key(event: dict[str, Any], chain: dict[str, Any]) -> tuple[str, st
 def _incident_title(event: dict[str, Any], chain: dict[str, Any]) -> str:
     header = _meaningful_title(_header_message(event["lines"][0]))
     if header:
+        if event.get("style") == "timestamp_bracket":
+            return _normalize_for_group(header)
         return header
     if chain.get("root_cause"):
         titled = _meaningful_title(chain["root_cause"])
@@ -977,14 +1000,14 @@ def analyze_log_text(text: str, filename: str | None = None) -> dict[str, Any]:
     else:
         time_range = {"from": None, "to": None}
 
-    events = _split_events(lines)
-    t3 = _profile_log(t2, "split_events")
+    event_count = 0
     grouped: dict[tuple[str, str], dict[str, Any]] = {}
-    for ev in events:
+    for ev in _iter_error_events(lines):
+        event_count += 1
         chain = parse_java_exception_chain(ev["lines"])
         key = _grouping_key(ev, chain)
         sample = "\n".join(ev["lines"])[:SAMPLE_CHARS]
-        exit_m = EXIT_CODE_RE.search("\n".join(ev["lines"]))
+        exit_m = EXIT_CODE_RE.search(sample)
         entry = grouped.setdefault(key, {
             "signature": _incident_title(ev, chain),
             "count": 0,
@@ -1007,8 +1030,9 @@ def analyze_log_text(text: str, filename: str | None = None) -> dict[str, Any]:
             entry["top_exception"] = chain["top_exception"]
             entry["causes"] = chain["causes"]
             entry["exception_chain"] = chain["exception_chain"]
-        for c in _code_list("\n".join(ev["lines"])):
+        for c in _code_list(sample):
             entry["codes"][c] += 1
+    t3 = _profile_log(t2, "split_events")
 
     groups = []
     for v in grouped.values():
@@ -1061,12 +1085,12 @@ def analyze_log_text(text: str, filename: str | None = None) -> dict[str, Any]:
         "vendor_code_list_truncated": unique_n > VENDOR_CODE_REPORT_CAP,
         "vendor_code_json_truncated": unique_n > VENDOR_CODE_JSON_CAP,
         "vendor_code_details": details_out,
-        "error_event_count": len(events) + ssh_event_count,
+        "error_event_count": event_count + ssh_event_count,
         "incident_unique_count": incident_unique_count,
         "error_groups": shown,
         "incidents": shown,
         "limitations": [
-            "The analyzer groups multiline ERROR/FATAL/SEVERE/CRITICAL records, Java exception chains and Maven [ERROR] blocks using generic log heuristics.",
+            "A timestamp may be followed by a bracketed level (`[ts] [error] message`). Apache `notice` is counted as INFO and is not an incident. `crit` / `alert` / `emerg` are not mapped. Repeated messages are grouped on the text after the level; `[client …]` and `child <digits>` are treated as context, not identity. Trailing status numbers such as `error state 6` are kept distinct.",
             "RFC3164/syslog stamps (`MMM d HH:mm:ss`) are used as written for time_range; a year is not invented when the source has none. Oracle-style stamps with a weekday and a year (`Wed Jul 01 15:00:00 2026`) are calendar times.",
             "Vendor codes (ORA-01555, RMAN-03015, TNS-12500, and similar PREFIX-NUMBER) are taken from the start of a record after an optional timestamp, or from the message after an explicit log level. Tokens embedded later in the same line are ignored. Occurrence count is not importance. Codes are identifiers, not correlated incidents; Oracle messages are not classified from an error-number dictionary. The report lists a bounded subset when many distinct codes are present; family totals and unique/occurrence counts include all vendor codes.",
             "OpenSSH/auth lines are correlated by sshd PID into authentication attempts; repeated attempts from one IP can raise a brute-force incident when the gap between attempts is at most 15 minutes. Five or more attempts in a 60-second window, or ten or more in a slower cluster, are ERROR; five to nine slower attempts are suspected (WARN). Connection closed by itself is not an error. Reverse-DNS mismatch is not treated as a proven break-in.",

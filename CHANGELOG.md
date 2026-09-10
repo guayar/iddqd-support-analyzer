@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## [0.17.0] - 2026-09-10
+
+### Added
+
+- Log records may have a bracketed level after a timestamp (`[Sun Dec 04 04:47:44 2005] [error] …`). Repeated messages group on the text after the level; `[client …]` and `child <digits>` are context, not identity. Apache `notice` counts as INFO and is not an incident
+
+### Changed
+
+- version bumped to `0.17.0`
+
 ## [0.16.1] - 2026-09-10
 
 ### Changed

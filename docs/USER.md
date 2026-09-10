@@ -79,11 +79,11 @@ If only a certificate embedded in `ds:KeyInfo` is available, the analyzer can ve
 
 ### Log analysis
 
-- timestamp range detection, including RFC3164/syslog stamps without inventing a year, and Oracle alert stamps that already include a year (`Wed Jul 01 15:00:00 2026`)
+- timestamp range detection, including RFC3164/syslog stamps without inventing a year, Oracle alert stamps that already include a year (`Wed Jul 01 15:00:00 2026`), and a bracketed level after a timestamp (`[Sun Dec 04 04:47:44 2005] [error] …`)
 - detected line severities: explicit source markers plus deterministic per-line classification (for example `Failed password` → WARN); this is not incident severity. Explicit FATAL/CRITICAL/SEVERE markers are listed under **Notable line findings** (line number, source marker, Relevant log) before **Correlated incidents**, even when incident details are truncated. Semantic WARN is not listed as an explicit source marker.
 - OpenSSH/auth.log patterns correlated by `sshd` PID. Reverse-DNS mismatch (`POSSIBLE BREAK-IN ATTEMPT`) alone is WARN, not a proven break-in; the same PID with failed authentication is ERROR. Brute-force roll-up is by source IP with a 15-minute gap (no global merge). Five or more attempts in 60 seconds, or ten or more in a slower cluster, are ERROR; five to nine slower attempts are suspected (WARN). `Connection closed` alone is not an incident. Incident totals are counted before the displayed list is truncated.
 - vendor / status codes: `PREFIX-NUMBER` at the start of a record (after an optional timestamp) or after an explicit log level; family roll-up in the report. Occurrence count is not importance. The displayed list is bounded; unique and occurrence totals include all vendor codes. Tokens later in the same line are ignored. Not correlated incidents and not an Oracle error dictionary
-- correlated incidents: Java/Maven ERROR records and SSH sessions grouped by signature. Zero incidents with many vendor codes is a valid result
+- correlated incidents: Java/Maven ERROR records, SSH sessions, and timestamp-plus-bracket ERROR lines grouped by signature. Client addresses and `child <id>` in the message are treated as context. Apache `notice` is INFO, not an incident. Zero incidents with many vendor codes is a valid result
 - multiline incidents with Java exception chains and Maven `[ERROR]` blocks
 - root-cause extraction from `Caused by:` (not a separate incident)
 - first occurrence, numbered `Caused by` list, and a collapsible raw log sample
@@ -171,7 +171,7 @@ A deliberately separate web-enabled chat. It receives **no** Analyzer or Assista
 
 - Local Gradio app on `127.0.0.1` for a private workstation, not a packaged or multi-user product. Reports are heuristics plus spec-backed SAML checks, not a substitute for an IdP/SP vendor’s own validator. Unexpected runtime errors are in the process terminal; validation messages (empty input, oversize file) are a timed toast.
 - `EncryptedAssertion` is detected, not decrypted. The anonymizer is useful, not DLP; shareable output still needs a human pass.
-- Log timestamps are treated as record boundaries when the shape is recognizable; numeric dates such as `09/01/26` do not get a calendar `time_range` unless the same log makes day/month order unambiguous. RFC3164 stamps are shown as written (`Dec 24 06:55:46`); a year is not filled in when the source has none. Oracle-style stamps that already include a year are parsed as calendar times. Vendor codes are identifiers, not correlated incidents; occurrence count is not importance. `error:` in the text of an `ORA-` / `RMAN-` line is not a source ERROR.
+- Log timestamps are treated as record boundaries when the shape is recognizable; numeric dates such as `09/01/26` do not get a calendar `time_range` unless the same log makes day/month order unambiguous. RFC3164 stamps are shown as written (`Dec 24 06:55:46`); a year is not filled in when the source has none. Oracle-style stamps that already include a year are parsed as calendar times. A bracketed level after a timestamp (`[error]`, `[warn]`, …) is a source marker; Apache `notice` is counted as INFO. `crit` / `alert` / `emerg` are not mapped. Vendor codes are identifiers, not correlated incidents; occurrence count is not importance. `error:` in the text of an `ORA-` / `RMAN-` line is not a source ERROR.
 - Optional chats need local Ollama. Assistant and General Chat are independent Config modules. The displayed model name is the `OLLAMA_MODEL` env tag, not a label from the weight file and not `ollama list`. Coverage grows from real traces and failing cases, not from claiming a complete SAML or logging catalogue.
 - Local OCR is imperfect. Prefer the image when OCR and pixels disagree. Cloud OCR is not used. OCR text from General Chat may be used to build public search queries.
 - Chat transcripts are height-capped so they scroll in-pane; the prompt does not grow the page. Analyze still page-scrolls.
@@ -309,6 +309,7 @@ PYTHONPATH=. python tests/test_analyzers.py
 PYTHONPATH=. python tests/test_log_incidents.py
 PYTHONPATH=. python tests/test_log_timestamps.py
 PYTHONPATH=. python tests/test_log_oracle.py
+PYTHONPATH=. python tests/test_log_apache.py
 PYTHONPATH=. python tests/test_log_syslog_ssh.py
 PYTHONPATH=. python tests/test_regression_manifest.py
 PYTHONPATH=. python tests/test_signature_validation.py
