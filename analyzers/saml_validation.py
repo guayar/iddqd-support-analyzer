@@ -50,6 +50,11 @@ def instant_expired(now: datetime, not_on_or_after: datetime) -> bool:
     return now - _skew() >= not_on_or_after
 
 
+def instant_on_or_after(now: datetime, instant: datetime) -> bool:
+    """True if now has reached an exclusive upper bound (no clock skew)."""
+    return now >= instant
+
+
 def _skew_note() -> str:
     return f"Clock skew {_skew_seconds()}s (SAML_CLOCK_SKEW_SECONDS) is applied to both ends of the validity window."
 
@@ -875,16 +880,16 @@ def validate_saml(
                 issues.append(_issue("SESSION_NOTONORAFTER_INVALID", "ERROR", st_scope, "SessionNotOnOrAfter is not a valid timezone-aware dateTime.", observed=session_raw))
             elif session_raw and not _is_utc_time(session_raw):
                 issues.append(_issue("SESSION_NOTONORAFTER_NOT_UTC", "ERROR", st_scope, "SessionNotOnOrAfter must be expressed in UTC.", observed=session_raw, expected="UTC", standard="SAML Core 2.0 §1.3.3"))
-            elif session_noa and instant_expired(now, session_noa):
+            elif session_noa and instant_on_or_after(now, session_noa):
                 issues.append(_issue(
                     "SESSION_NOTONORAFTER_EXPIRED",
                     "WARNING",
                     st_scope,
                     "AuthnStatement SessionNotOnOrAfter has passed at analyzer runtime. For Web Browser SSO this is an upper bound on the SP security context derived from the assertion, not a required ACS reject of the Response.",
                     observed=session_raw,
-                    expected=f"> {now.isoformat()} with clock skew {_skew_seconds()}s",
+                    expected=f"> {now.isoformat()} (strict; clock skew does not apply)",
                     standard="SAML Core 2.0 §2.7.2 + Approved Errata E79; SAML Profiles 2.0 §4.1.4.3",
-                    note="Core OS said the IdP session MUST be considered ended; E79 replaced that with an upper bound and defers processing to profiles. Profiles say the security context SHOULD be discarded once this time is reached. There is no required relationship to Conditions NotOnOrAfter. SessionIndex remains an opaque string. " + _skew_note(),
+                    note="Core OS said the IdP session MUST be considered ended; E79 replaced that with an upper bound and defers processing to profiles. Profiles say the security context SHOULD be discarded once this time is reached. There is no required relationship to Conditions NotOnOrAfter. SessionIndex remains an opaque string. Profiles name clock skew only for bearer SubjectConfirmationData NotOnOrAfter, not for SessionNotOnOrAfter.",
                 ))
             if st.get("authn_context_class_ref") and not _valid_uri(st.get("authn_context_class_ref")):
                 issues.append(_issue("AUTHNCONTEXT_CLASSREF_INVALID", "ERROR", st_scope, "AuthnContextClassRef is not a valid URI.", observed=st.get("authn_context_class_ref"), standard="SAML Core 2.0 AuthnContext"))
@@ -991,16 +996,16 @@ def validate_saml(
             vudt = _parse_time(vu)
             if vudt is None:
                 issues.append(_issue("METADATA_VALIDUNTIL_INVALID", "ERROR", scope, "Metadata validUntil is not a valid timezone-aware dateTime.", observed=vu))
-            elif instant_expired(now, vudt):
+            elif instant_on_or_after(now, vudt):
                 issues.append(_issue(
                     "METADATA_EXPIRED",
                     "ERROR",
                     scope,
                     "Metadata has expired at analyzer runtime.",
                     observed=vu,
-                    expected=f"> {now.isoformat()} with clock skew {_skew_seconds()}s",
-                    standard="SAML Metadata 2.0 caching/validity rules",
-                    note=_skew_note(),
+                    expected=f"> {now.isoformat()} (strict; clock skew does not apply)",
+                    standard="SAML Metadata 2.0 validUntil",
+                    note="validUntil is document expiration, not a protocol message window. Clock skew (SAML_CLOCK_SKEW_SECONDS) applies to assertion Conditions and bearer confirmation, not metadata.",
                 ))
         if not md.get("roles"):
             issues.append(_issue("METADATA_NO_SSO_ROLE", "WARNING", scope, "EntityDescriptor contains no SPSSODescriptor or IDPSSODescriptor, so this SSO analyzer has no SSO role to validate."))

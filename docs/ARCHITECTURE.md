@@ -69,7 +69,7 @@ Validation is separated into four layers:
 3. **Signature and trust validation** — SAML XML Signature profile checks, same-document Reference validation, cryptographic signature/digest verification with public X.509 certificates, and comparison with matching metadata signing certificates.
 4. **Cross-document consistency** — comparisons between Request, Response, Assertion and supplied SP/IdP metadata.
 
-Time validity (Conditions, bearer `NotOnOrAfter`, `SessionNotOnOrAfter`, metadata `validUntil`) uses analyzer UTC with `SAML_CLOCK_SKEW_SECONDS` (default 120).
+Time validity for assertion Conditions and bearer `NotOnOrAfter` uses analyzer UTC with `SAML_CLOCK_SKEW_SECONDS` (default 120). `SessionNotOnOrAfter` and metadata `validUntil` are compared strictly.
 
 ### XML Signature trust model
 

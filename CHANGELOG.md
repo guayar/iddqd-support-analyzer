@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## [0.17.6] - 2026-09-10
+
+### Changed
+
+- Clock skew (`SAML_CLOCK_SKEW_SECONDS`) applies only to assertion Conditions and bearer `NotOnOrAfter`, matching SAML Profiles. `SessionNotOnOrAfter` and metadata `validUntil` are compared strictly
+- version bumped to `0.17.6`
+
 ## [0.17.5] - 2026-09-10
 
 ### Changed

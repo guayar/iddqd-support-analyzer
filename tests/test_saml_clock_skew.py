@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 from analyzers.saml import analyze_saml_input
-from analyzers.saml_validation import instant_expired, instant_not_yet_valid
+from analyzers.saml_validation import instant_expired, instant_not_yet_valid, instant_on_or_after
 
 NOW = datetime(2026, 9, 10, 12, 0, 0, tzinfo=timezone.utc)
 TZ = timezone.utc
@@ -91,6 +91,14 @@ def test_zero_skew_equals_raw_timestamps():
         assert instant_expired(NOW - timedelta(seconds=1), NOW) is False
 
 
+def test_instant_on_or_after_ignores_configured_skew():
+    with patch("config.SAML_CLOCK_SKEW_SECONDS", 120):
+        assert instant_on_or_after(NOW - timedelta(seconds=1), NOW) is False
+        assert instant_on_or_after(NOW, NOW) is True
+        assert instant_on_or_after(NOW + timedelta(seconds=1), NOW) is True
+        assert instant_expired(NOW + timedelta(seconds=30), NOW) is False
+
+
 def test_assertion_not_before_xml_minus_zero_plus_one():
     not_before = NOW
     far_noa = NOW + timedelta(hours=6)
@@ -122,38 +130,38 @@ def test_assertion_and_bearer_expiry_xml_minus_zero_plus_one():
             assert code in codes_p1, (skew, code)
 
 
-def test_session_expiry_xml_minus_zero_plus_one():
+def test_session_expiry_is_strict_regardless_of_skew():
     session_noa = NOW
     xml = _xml(
         nb=NOW - timedelta(hours=6),
         noa=NOW + timedelta(hours=6),
         session_noa=session_noa,
     )
-    for skew in (0, 1, 120):
-        edge = session_noa + timedelta(seconds=skew)
+    for skew in (0, 120):
         with patch("config.SAML_CLOCK_SKEW_SECONDS", skew):
-            codes_m1 = _codes(xml, now=edge - timedelta(seconds=1))
-            codes_0 = _codes(xml, now=edge)
-            codes_p1 = _codes(xml, now=edge + timedelta(seconds=1))
+            codes_m1 = _codes(xml, now=session_noa - timedelta(seconds=1))
+            codes_0 = _codes(xml, now=session_noa)
+            codes_p1 = _codes(xml, now=session_noa + timedelta(seconds=1))
+            codes_plus_30 = _codes(xml, now=session_noa + timedelta(seconds=30))
         assert "SESSION_NOTONORAFTER_EXPIRED" not in codes_m1, skew
         assert "SESSION_NOTONORAFTER_EXPIRED" in codes_0, skew
         assert "SESSION_NOTONORAFTER_EXPIRED" in codes_p1, skew
-        assert "ASSERTION_EXPIRED" not in codes_m1 | codes_0 | codes_p1
+        assert "SESSION_NOTONORAFTER_EXPIRED" in codes_plus_30, skew
+        assert "ASSERTION_EXPIRED" not in codes_m1 | codes_0 | codes_p1 | codes_plus_30
 
 
-def test_metadata_expiry_xml_minus_zero_plus_one():
+def test_metadata_expiry_is_strict_regardless_of_skew():
     live = _wide_open(noa=NOW + timedelta(hours=6))
     vu = NOW
-    for skew in (0, 1, 120):
-        edge = vu + timedelta(seconds=skew)
-        bundle = live + "\n\n" + SP_METADATA.format(vu=_iso(vu))
+    bundle = live + "\n\n" + SP_METADATA.format(vu=_iso(vu))
+    for skew in (0, 120):
         with patch("config.SAML_CLOCK_SKEW_SECONDS", skew):
-            codes_m1 = _codes(bundle, now=edge - timedelta(seconds=1))
-            codes_0 = _codes(bundle, now=edge)
-            codes_p1 = _codes(bundle, now=edge + timedelta(seconds=1))
+            codes_m1 = _codes(bundle, now=vu - timedelta(seconds=1))
+            codes_0 = _codes(bundle, now=vu)
+            codes_plus_30 = _codes(bundle, now=vu + timedelta(seconds=30))
         assert "METADATA_EXPIRED" not in codes_m1, skew
         assert "METADATA_EXPIRED" in codes_0, skew
-        assert "METADATA_EXPIRED" in codes_p1, skew
+        assert "METADATA_EXPIRED" in codes_plus_30, skew
 
 
 def test_hours_old_still_expires_with_default_skew():
@@ -170,7 +178,8 @@ if __name__ == "__main__":
     test_zero_skew_equals_raw_timestamps()
     test_assertion_not_before_xml_minus_zero_plus_one()
     test_assertion_and_bearer_expiry_xml_minus_zero_plus_one()
-    test_session_expiry_xml_minus_zero_plus_one()
-    test_metadata_expiry_xml_minus_zero_plus_one()
+    test_instant_on_or_after_ignores_configured_skew()
+    test_session_expiry_is_strict_regardless_of_skew()
+    test_metadata_expiry_is_strict_regardless_of_skew()
     test_hours_old_still_expires_with_default_skew()
     print("SAML CLOCK SKEW TESTS OK")

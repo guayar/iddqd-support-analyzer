@@ -1114,7 +1114,7 @@ def analyze_saml_input(text: str) -> dict[str, Any]:
             "A standard SAML Response contains Assertion XML directly; the analyzer decodes whole Base64 SAMLRequest/SAMLResponse payloads and standalone Base64 Assertions, but intentionally does not recursively decode arbitrary Base64 text nodes such as X509 certificates.",
             "EncryptedAssertion is detected but cannot be decrypted without the SP private key.",
             "EncryptedAttribute and EncryptedID are detected; XML Encryption algorithms and KeyInfo presence are reported, but plaintext is not recovered without the corresponding private key.",
-            "Time validity is evaluated against the analyzer machine's current UTC time with configurable clock skew (SAML_CLOCK_SKEW_SECONDS, default 120). The window is NotBefore minus skew through NotOnOrAfter plus skew. Set 0 for no extra tolerance. Traces that expired hours or years ago still expire.",
+            "Assertion Conditions and bearer SubjectConfirmationData use analyzer UTC with configurable clock skew (SAML_CLOCK_SKEW_SECONDS, default 120): NotBefore minus skew through NotOnOrAfter plus skew. Set 0 for no extra tolerance. SessionNotOnOrAfter and metadata validUntil are compared strictly (no skew). Traces that expired hours or years ago still expire.",
             "Standards validation combines SAML 2.0 Core requirements with Web Browser SSO profile rules where the supplied documents indicate an SSO Response. Binding-dependent checks are only hard errors when the binding can be inferred; otherwise they are warnings.",
         ],
     }
