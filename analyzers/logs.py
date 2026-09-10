@@ -22,6 +22,10 @@ from .log_ssh import (
     ssh_rule,
 )
 
+
+class LogScanTimeout(Exception):
+    """Log scan exceeded LOG_ANALYZE_MAX_SECONDS."""
+
 _TIME = r"[0-2]\d:[0-5]\d:[0-5]\d(?:[.,]\d+)?"
 _TZ = r"(?:Z|[+-]\d{2}:?\d{2})?"
 _MON = r"Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec"
@@ -76,6 +80,7 @@ VENDOR_EXAMPLE_REPORT_CAP = 8
 VENDOR_FAMILY_REPORT_CAP = 12
 VENDOR_AUX_JSON_CAP = 50
 GROUP_STORE_CAP = 2000
+LOG_ANALYZE_MAX_SECONDS = int(os.getenv("LOG_ANALYZE_MAX_SECONDS", "90"))
 MAX_EVENT_LINES = 500
 SAMPLE_CHARS = 50_000
 INLINE_EXC_RE = re.compile(
@@ -755,9 +760,15 @@ def _profile_log(t0: float, label: str) -> float:
     return now
 
 
-def analyze_log_text(text: str, filename: str | None = None) -> dict[str, Any]:
+def analyze_log_text(
+    text: str,
+    filename: str | None = None,
+    max_seconds: float | None = None,
+) -> dict[str, Any]:
     """One shared scan after an optional slash-date policy pass. New families: hint + correlator."""
     t0 = time.perf_counter()
+    budget = LOG_ANALYZE_MAX_SECONDS if max_seconds is None else max_seconds
+    deadline = (t0 + budget) if budget and budget > 0 else None
     lines = text.splitlines()
     levels = collections.Counter()
     codes = collections.Counter()
@@ -787,6 +798,11 @@ def analyze_log_text(text: str, filename: str | None = None) -> dict[str, Any]:
         _add_grouped_event(ev, grouped, unique_seen)
 
     for idx, line in enumerate(lines, 1):
+        if deadline is not None and idx % 4096 == 1 and time.perf_counter() > deadline:
+            raise LogScanTimeout(
+                f"Log scan exceeded {budget:g}s time budget at line {idx:,} of {len(lines):,}. "
+                "Raise LOG_ANALYZE_MAX_SECONDS or split the file."
+            )
         rec, new_record = _split_record(line)
         ts = _parse_ts(line, policy)
         if ts:
@@ -896,7 +912,9 @@ def analyze_log_text(text: str, filename: str | None = None) -> dict[str, Any]:
             x["first_line"],
         )
     )
-    incident_unique_count = len(unique_seen) + len(ssh_incidents)
+    incident_unique_count = (
+        len(unique_seen) + len(ssh_incidents) + len(ssh.overflow_auth_pids)
+    )
     shown = groups[:INCIDENT_RESULT_CAP]
     stored_occurrences = sum(codes.values())
     unique_n = len(codes)
@@ -940,7 +958,7 @@ def analyze_log_text(text: str, filename: str | None = None) -> dict[str, Any]:
             "A timestamp may be followed by a bracketed level (`[ts] [error] message`). Apache `notice` is counted as INFO and is not an incident. `crit` / `alert` / `emerg` are not mapped. Repeated messages are grouped on the text after the level; `[client …]` and `child <digits>` are treated as context, not identity. Trailing status numbers such as `error state 6` are kept distinct.",
             "RFC3164/syslog stamps (`MMM d HH:mm:ss`) are used as written for time_range; a year is not invented when the source has none. Oracle-style stamps with a weekday and a year (`Wed Jul 01 15:00:00 2026`) are calendar times.",
             "Vendor codes (ORA-01555, RMAN-03015, TNS-12500, and similar PREFIX-NUMBER) are taken from the start of a record after an optional timestamp, or from the message after an explicit log level. Tokens embedded later in the same line are ignored. Occurrence count is not importance. Codes are identifiers, not correlated incidents; Oracle messages are not classified from an error-number dictionary. The report lists a bounded subset when many distinct codes are present; family totals and unique/occurrence counts include all vendor codes.",
-            "OpenSSH/auth lines are correlated by sshd PID into authentication attempts; repeated attempts from one IP can raise a brute-force incident when the gap between attempts is at most 15 minutes. Five or more attempts in a 60-second window, or ten or more in a slower cluster, are ERROR; five to nine slower attempts are suspected (WARN). Connection closed by itself is not an error. Reverse-DNS mismatch is not treated as a proven break-in.",
+            "OpenSSH/auth lines are correlated by sshd PID into authentication attempts; repeated attempts from one IP can raise a brute-force incident when the gap between attempts is at most 15 minutes. Five or more attempts in a 60-second window, or ten or more in a slower cluster, are ERROR; five to nine slower attempts are suspected (WARN). Connection closed by itself is not an error. Reverse-DNS mismatch is not treated as a proven break-in. Stored SSH sessions are capped; authentication-event counts still include overflow PIDs.",
             "Line severity counts mix explicit source markers with deterministic per-line classification; they are not the same as incident severity. English `error:` inside an Oracle vendor-code message is not counted as a source ERROR.",
             "Explicit FATAL/CRITICAL/SEVERE source markers are listed under Notable line findings with source line numbers, independently of the incident display cap. A few explicit ERROR examples may be included; semantic WARN lines (for example Failed password) are not listed there.",
             "Incident totals are computed before the displayed list is truncated. Stored incident details are capped; unique counts still include every signature.",

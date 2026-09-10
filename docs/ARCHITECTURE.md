@@ -11,7 +11,7 @@ Gradio UI (app.py)
   │
   ├─ Analyze (always) ──> actions.analyze ──> analyzers/saml,logs ──> reporting
   │         └── Auto-detect routes each artifact; SAML files stay one correlated bundle
-  │         └── log scan: optional slash-date policy, then one sequential pass (prefix once; vendor/levels/events; OpenSSH correlator on `sshd[` hint). New families: hint + correlator, not a new full-file pass. RFC3164/syslog + Oracle alert stamps + `[ts] [error]` + Java/Maven events; vendor PREFIX-NUMBER at record start (identifiers, not incidents); bounded stored details, exact unique/occurrence totals
+  │         └── log scan: optional slash-date policy, then one sequential pass (prefix once; vendor/levels/events; OpenSSH correlator on `sshd[` hint). Stored groups/vendor details/SSH sessions are capped; unique/event counts stay exact. `LOG_ANALYZE_MAX_SECONDS` can abort a hang. Whole file is in RAM (`splitlines`). New families: hint + correlator, not a new full-file pass.
   │         └── optional fetched third-party corpora stay under testdata/external (not required to run Analyze)
   │         └── Clear resets uploads, paste, cert, report; mode and Assistant chat stay
   │

@@ -174,7 +174,7 @@ A deliberately separate web-enabled chat. It receives **no** Analyzer or Assista
 - Log timestamps are treated as record boundaries when the shape is recognizable; numeric dates such as `09/01/26` do not get a calendar `time_range` unless the same log makes day/month order unambiguous. RFC3164 stamps are shown as written (`Dec 24 06:55:46`); a year is not filled in when the source has none. Oracle-style stamps that already include a year are parsed as calendar times. A bracketed level after a timestamp (`[error]`, `[warn]`, …) is a source marker; Apache `notice` is counted as INFO. `crit` / `alert` / `emerg` are not mapped. Vendor codes are identifiers, not correlated incidents; occurrence count is not importance. `error:` in the text of an `ORA-` / `RMAN-` line is not a source ERROR.
 - Optional chats need local Ollama. Assistant and General Chat are independent Config modules. The displayed model name is the `OLLAMA_MODEL` env tag, not a label from the weight file and not `ollama list`. Coverage grows from real traces and failing cases, not from claiming a complete SAML or logging catalogue.
 - Local OCR is imperfect. Prefer the image when OCR and pixels disagree. Cloud OCR is not used. OCR text from General Chat may be used to build public search queries.
-- Chat transcripts are height-capped so they scroll in-pane; the prompt does not grow the page. Analyze still page-scrolls.
+- Log analysis loads the whole file into memory (`splitlines()`). That is a deliberate workstation limit, not a streaming engine. Default `MAX_FILE_MB` is 50; a 150 MB log can take minutes and may hit a reverse-proxy timeout. `LOG_ANALYZE_MAX_SECONDS` (default 90, `0` disables) aborts a pathological scan with a toast. `IDDQD_LOG_PROFILE=1` prints phase timings on stderr.
 
 ## Privacy model
 
@@ -259,13 +259,16 @@ OLLAMA_URL=http://127.0.0.1:11434
 OLLAMA_MODEL=qwen3.6:27b
 ALLOW_REMOTE_LLM=false
 APP_PORT=7860
-MAX_FILE_MB=150
+MAX_FILE_MB=50
+LOG_ANALYZE_MAX_SECONDS=90
 UI_THEME=system
 ```
 
 `MAX_FILE_MB` also caps decompressed SAML from Redirect/Base64 (zlib, raw DEFLATE, gzip), including pasted text, not only uploaded files. Signature and anonymizer XML parsing disables DTDs, entity expansion and network fetches.
 
-`IDDQD_LOG_PROFILE=1` prints log-analyzer phase timings on stderr (policy, line scan, event split, SSH).
+`LOG_ANALYZE_MAX_SECONDS` (default 90, `0` = no cap) bounds wall time of a log scan. Size and time are not the same: a repetitive 10 MB file is cheap, a high-diversity SSH/auth log of the same size is not.
+
+`IDDQD_LOG_PROFILE=1` prints log-analyzer phase timings on stderr (slash-date policy, shared scan, total).
 
 `UI_THEME` is `light`, `dark` or `system` (default). Choosing Light/Dark/System in Settings is stored in the browser and restored after a process restart. Gradio Screen Studio (tab recording) is disabled.
 

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from analyzers import analyze_log_text, analyze_saml_input
+from analyzers.logs import LogScanTimeout
 from analyzers.saml import decoded_artifacts_for_named_inputs, looks_like_saml_input, saml_root_types
 from analyzers.saml_supplied_cert import extract_pem_certificates_from_text
 from reporting import render_log_report, render_mixed_report, render_saml_output
@@ -65,7 +66,10 @@ def _run_saml(artifacts: list[tuple[str, str]], signing_cert_file, all_artifacts
 
 def _run_log(artifacts: list[tuple[str, str]]):
     names = [name for name, _text in artifacts if name != "pasted text"]
-    return analyze_log_text(join_analyze_artifacts(artifacts), filename=", ".join(names) if names else None)
+    try:
+        return analyze_log_text(join_analyze_artifacts(artifacts), filename=", ".join(names) if names else None)
+    except LogScanTimeout as e:
+        raise InputError(str(e)) from e
 
 
 def analyze(files, pasted, mode, signing_cert_file=None) -> tuple[str, str, dict[str, Any]]:

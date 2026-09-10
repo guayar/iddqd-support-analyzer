@@ -12,6 +12,7 @@ BRUTE_FORCE_GAP_SECONDS = 15 * 60
 BRUTE_FORCE_RAPID_WINDOW_SECONDS = 60
 _SESSION_SAMPLE_CHARS = 50_000
 _SESSION_LINE_CAP = 32
+SSH_SESSION_STORE_CAP = 2000
 
 _MON = r"Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec"
 _TIME = r"[0-2]\d:[0-5]\d:[0-5]\d(?:[.,]\d+)?"
@@ -275,23 +276,31 @@ class SshCorrelator:
 
     def __init__(self) -> None:
         self.sessions: dict[str, dict[str, Any]] = {}
+        self.overflow_auth_pids: set[str] = set()
 
     def on_line(self, idx: int, line: str, stamp: str | None) -> None:
         pid = ssh_pid(line)
         if not pid:
             return
         rule = ssh_rule(line)
-        sess = self.sessions.setdefault(pid, {
-            "pid": pid,
-            "lines": [],
-            "first_line": idx,
-            "ip": None,
-            "user": None,
-            "kinds": set(),
-            "level": None,
-            "category": None,
-            "stamp": stamp,
-        })
+        sess = self.sessions.get(pid)
+        if sess is None:
+            if len(self.sessions) >= SSH_SESSION_STORE_CAP:
+                if rule and rule[2] in _AUTH_KINDS:
+                    self.overflow_auth_pids.add(pid)
+                return
+            sess = {
+                "pid": pid,
+                "lines": [],
+                "first_line": idx,
+                "ip": None,
+                "user": None,
+                "kinds": set(),
+                "level": None,
+                "category": None,
+                "stamp": stamp,
+            }
+            self.sessions[pid] = sess
         if len(sess["lines"]) < _SESSION_LINE_CAP:
             sess["lines"].append(line)
         ip = _ssh_ip(line)
@@ -313,4 +322,4 @@ class SshCorrelator:
             sess["level"] = session_incident_level(sess["kinds"])
         incidents = [_incident_from_session(s) for s in auth_sessions]
         incidents.extend(_brute_force_incidents(auth_sessions))
-        return incidents, len(auth_sessions)
+        return incidents, len(auth_sessions) + len(self.overflow_auth_pids)

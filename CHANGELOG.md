@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## [0.17.3] - 2026-09-10
+
+### Changed
+
+- SSH session objects are stored up to `SSH_SESSION_STORE_CAP`; extra PIDs still count as auth events without keeping their lines
+- Default `MAX_FILE_MB` is 50 (override in `.env`). Log scans abort after `LOG_ANALYZE_MAX_SECONDS` (default 90, `0` disables)
+- version bumped to `0.17.3`
+
 ## [0.17.2] - 2026-09-10
 
 ### Changed

@@ -8,7 +8,7 @@ APP_VERSION = (Path(__file__).resolve().parent / "VERSION").read_text(encoding="
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3.6:27b")
 ALLOW_REMOTE_LLM = os.getenv("ALLOW_REMOTE_LLM", "false").lower() == "true"
-MAX_FILE_MB = int(os.getenv("MAX_FILE_MB", "150"))
+MAX_FILE_MB = int(os.getenv("MAX_FILE_MB", "50"))
 SIGNING_CERT_MAX_BYTES = 5 * 1024 * 1024
 APP_PORT = int(os.getenv("APP_PORT", "7860"))
 WEB_SEARCH_RESULTS = int(os.getenv("WEB_SEARCH_RESULTS", "6"))
