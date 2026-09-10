@@ -13,10 +13,10 @@ from typing import Any
 
 from defusedxml import ElementTree as ET
 
+from . import saml_validation as saml_val
 from .saml_validation import (
     BEARER_METHOD,
-    _now_utc,
-    _skew_note,
+    clock_skew_assisted_note,
     instant_expired,
     instant_not_yet_valid,
     validate_saml,
@@ -760,39 +760,69 @@ def _bearer_in_response_to(assertion: dict[str, Any]) -> list[tuple[int, str | N
     return rows
 
 
+def _time_check_note(status: str, now: datetime, bound: datetime, *, lower: bool, match_plain: str, mismatch_plain: str) -> str:
+    if status == "MATCH":
+        assisted = clock_skew_assisted_note(now, bound, lower=lower)
+        return assisted or match_plain
+    return mismatch_plain
+
+
 def _time_checks(assertion: dict[str, Any]) -> list[dict[str, Any]]:
     checks = []
-    now = _now_utc()
+    now = saml_val._now_utc()
     cond = assertion.get("conditions") or {}
-    nb = _parse_time(cond.get("NotBefore"))
-    noa = _parse_time(cond.get("NotOnOrAfter"))
-    skew_note = _skew_note()
+    nb = saml_val._parse_time(cond.get("NotBefore"))
+    noa = saml_val._parse_time(cond.get("NotOnOrAfter"))
     if nb:
+        status = "MATCH" if not instant_not_yet_valid(now, nb) else "MISMATCH"
         checks.append({
             "check": "Assertion Conditions NotBefore",
-            "status": "MATCH" if not instant_not_yet_valid(now, nb) else "MISMATCH",
+            "status": status,
             "left": now.isoformat(),
             "right": cond.get("NotBefore"),
-            "note": "MATCH means the assertion is not premature at analyzer runtime. " + skew_note,
+            "note": _time_check_note(
+                status,
+                now,
+                nb,
+                lower=True,
+                match_plain="MATCH means the assertion is not premature at analyzer runtime.",
+                mismatch_plain="MISMATCH means the assertion is not yet valid even after configured clock skew.",
+            ),
         })
     if noa:
+        status = "MATCH" if not instant_expired(now, noa) else "MISMATCH"
         checks.append({
             "check": "Assertion Conditions NotOnOrAfter",
-            "status": "MATCH" if not instant_expired(now, noa) else "MISMATCH",
+            "status": status,
             "left": now.isoformat(),
             "right": cond.get("NotOnOrAfter"),
-            "note": "MATCH means the assertion has not expired at analyzer runtime. " + skew_note,
+            "note": _time_check_note(
+                status,
+                now,
+                noa,
+                lower=False,
+                match_plain="MATCH means the assertion has not expired at analyzer runtime.",
+                mismatch_plain="MISMATCH means the assertion has expired even after configured clock skew.",
+            ),
         })
     for idx, sc in enumerate((assertion.get("subject") or {}).get("confirmations") or [], 1):
         s_noa_s = (sc.get("data") or {}).get("NotOnOrAfter")
-        s_noa = _parse_time(s_noa_s)
+        s_noa = saml_val._parse_time(s_noa_s)
         if s_noa:
+            status = "MATCH" if not instant_expired(now, s_noa) else "MISMATCH"
             checks.append({
                 "check": f"SubjectConfirmation #{idx} NotOnOrAfter",
-                "status": "MATCH" if not instant_expired(now, s_noa) else "MISMATCH",
+                "status": status,
                 "left": now.isoformat(),
                 "right": s_noa_s,
-                "note": "MATCH means this subject confirmation has not expired at analyzer runtime. " + skew_note,
+                "note": _time_check_note(
+                    status,
+                    now,
+                    s_noa,
+                    lower=False,
+                    match_plain="MATCH means this subject confirmation has not expired at analyzer runtime.",
+                    mismatch_plain="MISMATCH means this subject confirmation has expired even after configured clock skew.",
+                ),
             })
     return checks
 
@@ -957,6 +987,7 @@ def analyze_saml_input(text: str) -> dict[str, Any]:
         checks.append(_check("AuthnRequest ID vs Response InResponseTo", req.get("id"), resp.get("in_response_to"), "SP-initiated Response should correlate to the AuthnRequest when InResponseTo is present."))
 
     for ai, ass in enumerate(assertions, 1):
+        checks.extend(_time_checks(ass))
         recipients = _subject_recipients(ass)
         irts = _subject_in_response_to(ass)
         audiences = (ass.get("conditions") or {}).get("audiences") or []
@@ -1114,7 +1145,7 @@ def analyze_saml_input(text: str) -> dict[str, Any]:
             "A standard SAML Response contains Assertion XML directly; the analyzer decodes whole Base64 SAMLRequest/SAMLResponse payloads and standalone Base64 Assertions, but intentionally does not recursively decode arbitrary Base64 text nodes such as X509 certificates.",
             "EncryptedAssertion is detected but cannot be decrypted without the SP private key.",
             "EncryptedAttribute and EncryptedID are detected; XML Encryption algorithms and KeyInfo presence are reported, but plaintext is not recovered without the corresponding private key.",
-            "Assertion Conditions and bearer SubjectConfirmationData use analyzer UTC with configurable clock skew (SAML_CLOCK_SKEW_SECONDS, default 120): NotBefore minus skew through NotOnOrAfter plus skew. Set 0 for no extra tolerance. SessionNotOnOrAfter and metadata validUntil are compared strictly (no skew). Traces that expired hours or years ago still expire.",
+            "Assertion Conditions NotBefore/NotOnOrAfter and bearer SubjectConfirmationData.NotOnOrAfter use analyzer UTC with configurable clock skew (SAML_CLOCK_SKEW_SECONDS; IDDQD default 120): NotBefore minus skew through NotOnOrAfter plus skew. Bearer SubjectConfirmationData.NotBefore is forbidden and is not a skew window. Set 0 for no extra tolerance. SessionNotOnOrAfter is evaluated strictly (IDDQD policy). Metadata validUntil is compared strictly. Traces that expired hours or years ago still expire.",
             "Standards validation combines SAML 2.0 Core requirements with Web Browser SSO profile rules where the supplied documents indicate an SSO Response. Binding-dependent checks are only hard errors when the binding can be inferred; otherwise they are warnings.",
         ],
     }

@@ -9,10 +9,23 @@ OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3.6:27b")
 ALLOW_REMOTE_LLM = os.getenv("ALLOW_REMOTE_LLM", "false").lower() == "true"
 MAX_FILE_MB = int(os.getenv("MAX_FILE_MB", "50"))
-# SAML Conditions / bearer confirmation vs analyzer UTC (Profiles clock skew).
-# Window is NotBefore − S … NotOnOrAfter + S. 0 = no extra tolerance.
-# SessionNotOnOrAfter and metadata validUntil stay strict (no S).
-SAML_CLOCK_SKEW_SECONDS = max(0, int(os.getenv("SAML_CLOCK_SKEW_SECONDS", "120")))
+
+
+# Assertion Conditions / bearer NotOnOrAfter vs analyzer UTC.
+# IDDQD default is 120s; 0 = strict. SessionNotOnOrAfter and metadata validUntil stay strict.
+def parse_saml_clock_skew_seconds(raw: str) -> int:
+    try:
+        seconds = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"SAML_CLOCK_SKEW_SECONDS must be an integer >= 0, got {raw!r}"
+        ) from exc
+    if seconds < 0:
+        raise ValueError(f"SAML_CLOCK_SKEW_SECONDS must be >= 0, got {seconds}")
+    return seconds
+
+
+SAML_CLOCK_SKEW_SECONDS = parse_saml_clock_skew_seconds(os.getenv("SAML_CLOCK_SKEW_SECONDS", "120"))
 SIGNING_CERT_MAX_BYTES = 5 * 1024 * 1024
 APP_PORT = int(os.getenv("APP_PORT", "7860"))
 WEB_SEARCH_RESULTS = int(os.getenv("WEB_SEARCH_RESULTS", "6"))

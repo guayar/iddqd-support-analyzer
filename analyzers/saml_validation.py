@@ -33,7 +33,7 @@ def _now_utc() -> datetime:
 
 
 def _skew_seconds() -> int:
-    return max(0, int(app_config.SAML_CLOCK_SKEW_SECONDS))
+    return int(app_config.SAML_CLOCK_SKEW_SECONDS)
 
 
 def _skew() -> timedelta:
@@ -57,6 +57,27 @@ def instant_on_or_after(now: datetime, instant: datetime) -> bool:
 
 def _skew_note() -> str:
     return f"Clock skew {_skew_seconds()}s (SAML_CLOCK_SKEW_SECONDS) is applied to both ends of the validity window."
+
+
+def clock_skew_assisted_note(now: datetime, bound: datetime, *, lower: bool) -> str | None:
+    """MATCH-only note when configured skew is why the instant is still accepted."""
+    skew = _skew_seconds()
+    if skew <= 0:
+        return None
+    if lower:
+        if now >= bound:
+            return None
+        delta = int((bound - now).total_seconds())
+    else:
+        if now < bound:
+            return None
+        delta = int((now - bound).total_seconds())
+    if delta < 0:
+        return None
+    return (
+        f"Outside the strict validity window by {delta}s; "
+        f"accepted within configured {skew}s clock-skew tolerance."
+    )
 
 
 def _issue(
@@ -889,7 +910,7 @@ def validate_saml(
                     observed=session_raw,
                     expected=f"> {now.isoformat()} (strict; clock skew does not apply)",
                     standard="SAML Core 2.0 §2.7.2 + Approved Errata E79; SAML Profiles 2.0 §4.1.4.3",
-                    note="Core OS said the IdP session MUST be considered ended; E79 replaced that with an upper bound and defers processing to profiles. Profiles say the security context SHOULD be discarded once this time is reached. There is no required relationship to Conditions NotOnOrAfter. SessionIndex remains an opaque string. Profiles name clock skew only for bearer SubjectConfirmationData NotOnOrAfter, not for SessionNotOnOrAfter.",
+                    note="IDDQD evaluates SessionNotOnOrAfter strictly (no clock skew). Web Browser SSO does not attach the bearer-style clock-skew clause to this field; general SAML clock-skew guidance exists, so strict session handling is an IDDQD policy choice rather than a SAML MUST. E79: upper bound on the SP security context (SHOULD discard). No required relationship to Conditions NotOnOrAfter.",
                 ))
             if st.get("authn_context_class_ref") and not _valid_uri(st.get("authn_context_class_ref")):
                 issues.append(_issue("AUTHNCONTEXT_CLASSREF_INVALID", "ERROR", st_scope, "AuthnContextClassRef is not a valid URI.", observed=st.get("authn_context_class_ref"), standard="SAML Core 2.0 AuthnContext"))

@@ -26,7 +26,7 @@ Built to learn SAML and support-style log analysis by implementing the checks, i
 - trust comparison against matching SP / IdP metadata signing certificates
 - optional standalone X.509 signing certificate upload (`.pem`, `.crt`, `.cer`; PEM or DER)
 - certificate fingerprints from SAML messages, metadata and supplied certificates
-- protocol/profile validation with structured error codes, including assertion/bearer time windows with configurable clock skew (`SAML_CLOCK_SKEW_SECONDS`, default 120); session and metadata `validUntil` stay strict
+- protocol/profile validation with structured error codes, including assertion Conditions `NotBefore`/`NotOnOrAfter` and bearer `SubjectConfirmationData.NotOnOrAfter` with configurable clock skew (`SAML_CLOCK_SKEW_SECONDS`, IDDQD default 120); `SessionNotOnOrAfter` and metadata `validUntil` stay strict
 - copy the rendered Analyze report to the clipboard
 - **Clear** empties uploads, paste, optional signing certificate, report, decoded artifacts and JSON (Analyzer mode stays). If Assistant is on, the attached analysis is dropped; the chat is not reset
 - cross-document checks across Request ↔ Response ↔ Assertion ↔ SP metadata ↔ IdP metadata
@@ -175,7 +175,7 @@ A deliberately separate web-enabled chat. It receives **no** Analyzer or Assista
 
 - Local Gradio app on `127.0.0.1` for a private workstation, not a packaged or multi-user product. Reports are heuristics plus spec-backed SAML checks, not a substitute for an IdP/SP vendor’s own validator. Unexpected runtime errors are in the process terminal; validation messages (empty input, oversize file) are a timed toast.
 - `EncryptedAssertion` is detected, not decrypted. The anonymizer is useful, not DLP; shareable output still needs a human pass.
-- SAML assertion Conditions and bearer `NotOnOrAfter` use analyzer UTC plus `SAML_CLOCK_SKEW_SECONDS` (default 120; `0` is strict). That covers small IdP/SP clock drift, not traces that expired hours or years ago. `SessionNotOnOrAfter` and metadata `validUntil` are compared strictly; Profiles name clock skew only for bearer confirmation, not those fields.
+- SAML assertion Conditions `NotBefore`/`NotOnOrAfter` and bearer `SubjectConfirmationData.NotOnOrAfter` use analyzer UTC plus `SAML_CLOCK_SKEW_SECONDS` (`0` is strict; IDDQD default is 120 seconds, not a SAML-mandated value). That covers small IdP/SP clock drift, not traces that expired hours or years ago. Bearer `SubjectConfirmationData.NotBefore` is forbidden and is not a skew window. `SessionNotOnOrAfter` is evaluated strictly as an IDDQD policy (Profiles do not attach the bearer-style clock-skew clause to that field). Metadata `validUntil` is compared strictly.
 - Log timestamps are treated as record boundaries when the shape is recognizable; numeric dates such as `09/01/26` do not get a calendar `time_range` unless the same log makes day/month order unambiguous. RFC3164 stamps are shown as written (`Dec 24 06:55:46`); a year is not filled in when the source has none. Oracle-style stamps that already include a year are parsed as calendar times. A bracketed level after a timestamp (`[error]`, `[warn]`, …) is a source marker; Apache `notice` is counted as INFO. `crit` / `alert` / `emerg` are not mapped. Vendor codes are identifiers, not correlated incidents; occurrence count is not importance. `error:` in the text of an `ORA-` / `RMAN-` line is not a source ERROR.
 - Optional chats need local Ollama. Assistant and General Chat are independent Config modules. The displayed model name is the `OLLAMA_MODEL` env tag, not a label from the weight file and not `ollama list`. Coverage grows from real traces and failing cases, not from claiming a complete SAML or logging catalogue.
 - Local OCR is imperfect. Prefer the image when OCR and pixels disagree. Cloud OCR is not used. OCR text from General Chat may be used to build public search queries.
@@ -274,7 +274,7 @@ UI_THEME=system
 
 `LOG_ANALYZE_MAX_SECONDS` (default 90, `0` = no cap) bounds wall time of a log scan. Size and time are not the same: a repetitive 10 MB file is cheap, a high-diversity SSH/auth log of the same size is not.
 
-`SAML_CLOCK_SKEW_SECONDS` (default 120, `0` = no extra tolerance) widens assertion Conditions and bearer `NotOnOrAfter` / `NotBefore` the way Profiles allow clock skew between providers: valid if `NotBefore − S ≤ now < NotOnOrAfter + S`. `SessionNotOnOrAfter` and metadata `validUntil` stay strict (`now >=` bound).
+`SAML_CLOCK_SKEW_SECONDS` (IDDQD default 120, `0` = no extra tolerance) widens assertion Conditions `NotBefore`/`NotOnOrAfter` and bearer `SubjectConfirmationData.NotOnOrAfter`: valid if `NotBefore − S ≤ now < NotOnOrAfter + S`. Negative or non-integer values fail at startup. Bearer `NotBefore` is not part of this window. `SessionNotOnOrAfter` is evaluated strictly (IDDQD policy). Metadata `validUntil` stays strict (`now >=` bound).
 
 `IDDQD_LOG_PROFILE=1` prints log-analyzer phase timings on stderr (slash-date policy, shared scan, total).
 

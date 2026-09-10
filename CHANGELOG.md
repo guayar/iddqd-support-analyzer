@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## [0.17.7] - 2026-09-10
+
+### Changed
+
+- Clock-skew docs name Conditions `NotBefore`/`NotOnOrAfter` and bearer `NotOnOrAfter` only; 120s is the IDDQD default. Session expiry wording is labeled as IDDQD policy. Mapping checks note when a MATCH exists only because of configured skew. Negative or non-integer `SAML_CLOCK_SKEW_SECONDS` fail at startup
+- version bumped to `0.17.7`
+
 ## [0.17.6] - 2026-09-10
 
 ### Changed
