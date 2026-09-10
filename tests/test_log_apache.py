@@ -3,7 +3,6 @@ from __future__ import annotations
 from analyzers.logs import (
     _grouping_key,
     _header_message,
-    _normalize_for_group,
     analyze_log_text,
     log_record_prefix,
 )
@@ -58,7 +57,27 @@ def test_client_ip_is_context_not_identity():
     assert r["error_event_count"] == 2
     assert r["incident_unique_count"] == 1
     assert r["incidents"][0]["count"] == 2
-    assert "[client <ip>]" in _normalize_for_group(_header_message(text.splitlines()[0]))
+    assert r["incidents"][0]["signature"] == (
+        "Directory index forbidden by rule: /var/www/html/"
+    )
+
+
+def test_client_bracket_is_not_incident_title():
+    line = (
+        "[Sun Dec 04 05:15:09 2005] [error] [client 222.166.160.184] "
+        "Directory index forbidden by rule: /var/www/html/"
+    )
+    assert _header_message(line) == "Directory index forbidden by rule: /var/www/html/"
+    r = analyze_log_text(line + "\n")
+    assert r["error_event_count"] == 1
+    assert r["incident_unique_count"] == 1
+    assert r["incidents"][0]["signature"] == (
+        "Directory index forbidden by rule: /var/www/html/"
+    )
+    assert "[client" not in r["incidents"][0]["signature"]
+    md = render_log_report(r)
+    assert "### 1. Directory index forbidden by rule: /var/www/html/" in md
+    assert "### 1. [client" not in md
 
 
 def test_child_id_is_context_not_identity():
@@ -108,6 +127,7 @@ if __name__ == "__main__":
     test_notice_is_info_not_an_incident()
     test_repeated_apache_errors_group_without_timestamp()
     test_client_ip_is_context_not_identity()
+    test_client_bracket_is_not_incident_title()
     test_child_id_is_context_not_identity()
     test_java_and_maven_prefixes_unchanged()
     test_many_apache_errors_stay_grouped()

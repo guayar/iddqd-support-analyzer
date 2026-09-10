@@ -42,6 +42,7 @@ EXC_HEAD_RE = re.compile(
 )
 EXIT_CODE_RE = re.compile(r"exit code:\s*(\d+)", re.I)
 JUNK_TITLE_RE = re.compile(r"^[\s\[\](){}:.,;_\-/=*#]+$")
+CLIENT_BRACKET_PREFIX_RE = re.compile(r"^\[client [^\]]+\]\s*", re.I)
 MAVEN_ADVISORY_RE = re.compile(
     r"^(?:to see the full stack trace|re-run maven|for more information about the errors|\[help\s+\d+\])",
     re.I,
@@ -822,7 +823,10 @@ def _header_message(first_line: str) -> str:
     if rec and rec["style"] in {"timestamped", "timestamp_bracket"}:
         if rec["style"] == "timestamped" and " : " in first_line:
             return first_line.rsplit(" : ", 1)[-1].strip()
-        return (rec.get("rest") or "").strip()
+        rest = (rec.get("rest") or "").strip()
+        if rec["style"] == "timestamp_bracket":
+            rest = CLIENT_BRACKET_PREFIX_RE.sub("", rest, count=1)
+        return rest
     if rec and rec["style"] == "bare":
         return (rec.get("rest") or "").strip()
     return first_line.strip()

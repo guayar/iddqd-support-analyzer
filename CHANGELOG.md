@@ -11,6 +11,7 @@ All notable changes to this project are documented here.
 ### Changed
 
 - Correlated-incidents empty state: 0 incidents does not mean the log is empty; vendor codes stay a separate list
+- Timestamp-plus-bracket incident titles drop a leading `[client …]` so the heading is the message, not markdown/HTML-broken `[client`
 - Versioning (user guide): no bump for cosmetics/docs; patch for small work on existing modules; minor only for new capabilities
 - version bumped to `0.17.0`
 
