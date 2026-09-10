@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here.
 
+## [0.16.0] - 2026-09-10
+
+### Added
+
+- Oracle-style alert timestamps (`Wed Jul 01 15:00:00 2026`, including a weekday and a year) are calendar `time_range` values. RFC3164 stamps without a year are still shown as written
+- Log report **Vendor codes** lists record-start `PREFIX-NUMBER` families (ORA, RMAN, TNS, …) with counts and first/last line; embedded tokens such as `SP2-0552` in a message body are ignored. Codes are identifiers, not incidents
+
+### Changed
+
+- English `error:` / `WARNING:` inside an Oracle vendor-code message is not counted as a source ERROR/WARN
+- Log scan skips slash-date policy and OpenSSH correlation when those shapes are absent; unique vendor-code lists are capped
+- version bumped to `0.16.0`
+
 ## [0.15.2] - 2026-09-09
 
 ### Changed

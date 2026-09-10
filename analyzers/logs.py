@@ -1,22 +1,28 @@
 from __future__ import annotations
 
 import collections
+import os
 import re
+import sys
+import time
 from datetime import datetime
 from typing import Any, NamedTuple
 
 _TIME = r"[0-2]\d:[0-5]\d:[0-5]\d(?:[.,]\d+)?"
 _TZ = r"(?:Z|[+-]\d{2}:?\d{2})?"
 _MON = r"Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec"
+_DOW = r"Sun|Mon|Tue|Wed|Thu|Fri|Sat"
 _MONTH_NUM = {name.lower(): i for i, name in enumerate(_MON.split("|"), 1)}
 TS_TOKEN_RE = re.compile(
     rf"(?P<iso>\d{{4}}-\d{{2}}-\d{{2}}[T ]{_TIME}{_TZ})"
     rf"|(?P<ymd_slash>\d{{4}}/\d{{2}}/\d{{2}}[ T]{_TIME})"
     rf"|(?P<dmy_mon>\d{{2}}-(?:{_MON})-\d{{4}}[ T]{_TIME})"
     rf"|(?P<slash>\d{{2}}/\d{{2}}/(?:\d{{4}}|\d{{2}})[ T]{_TIME})"
+    rf"|(?P<oracle>(?:(?:{_DOW}) +)?(?:{_MON}) +\d{{1,2}}[ T]{_TIME} +\d{{4}})"
     rf"|(?P<syslog>(?:{_MON}) +\d{{1,2}}[ T]{_TIME})",
     re.I,
 )
+SLASH_DATE_HINT_RE = re.compile(r"\d{2}/\d{2}/\d")
 LEVEL_NAMES = r"TRACE|DEBUG|INFO|WARN(?:ING)?|ERROR|FATAL|SEVERE|CRITICAL"
 ERROR_LEVELS = {"ERROR", "FATAL", "SEVERE", "CRITICAL"}
 BRACKET_RE = re.compile(rf"^\[(?P<level>{LEVEL_NAMES})\](?P<rest>.*)$", re.I)
@@ -36,14 +42,16 @@ MAVEN_ADVISORY_RE = re.compile(
     r"^(?:to see the full stack trace|re-run maven|for more information about the errors|\[help\s+\d+\])",
     re.I,
 )
-CODE_PATTERNS = [
-    re.compile(r"\b(ORA-\d{3,6})\b", re.I),
+VENDOR_HEAD_RE = re.compile(r"^(?P<family>[A-Z][A-Z0-9]{1,15})-(?P<num>\d{3,8})\b")
+VENDOR_FIND_RE = re.compile(r"\b(?P<family>[A-Z][A-Z0-9]{1,15})-(?P<num>\d{3,8})\b")
+CODE_AUX_PATTERNS = [
     re.compile(r"\b(SQLSTATE\s*[:=]?\s*[0-9A-Z]{5})\b", re.I),
     re.compile(r"\b(HTTP(?:\s+STATUS)?\s*[:=]?\s*[45]\d\d)\b", re.I),
-    re.compile(r"\b([A-Z][A-Z0-9_]{1,20}[-_][0-9]{3,8})\b"),
     re.compile(r"\b(error\s*code\s*[:=]\s*[A-Za-z0-9_.-]+)\b", re.I),
     re.compile(r"\b(status\s*code\s*[:=]\s*[45]\d\d)\b", re.I),
 ]
+VENDOR_CODE_STORE_CAP = 2000
+VENDOR_CODE_JSON_CAP = 500
 MAX_EVENT_LINES = 500
 SAMPLE_CHARS = 50_000
 INLINE_EXC_RE = re.compile(
@@ -177,6 +185,17 @@ def _from_iso(raw: str) -> datetime | None:
         return None
 
 
+def _from_oracle(raw: str) -> datetime | None:
+    m = re.match(
+        rf"(?:(?:{_DOW}) +)?(?P<mon>{_MON}) +(?P<day>\d{{1,2}})[ T](?P<time>{_TIME}) +(?P<year>\d{{4}})",
+        raw.strip(),
+        re.I,
+    )
+    if not m:
+        return None
+    return _combine(int(m.group("year")), _MONTH_NUM[m.group("mon")[:3].lower()], int(m.group("day")), m.group("time"))
+
+
 def _datetime_from_match(m: re.Match[str], policy: _TsPolicy) -> datetime | None:
     if m.group("iso"):
         return _from_iso(m.group("iso"))
@@ -188,6 +207,8 @@ def _datetime_from_match(m: re.Match[str], policy: _TsPolicy) -> datetime | None
         date, time = _split_date_time(m.group("dmy_mon"))
         day_s, mon_s, year_s = date.split("-")
         return _combine(int(year_s), _MONTH_NUM[mon_s[:3].lower()], int(day_s), time)
+    if m.group("oracle"):
+        return _from_oracle(m.group("oracle"))
     if m.group("syslog"):
         return None
     raw = m.group("slash")
@@ -232,11 +253,13 @@ def _forced_slash_order(m: re.Match[str]) -> bool | None:
     return None
 
 
-def _ts_policy(lines: list[str]) -> _TsPolicy:
+def _ts_policy(lines: list[str], text: str | None = None) -> _TsPolicy:
     unamb: set[tuple[int, int, int]] = set()
     saw_dmy = False
     saw_mdy = False
     empty = _TsPolicy(None, frozenset())
+    if text is not None and not SLASH_DATE_HINT_RE.search(text):
+        return empty
     for line in lines:
         for m in TS_TOKEN_RE.finditer(line):
             forced = _forced_slash_order(m)
@@ -303,7 +326,16 @@ def _syslog_internal_dt(raw: str) -> datetime | None:
         return None
 
 
+def _vendor_leads_record(line: str) -> bool:
+    s = line.lstrip()
+    ts = _timestamp_at_start(line)
+    rest = s[ts.end():].lstrip() if ts else s
+    return bool(VENDOR_HEAD_RE.match(rest))
+
+
 def colon_severity(line: str) -> str | None:
+    if _vendor_leads_record(line):
+        return None
     m = LEVEL_COLON_RE.search(line)
     if not m:
         return None
@@ -501,9 +533,13 @@ def _brute_force_incidents(sessions: list[dict[str, Any]]) -> list[dict[str, Any
     return out
 
 
-def collect_ssh_incidents(lines: list[str]) -> tuple[list[dict[str, Any]], int]:
+def collect_ssh_incidents(lines: list[str], enabled: bool = True) -> tuple[list[dict[str, Any]], int]:
+    if not enabled:
+        return [], 0
     sessions: dict[str, dict[str, Any]] = {}
     for idx, line in enumerate(lines, 1):
+        if "sshd[" not in line:
+            continue
         pid = _ssh_pid(line)
         rule = ssh_rule(line)
         if not pid:
@@ -561,10 +597,59 @@ def _normalize_level(level: str) -> str:
     return "WARN" if level == "WARNING" else level
 
 
-def _code_list(text: str) -> list[str]:
+def _first_vendor_code(line: str) -> str | None:
+    s = line.lstrip()
+    ts = _timestamp_at_start(line)
+    after_ts = s[ts.end():] if ts else s
+    stripped = after_ts.lstrip()
+    has_level = False
+    payload = stripped
+    bm = BRACKET_RE.match(stripped)
+    if bm:
+        has_level = True
+        payload = bm.group("rest") or ""
+    else:
+        lm = TS_LEVEL_RE.match(after_ts)
+        if lm:
+            has_level = True
+            payload = after_ts[lm.end():]
+        else:
+            bm2 = BARE_ERROR_RE.match(stripped)
+            if bm2:
+                has_level = True
+                payload = stripped[bm2.end():]
+    if has_level or ts:
+        m = VENDOR_FIND_RE.search(payload)
+        return f"{m.group('family')}-{m.group('num')}" if m else None
+    m = VENDOR_HEAD_RE.match(stripped)
+    return f"{m.group('family')}-{m.group('num')}" if m else None
+
+
+def _aux_codes(line: str) -> list[str]:
+    if (
+        "HTTP" not in line
+        and "http" not in line
+        and "SQLSTATE" not in line
+        and "sqlstate" not in line
+        and "error code" not in line
+        and "Error code" not in line
+        and "status code" not in line
+        and "Status code" not in line
+    ):
+        return []
     found = []
-    for pat in CODE_PATTERNS:
-        found.extend(m.group(1).strip() for m in pat.finditer(text))
+    for pat in CODE_AUX_PATTERNS:
+        found.extend(m.group(1).strip() for m in pat.finditer(line))
+    return found
+
+
+def _code_list(text: str) -> list[str]:
+    found: list[str] = []
+    for line in text.splitlines() or [text]:
+        vendor = _first_vendor_code(line)
+        if vendor:
+            found.append(vendor)
+        found.extend(_aux_codes(line))
     return list(dict.fromkeys(found))
 
 
@@ -771,26 +856,55 @@ def _incident_title(event: dict[str, Any], chain: dict[str, Any]) -> str:
     return "Unknown error"
 
 
+def _profile_log(t0: float, label: str) -> float:
+    now = time.perf_counter()
+    if os.environ.get("IDDQD_LOG_PROFILE") == "1":
+        print(f"iddqd log profile: {label} {(now - t0) * 1000:.1f} ms", file=sys.stderr)
+    return now
+
+
 def analyze_log_text(text: str, filename: str | None = None) -> dict[str, Any]:
+    t0 = time.perf_counter()
     lines = text.splitlines()
-    timestamps = []
-    syslog_stamps: list[tuple[tuple[int, int, int, int, int], str]] = []
     levels = collections.Counter()
     codes = collections.Counter()
+    families = collections.Counter()
+    code_details: dict[str, dict[str, Any]] = {}
+    omitted_code_occurrences = 0
+    n_cal = 0
+    ts_min: datetime | None = None
+    ts_max: datetime | None = None
+    n_syslog = 0
+    syslog_min: tuple[tuple[int, int, int, int, int], str] | None = None
+    syslog_max: tuple[tuple[int, int, int, int, int], str] | None = None
+    saw_sshd = False
 
-    policy = _ts_policy(lines)
+    policy = _ts_policy(lines, text)
+    t1 = _profile_log(t0, "ts_policy")
     line_findings: list[dict[str, Any]] = []
     finding_shown = collections.Counter()
     for idx, line in enumerate(lines, 1):
+        if "sshd[" in line:
+            saw_sshd = True
         ts = _parse_ts(line, policy)
         if ts:
-            timestamps.append(ts)
+            n_cal += 1
+            if ts_min is None or ts < ts_min:
+                ts_min = ts
+            if ts_max is None or ts > ts_max:
+                ts_max = ts
         raw = syslog_stamp(line)
         if raw:
             key = _syslog_sort_key(raw)
             if key:
-                syslog_stamps.append((key, raw))
+                n_syslog += 1
+                item = (key, raw)
+                if syslog_min is None or key < syslog_min[0]:
+                    syslog_min = item
+                if syslog_max is None or key > syslog_max[0]:
+                    syslog_max = item
         source_level = None
+        rule = None
         rec = log_record_prefix(line)
         if rec:
             levels[rec["level"]] += 1
@@ -800,15 +914,16 @@ def analyze_log_text(text: str, filename: str | None = None) -> dict[str, Any]:
             if colon:
                 levels[colon] += 1
                 source_level = colon
-            else:
+            elif "sshd" in line:
                 rule = ssh_rule(line)
                 if rule:
                     levels[_normalize_level(rule[0])] += 1
         cap = LINE_FINDING_CAPS.get(source_level or "")
         if cap and finding_shown[source_level] < cap:
             finding_shown[source_level] += 1
-            pid = _ssh_pid(line)
-            rule = ssh_rule(line)
+            pid = _ssh_pid(line) if "sshd[" in line else None
+            if rule is None and pid:
+                rule = ssh_rule(line)
             line_findings.append({
                 "line": idx,
                 "source_level": source_level,
@@ -818,29 +933,51 @@ def analyze_log_text(text: str, filename: str | None = None) -> dict[str, Any]:
                 "message": line,
                 "context": _source_line_context(lines, idx, pid),
             })
-        for code in _code_list(line):
-            codes[code] += 1
+        vendor = _first_vendor_code(line)
+        if vendor:
+            family = vendor.split("-", 1)[0]
+            families[family] += 1
+            if vendor in codes:
+                codes[vendor] += 1
+                det = code_details[vendor]
+                det["count"] += 1
+                det["last_line"] = idx
+            elif len(codes) < VENDOR_CODE_STORE_CAP:
+                codes[vendor] += 1
+                code_details[vendor] = {
+                    "code": vendor,
+                    "family": family,
+                    "count": 1,
+                    "first_line": idx,
+                    "last_line": idx,
+                    "example": line.strip()[:240],
+                }
+            else:
+                omitted_code_occurrences += 1
+        for aux in _aux_codes(line):
+            codes[aux] += 1
     line_findings.sort(
         key=lambda f: (_LINE_FINDING_ORDER.get(f["source_level"] or "", 50), f["line"])
     )
+    t2 = _profile_log(t1, "line_scan")
 
-    if timestamps:
+    if ts_min is not None and ts_max is not None:
         time_range = {
-            "from": min(timestamps).isoformat(),
-            "to": max(timestamps).isoformat(),
+            "from": ts_min.isoformat(),
+            "to": ts_max.isoformat(),
             "year_present": True,
         }
-    elif syslog_stamps:
-        syslog_stamps.sort(key=lambda x: x[0])
+    elif syslog_min is not None and syslog_max is not None:
         time_range = {
-            "from": syslog_stamps[0][1],
-            "to": syslog_stamps[-1][1],
+            "from": syslog_min[1],
+            "to": syslog_max[1],
             "year_present": False,
         }
     else:
         time_range = {"from": None, "to": None}
 
     events = _split_events(lines)
+    t3 = _profile_log(t2, "split_events")
     grouped: dict[tuple[str, str], dict[str, Any]] = {}
     for ev in events:
         chain = parse_java_exception_chain(ev["lines"])
@@ -878,7 +1015,8 @@ def analyze_log_text(text: str, filename: str | None = None) -> dict[str, Any]:
         v["codes"] = dict(v["codes"])
         groups.append(v)
 
-    ssh_incidents, ssh_event_count = collect_ssh_incidents(lines)
+    ssh_incidents, ssh_event_count = collect_ssh_incidents(lines, enabled=saw_sshd)
+    _profile_log(t3, "ssh_and_groups")
     groups.extend(ssh_incidents)
     groups.sort(
         key=lambda x: (
@@ -889,25 +1027,38 @@ def analyze_log_text(text: str, filename: str | None = None) -> dict[str, Any]:
     )
     incident_unique_count = len(groups)
     shown = groups[:INCIDENT_RESULT_CAP]
+    stored_occurrences = sum(codes.values())
+    listed = dict(codes.most_common(VENDOR_CODE_JSON_CAP))
+    details_out = []
+    for code, _count in list(listed.items())[:40]:
+        if code in code_details:
+            details_out.append(code_details[code])
+    _profile_log(t0, "total")
 
     return {
         "kind": "log",
         "filename": filename,
         "line_count": len(lines),
-        "timestamped_lines": len(timestamps) + (len(syslog_stamps) if not timestamps else 0),
+        "timestamped_lines": n_cal if n_cal else n_syslog,
         "time_range": time_range,
         "levels": dict(levels),
         "line_findings": line_findings,
-        "error_codes": dict(codes.most_common()),
+        "error_codes": listed,
+        "vendor_code_families": dict(families),
+        "vendor_code_unique": len(codes),
+        "vendor_code_occurrences": stored_occurrences + omitted_code_occurrences,
+        "vendor_code_list_truncated": omitted_code_occurrences > 0,
+        "vendor_code_details": details_out,
         "error_event_count": len(events) + ssh_event_count,
         "incident_unique_count": incident_unique_count,
         "error_groups": shown,
         "incidents": shown,
         "limitations": [
             "The analyzer groups multiline ERROR/FATAL/SEVERE/CRITICAL records, Java exception chains and Maven [ERROR] blocks using generic log heuristics.",
-            "RFC3164/syslog stamps (`MMM d HH:mm:ss`) are used as written for time_range; a year is not invented when the source has none.",
+            "RFC3164/syslog stamps (`MMM d HH:mm:ss`) are used as written for time_range; a year is not invented when the source has none. Oracle-style stamps with a weekday and a year (`Wed Jul 01 15:00:00 2026`) are calendar times.",
+            "Vendor codes (ORA-01555, RMAN-03015, TNS-12500, and similar PREFIX-NUMBER) are taken from the start of a record after an optional timestamp, or from the message after an explicit log level. Tokens embedded later in the same line are ignored. Codes are identifiers, not incident severities; Oracle messages are not classified from an error-number dictionary.",
             "OpenSSH/auth lines are correlated by sshd PID into authentication attempts; repeated attempts from one IP can raise a brute-force incident when the gap between attempts is at most 15 minutes. Five or more attempts in a 60-second window, or ten or more in a slower cluster, are ERROR; five to nine slower attempts are suspected (WARN). Connection closed by itself is not an error. Reverse-DNS mismatch is not treated as a proven break-in.",
-            "Line severity counts mix explicit source markers with deterministic per-line classification; they are not the same as incident severity.",
+            "Line severity counts mix explicit source markers with deterministic per-line classification; they are not the same as incident severity. English `error:` inside an Oracle vendor-code message is not counted as a source ERROR.",
             "Explicit FATAL/CRITICAL/SEVERE source markers are listed under Notable line findings with source line numbers, independently of the incident display cap. A few explicit ERROR examples may be included; semantic WARN lines (for example Failed password) are not listed there.",
             "Incident totals are computed before the displayed list is truncated.",
             "Numeric dates such as 09/01/26 are treated as record boundaries; ISO time_range is filled only when day/month order is unambiguous in this log.",

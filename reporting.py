@@ -408,11 +408,33 @@ def render_log_report(result: dict[str, Any]) -> str:
         )
     else:
         out.append("- No standard severity markers detected")
-    out.append("\n## Error / status codes")
-    if result["error_codes"]:
-        out.extend(f"- `{k}` — {v} occurrence(s)" for k, v in list(result["error_codes"].items())[:40])
+    out.append("\n## Vendor codes")
+    unique_n = result.get("vendor_code_unique")
+    occ_n = result.get("vendor_code_occurrences")
+    if unique_n is not None and occ_n is not None:
+        extra = f"{unique_n} unique; {occ_n} occurrence(s)"
+        if result.get("vendor_code_list_truncated"):
+            extra += "; further distinct codes omitted from the list"
+        out.append(f"Record-start `PREFIX-NUMBER` (after an optional timestamp) or after an explicit log level. Not incident severity. ({extra})")
     else:
-        out.append("- No explicit codes detected")
+        out.append("Explicit codes from the record, not incident severity.")
+    families = result.get("vendor_code_families") or {}
+    if families:
+        top_f = sorted(families.items(), key=lambda kv: (-kv[1], kv[0]))[:12]
+        out.append("- **Families:** " + ", ".join(f"`{k}` × {v}" for k, v in top_f))
+    details = {d["code"]: d for d in result.get("vendor_code_details") or [] if d.get("code")}
+    codes = result.get("error_codes") or {}
+    if codes:
+        for i, (k, v) in enumerate(list(codes.items())[:40]):
+            d = details.get(k) or {}
+            loc = ""
+            if d.get("first_line"):
+                loc = f" — lines {d['first_line']}–{d.get('last_line')}"
+            out.append(f"- `{k}` — {v} occurrence(s){loc}")
+            if i < 8 and d.get("example"):
+                out.append(f"  - `{d['example']}`")
+    else:
+        out.append("- No vendor or status codes detected")
     findings = result.get("line_findings") or []
     if findings:
         out.extend([

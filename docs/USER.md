@@ -79,10 +79,10 @@ If only a certificate embedded in `ds:KeyInfo` is available, the analyzer can ve
 
 ### Log analysis
 
-- timestamp range detection, including RFC3164/syslog stamps without inventing a year
+- timestamp range detection, including RFC3164/syslog stamps without inventing a year, and Oracle alert stamps that already include a year (`Wed Jul 01 15:00:00 2026`)
 - detected line severities: explicit source markers plus deterministic per-line classification (for example `Failed password` → WARN); this is not incident severity. Explicit FATAL/CRITICAL/SEVERE markers are listed under **Notable line findings** (line number, source marker, Relevant log) before Incidents, even when incident details are truncated. Semantic WARN is not listed as an explicit source marker.
 - OpenSSH/auth.log patterns correlated by `sshd` PID. Reverse-DNS mismatch (`POSSIBLE BREAK-IN ATTEMPT`) alone is WARN, not a proven break-in; the same PID with failed authentication is ERROR. Brute-force roll-up is by source IP with a 15-minute gap (no global merge). Five or more attempts in 60 seconds, or ten or more in a slower cluster, are ERROR; five to nine slower attempts are suspected (WARN). `Connection closed` alone is not an incident. Incident totals are counted before the displayed list is truncated.
-- error/status code extraction
+- vendor / status codes: `PREFIX-NUMBER` at the start of a record (after an optional timestamp) or after an explicit log level; family roll-up in the report. Tokens later in the same line are ignored. Not incident severity and not an Oracle error dictionary
 - multiline incidents with Java exception chains and Maven `[ERROR]` blocks
 - root-cause extraction from `Caused by:` (not a separate incident)
 - first occurrence, numbered `Caused by` list, and a collapsible raw log sample
@@ -170,7 +170,7 @@ A deliberately separate web-enabled chat. It receives **no** Analyzer or Assista
 
 - Local Gradio app on `127.0.0.1` for a private workstation, not a packaged or multi-user product. Reports are heuristics plus spec-backed SAML checks, not a substitute for an IdP/SP vendor’s own validator. Unexpected runtime errors are in the process terminal; validation messages (empty input, oversize file) are a timed toast.
 - `EncryptedAssertion` is detected, not decrypted. The anonymizer is useful, not DLP; shareable output still needs a human pass.
-- Log timestamps are treated as record boundaries when the shape is recognizable; numeric dates such as `09/01/26` do not get a calendar `time_range` unless the same log makes day/month order unambiguous. RFC3164 stamps are shown as written (`Dec 24 06:55:46`); a year is not filled in when the source has none.
+- Log timestamps are treated as record boundaries when the shape is recognizable; numeric dates such as `09/01/26` do not get a calendar `time_range` unless the same log makes day/month order unambiguous. RFC3164 stamps are shown as written (`Dec 24 06:55:46`); a year is not filled in when the source has none. Oracle-style stamps that already include a year are parsed as calendar times. Vendor codes are not classified as incidents; `error:` in the text of an `ORA-` / `RMAN-` line is not a source ERROR.
 - Optional chats need local Ollama. Assistant and General Chat are independent Config modules. The displayed model name is the `OLLAMA_MODEL` env tag, not a label from the weight file and not `ollama list`. Coverage grows from real traces and failing cases, not from claiming a complete SAML or logging catalogue.
 - Local OCR is imperfect. Prefer the image when OCR and pixels disagree. Cloud OCR is not used. OCR text from General Chat may be used to build public search queries.
 - Chat transcripts are height-capped so they scroll in-pane; the prompt does not grow the page. Analyze still page-scrolls.
@@ -264,6 +264,8 @@ UI_THEME=system
 
 `MAX_FILE_MB` also caps decompressed SAML from Redirect/Base64 (zlib, raw DEFLATE, gzip), including pasted text, not only uploaded files. Signature and anonymizer XML parsing disables DTDs, entity expansion and network fetches.
 
+`IDDQD_LOG_PROFILE=1` prints log-analyzer phase timings on stderr (policy, line scan, event split, SSH).
+
 `UI_THEME` is `light`, `dark` or `system` (default). Choosing Light/Dark/System in Settings is stored in the browser and restored after a process restart. Gradio Screen Studio (tab recording) is disabled.
 
 `OLLAMA_*` settings apply only when Assistant or General Chat is enabled. `OLLAMA_MODEL` is the exact Ollama tag sent to `/api/chat` and shown on those tabs. It is not Qwen-only and is not read from the model file.
@@ -305,6 +307,7 @@ source .venv/bin/activate
 PYTHONPATH=. python tests/test_analyzers.py
 PYTHONPATH=. python tests/test_log_incidents.py
 PYTHONPATH=. python tests/test_log_timestamps.py
+PYTHONPATH=. python tests/test_log_oracle.py
 PYTHONPATH=. python tests/test_log_syslog_ssh.py
 PYTHONPATH=. python tests/test_regression_manifest.py
 PYTHONPATH=. python tests/test_signature_validation.py

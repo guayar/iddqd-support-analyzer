@@ -17,6 +17,8 @@ def test_unambiguous_formats_parse():
     assert _parse_ts("2026-09-01T14:04:46.123Z") == datetime(2026, 9, 1, 14, 4, 46, 123000)
     assert _parse_ts("2026/09/01 14:04:46") == datetime(2026, 9, 1, 14, 4, 46)
     assert _parse_ts("01-Sep-2026 14:04:46") == datetime(2026, 9, 1, 14, 4, 46)
+    assert _parse_ts("Wed Jul 01 15:00:00 2026") == datetime(2026, 7, 1, 15, 0, 0)
+    assert _parse_ts("Thu Jul  2 16:00:00 2026") == datetime(2026, 7, 2, 16, 0, 0)
     assert _parse_ts("[2026-09-01 14:04:46]") == datetime(2026, 9, 1, 14, 4, 46)
 
 
