@@ -3,6 +3,12 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from analyzers.logs import (
+    VENDOR_CODE_REPORT_CAP,
+    VENDOR_EXAMPLE_REPORT_CAP,
+    VENDOR_FAMILY_REPORT_CAP,
+)
+
 INCIDENT_REPORT_DETAIL_CAP = 30
 
 
@@ -411,30 +417,46 @@ def render_log_report(result: dict[str, Any]) -> str:
     out.append("\n## Vendor codes")
     unique_n = result.get("vendor_code_unique")
     occ_n = result.get("vendor_code_occurrences")
-    if unique_n is not None and occ_n is not None:
-        extra = f"{unique_n} unique; {occ_n} occurrence(s)"
-        if result.get("vendor_code_list_truncated"):
-            extra += "; further distinct codes omitted from the list"
-        out.append(f"Record-start `PREFIX-NUMBER` (after an optional timestamp) or after an explicit log level. Not incident severity. ({extra})")
+    codes = result.get("error_codes") or {}
+    shown = min(len(codes), VENDOR_CODE_REPORT_CAP)
+    if unique_n:
+        out.append(
+            "Message identifiers (`PREFIX-NUMBER`) at the start of a record, after an optional timestamp, "
+            "or after an explicit log level. Count is how often the identifier appeared, not importance. "
+            "These are not correlated incidents."
+        )
+        if unique_n > VENDOR_CODE_REPORT_CAP:
+            out.append(
+                f"Showing {shown} of {unique_n} unique ({occ_n} occurrence(s))."
+            )
+        else:
+            out.append(f"{unique_n} unique; {occ_n} occurrence(s).")
     else:
-        out.append("Explicit codes from the record, not incident severity.")
+        out.append("Message identifiers from the record, not correlated incidents.")
     families = result.get("vendor_code_families") or {}
     if families:
-        top_f = sorted(families.items(), key=lambda kv: (-kv[1], kv[0]))[:12]
-        out.append("- **Families:** " + ", ".join(f"`{k}` × {v}" for k, v in top_f))
+        fam_items = sorted(families.items(), key=lambda kv: (-kv[1], kv[0]))
+        top_f = fam_items[:VENDOR_FAMILY_REPORT_CAP]
+        fam_line = "- **Families:** " + ", ".join(f"`{k}` × {v}" for k, v in top_f)
+        if len(fam_items) > VENDOR_FAMILY_REPORT_CAP:
+            fam_line += f" ({VENDOR_FAMILY_REPORT_CAP} shown; {len(fam_items)} families total)"
+        out.append(fam_line)
     details = {d["code"]: d for d in result.get("vendor_code_details") or [] if d.get("code")}
-    codes = result.get("error_codes") or {}
     if codes:
-        for i, (k, v) in enumerate(list(codes.items())[:40]):
+        for i, (k, v) in enumerate(list(codes.items())[:VENDOR_CODE_REPORT_CAP]):
             d = details.get(k) or {}
             loc = ""
             if d.get("first_line"):
                 loc = f" — lines {d['first_line']}–{d.get('last_line')}"
             out.append(f"- `{k}` — {v} occurrence(s){loc}")
-            if i < 8 and d.get("example"):
-                out.append(f"  - `{d['example']}`")
+            if i < VENDOR_EXAMPLE_REPORT_CAP and d.get("example"):
+                out.append(f"  - Example: `{d['example']}`")
     else:
-        out.append("- No vendor or status codes detected")
+        out.append("- No vendor codes detected")
+    aux = result.get("aux_codes") or {}
+    if aux:
+        bits = [f"`{k}` × {v}" for k, v in list(aux.items())[:8]]
+        out.append("- **Other status tokens:** " + ", ".join(bits))
     findings = result.get("line_findings") or []
     if findings:
         out.extend([
@@ -453,7 +475,7 @@ def render_log_report(result: dict[str, Any]) -> str:
             out.append(_relevant_log_block(sample))
     groups = result.get("incidents") or result.get("error_groups") or []
     unique = result.get("incident_unique_count", len(groups))
-    out.append(f"\n## Incidents ({unique} unique; {result['error_event_count']} events)")
+    out.append(f"\n## Correlated incidents ({unique} unique; {result['error_event_count']} events)")
     shown = len(groups)
     if shown < unique:
         out.append(f"Showing first {shown} incidents")
@@ -461,7 +483,13 @@ def render_log_report(result: dict[str, Any]) -> str:
     if groups and detail_n < unique:
         out.append(f"Showing first {detail_n} incident details")
     if not groups:
-        out.append("No explicit ERROR/FATAL/SEVERE/CRITICAL or SSH authentication events detected.")
+        if (result.get("vendor_code_unique") or 0) > 0:
+            out.append(
+                "No Java/Maven ERROR records or SSH authentication events to group. "
+                "Vendor codes above are listed separately and are not incidents."
+            )
+        else:
+            out.append("No Java/Maven ERROR records or SSH authentication events to group.")
     for i, g in enumerate(groups[:INCIDENT_REPORT_DETAIL_CAP], 1):
         title = g.get("signature") or "Unknown error"
         out.append(f"\n### {i}. {title}")

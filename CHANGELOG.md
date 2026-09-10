@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## [0.16.1] - 2026-09-10
+
+### Changed
+
+- Log report incidents heading is **Correlated incidents**. Empty state does not imply the whole log was empty when vendor codes are listed
+- Vendor codes state that occurrence count is not importance; the list says how many of the unique codes are shown. HTTP/SQLSTATE tokens are not mixed into vendor unique totals
+- Unique vendor-code and per-code counts stay exact; first/last/example storage stays capped
+- version bumped to `0.16.1`
+
 ## [0.16.0] - 2026-09-10
 
 ### Added

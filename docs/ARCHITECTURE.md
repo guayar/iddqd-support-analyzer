@@ -11,7 +11,7 @@ Gradio UI (app.py)
   │
   ├─ Analyze (always) ──> actions.analyze ──> analyzers/saml,logs ──> reporting
   │         └── Auto-detect routes each artifact; SAML files stay one correlated bundle
-  │         └── log incidents: source-line vs semantic-line vs correlated SSH incident severity; RFC3164/syslog + Oracle alert stamps + OpenSSH auth; vendor PREFIX-NUMBER at record start (not incidents); notable explicit FATAL/CRITICAL lines kept in the report independently of the incident-detail cap
+  │         └── log incidents: source-line vs semantic-line vs correlated SSH incident severity; RFC3164/syslog + Oracle alert stamps + OpenSSH auth; vendor PREFIX-NUMBER at record start (identifiers, not incidents; bounded list, exact unique/occurrence totals); notable explicit FATAL/CRITICAL lines kept in the report independently of the incident-detail cap
   │         └── optional fetched third-party corpora stay under testdata/external (not required to run Analyze)
   │         └── Clear resets uploads, paste, cert, report; mode and Assistant chat stay
   │

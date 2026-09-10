@@ -33,7 +33,7 @@ assert "jwt.secret" in g["root_cause"]
 assert "Caused by:" in g["sample"]
 assert g["sample"].count("Caused by:") == 3
 md = render_log_report(a)
-assert "## Incidents" in md
+assert "## Correlated incidents" in md
 assert "Caused by: not explicitly present" not in md
 assert "<details>" in md
 assert "<summary>Relevant log</summary>" in md

@@ -66,7 +66,7 @@ def test_lowercase_fatal_colon_does_not_create_critical_incident():
     assert "🛑 **FATAL:** 1" in md
     assert "❌ **FATAL:**" not in md
     assert "## Notable line findings" in md
-    assert md.index("## Notable line findings") < md.index("## Incidents")
+    assert md.index("## Notable line findings") < md.index("## Correlated incidents")
     assert "- **Line:** 1" in md
     assert "<summary>Relevant log</summary>" in md
     assert "fatal: Write failed: Connection reset by peer [preauth]" in md
@@ -269,7 +269,7 @@ def test_display_cap_does_not_change_unique_count():
     assert len(r["incidents"]) == INCIDENT_RESULT_CAP
     assert len(r["error_groups"]) == INCIDENT_RESULT_CAP
     md = render_log_report(r)
-    assert f"Incidents ({INCIDENT_RESULT_CAP + 1} unique;" in md
+    assert f"Correlated incidents ({INCIDENT_RESULT_CAP + 1} unique;" in md
     assert f"Showing first {INCIDENT_RESULT_CAP} incidents" in md
     assert "## Detected line severities" in md
     assert "## Severity counts" not in md
@@ -304,7 +304,7 @@ def test_fatal_finding_pid_context_excludes_other_pids():
     assert "fatal: Write failed: Connection reset by peer [preauth]" in ctx
     assert "sshd[25463]" not in ctx
     md = render_log_report(r)
-    assert "sshd[25463]" not in md.split("## Incidents")[0]
+    assert "sshd[25463]" not in md.split("## Correlated incidents")[0]
 
 
 def test_fatal_finding_visible_past_incident_detail_cap():
@@ -326,7 +326,7 @@ def test_fatal_finding_visible_past_incident_detail_cap():
     assert findings[0]["line"] == 42
     md = render_log_report(r)
     assert f"Showing first {INCIDENT_REPORT_DETAIL_CAP} incident details" in md
-    notable, _, _ = md.partition("## Incidents")
+    notable, _, _ = md.partition("## Correlated incidents")
     assert "## Notable line findings" in notable
     assert "- **Line:** 42" in notable
     assert "fatal: Write failed: Connection reset by peer [preauth]" in notable

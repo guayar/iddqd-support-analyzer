@@ -60,6 +60,10 @@ def test_internal_error_after_oracle_code_is_not_source_error():
     md = render_log_report(r)
     assert "## Vendor codes" in md
     assert "KUP-04057" in md
+    assert "Example:" in md
+    assert "## Correlated incidents" in md
+    assert "Vendor codes above are listed separately" in md
+    assert "not importance" in md
 
 
 def test_java_ora_after_error_level_still_counts():
@@ -89,6 +93,35 @@ def test_oracle_scan_stays_bounded():
     assert "ERROR" not in r["levels"]
 
 
+def test_http_status_is_aux_not_vendor():
+    r = analyze_log_text("2026-09-07 10:01:00 ERROR Request failed HTTP 500\n")
+    assert "HTTP 500" not in r["error_codes"]
+    assert r["aux_codes"]["HTTP 500"] == 1
+    assert r["vendor_code_unique"] == 0
+
+
+def test_many_distinct_codes_keep_exact_unique():
+    lines = [f"ORA-{10000 + i}: msg {i}" for i in range(2100)]
+    r = analyze_log_text("\n".join(lines) + "\n")
+    assert r["vendor_code_unique"] == 2100
+    assert r["vendor_code_occurrences"] == 2100
+    assert r["vendor_code_families"]["ORA"] == 2100
+    assert len(r["error_codes"]) == 500
+    assert r["vendor_code_list_truncated"] is True
+    assert r["vendor_code_json_truncated"] is True
+    md = render_log_report(r)
+    assert "Showing 40 of 2100 unique" in md
+
+
+def test_late_repeat_is_counted_after_detail_cap():
+    lines = [f"ORA-{10000 + i}: once" for i in range(2000)]
+    lines.extend(["ORA-00600: internal error"] * 50)
+    r = analyze_log_text("\n".join(lines) + "\n")
+    assert r["vendor_code_unique"] == 2001
+    assert r["vendor_code_occurrences"] == 2050
+    assert r["error_codes"]["ORA-00600"] == 50
+
+
 if __name__ == "__main__":
     test_oracle_alert_stamp_is_calendar_time()
     test_rfc3164_without_year_is_unchanged()
@@ -96,4 +129,7 @@ if __name__ == "__main__":
     test_internal_error_after_oracle_code_is_not_source_error()
     test_java_ora_after_error_level_still_counts()
     test_oracle_scan_stays_bounded()
+    test_http_status_is_aux_not_vendor()
+    test_many_distinct_codes_keep_exact_unique()
+    test_late_repeat_is_counted_after_detail_cap()
     print("LOG ORACLE TESTS OK")

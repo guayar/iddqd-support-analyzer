@@ -52,6 +52,10 @@ CODE_AUX_PATTERNS = [
 ]
 VENDOR_CODE_STORE_CAP = 2000
 VENDOR_CODE_JSON_CAP = 500
+VENDOR_CODE_REPORT_CAP = 40
+VENDOR_EXAMPLE_REPORT_CAP = 8
+VENDOR_FAMILY_REPORT_CAP = 12
+VENDOR_AUX_JSON_CAP = 50
 MAX_EVENT_LINES = 500
 SAMPLE_CHARS = 50_000
 INLINE_EXC_RE = re.compile(
@@ -868,9 +872,9 @@ def analyze_log_text(text: str, filename: str | None = None) -> dict[str, Any]:
     lines = text.splitlines()
     levels = collections.Counter()
     codes = collections.Counter()
+    aux_counts = collections.Counter()
     families = collections.Counter()
     code_details: dict[str, dict[str, Any]] = {}
-    omitted_code_occurrences = 0
     n_cal = 0
     ts_min: datetime | None = None
     ts_max: datetime | None = None
@@ -937,13 +941,12 @@ def analyze_log_text(text: str, filename: str | None = None) -> dict[str, Any]:
         if vendor:
             family = vendor.split("-", 1)[0]
             families[family] += 1
-            if vendor in codes:
-                codes[vendor] += 1
+            codes[vendor] += 1
+            if vendor in code_details:
                 det = code_details[vendor]
                 det["count"] += 1
                 det["last_line"] = idx
-            elif len(codes) < VENDOR_CODE_STORE_CAP:
-                codes[vendor] += 1
+            elif len(code_details) < VENDOR_CODE_STORE_CAP:
                 code_details[vendor] = {
                     "code": vendor,
                     "family": family,
@@ -952,10 +955,8 @@ def analyze_log_text(text: str, filename: str | None = None) -> dict[str, Any]:
                     "last_line": idx,
                     "example": line.strip()[:240],
                 }
-            else:
-                omitted_code_occurrences += 1
         for aux in _aux_codes(line):
-            codes[aux] += 1
+            aux_counts[aux] += 1
     line_findings.sort(
         key=lambda f: (_LINE_FINDING_ORDER.get(f["source_level"] or "", 50), f["line"])
     )
@@ -1028,11 +1029,20 @@ def analyze_log_text(text: str, filename: str | None = None) -> dict[str, Any]:
     incident_unique_count = len(groups)
     shown = groups[:INCIDENT_RESULT_CAP]
     stored_occurrences = sum(codes.values())
+    unique_n = len(codes)
     listed = dict(codes.most_common(VENDOR_CODE_JSON_CAP))
     details_out = []
-    for code, _count in list(listed.items())[:40]:
+    for code, count in list(listed.items())[:VENDOR_CODE_REPORT_CAP]:
         if code in code_details:
-            details_out.append(code_details[code])
+            det = dict(code_details[code])
+            det["count"] = count
+            details_out.append(det)
+        else:
+            details_out.append({
+                "code": code,
+                "family": code.split("-", 1)[0],
+                "count": count,
+            })
     _profile_log(t0, "total")
 
     return {
@@ -1044,10 +1054,12 @@ def analyze_log_text(text: str, filename: str | None = None) -> dict[str, Any]:
         "levels": dict(levels),
         "line_findings": line_findings,
         "error_codes": listed,
+        "aux_codes": dict(aux_counts.most_common(VENDOR_AUX_JSON_CAP)),
         "vendor_code_families": dict(families),
-        "vendor_code_unique": len(codes),
-        "vendor_code_occurrences": stored_occurrences + omitted_code_occurrences,
-        "vendor_code_list_truncated": omitted_code_occurrences > 0,
+        "vendor_code_unique": unique_n,
+        "vendor_code_occurrences": stored_occurrences,
+        "vendor_code_list_truncated": unique_n > VENDOR_CODE_REPORT_CAP,
+        "vendor_code_json_truncated": unique_n > VENDOR_CODE_JSON_CAP,
         "vendor_code_details": details_out,
         "error_event_count": len(events) + ssh_event_count,
         "incident_unique_count": incident_unique_count,
@@ -1056,7 +1068,7 @@ def analyze_log_text(text: str, filename: str | None = None) -> dict[str, Any]:
         "limitations": [
             "The analyzer groups multiline ERROR/FATAL/SEVERE/CRITICAL records, Java exception chains and Maven [ERROR] blocks using generic log heuristics.",
             "RFC3164/syslog stamps (`MMM d HH:mm:ss`) are used as written for time_range; a year is not invented when the source has none. Oracle-style stamps with a weekday and a year (`Wed Jul 01 15:00:00 2026`) are calendar times.",
-            "Vendor codes (ORA-01555, RMAN-03015, TNS-12500, and similar PREFIX-NUMBER) are taken from the start of a record after an optional timestamp, or from the message after an explicit log level. Tokens embedded later in the same line are ignored. Codes are identifiers, not incident severities; Oracle messages are not classified from an error-number dictionary.",
+            "Vendor codes (ORA-01555, RMAN-03015, TNS-12500, and similar PREFIX-NUMBER) are taken from the start of a record after an optional timestamp, or from the message after an explicit log level. Tokens embedded later in the same line are ignored. Occurrence count is not importance. Codes are identifiers, not correlated incidents; Oracle messages are not classified from an error-number dictionary. The report lists a bounded subset when many distinct codes are present; family totals and unique/occurrence counts include all vendor codes.",
             "OpenSSH/auth lines are correlated by sshd PID into authentication attempts; repeated attempts from one IP can raise a brute-force incident when the gap between attempts is at most 15 minutes. Five or more attempts in a 60-second window, or ten or more in a slower cluster, are ERROR; five to nine slower attempts are suspected (WARN). Connection closed by itself is not an error. Reverse-DNS mismatch is not treated as a proven break-in.",
             "Line severity counts mix explicit source markers with deterministic per-line classification; they are not the same as incident severity. English `error:` inside an Oracle vendor-code message is not counted as a source ERROR.",
             "Explicit FATAL/CRITICAL/SEVERE source markers are listed under Notable line findings with source line numbers, independently of the incident display cap. A few explicit ERROR examples may be included; semantic WARN lines (for example Failed password) are not listed there.",
