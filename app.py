@@ -508,6 +508,22 @@ def clear_assistant_context():
     return None, _context_badge(None), empty_assistant_history()
 
 
+def clear_assistant_conversation():
+    from chats import empty_assistant_history
+    from vision import SCOPE_ASSISTANT, clear_vision_cache
+
+    clear_vision_cache(SCOPE_ASSISTANT)
+    return empty_assistant_history()
+
+
+def clear_general_chat_conversation():
+    from chats import empty_assistant_history
+    from vision import SCOPE_GENERAL_CHAT, clear_vision_cache
+
+    clear_vision_cache(SCOPE_GENERAL_CHAT)
+    return empty_assistant_history()
+
+
 def anonymize(file, pasted):
     from actions import anonymize as run_anonymize
 
@@ -665,13 +681,16 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                             "Everything in this tab stays between the browser, this application, local OCR and the local Ollama model. "
                             "**No web search.** Attach PNG/JPEG/WEBP screenshots (terminals, stack traces, admin consoles). "
                             "The latest Analyze result is available here automatically. "
-                            "**Clear analysis context** removes it and resets this chat. "
+                            "**Clear conversation** starts a new chat and keeps the attached analysis. "
+                            "**Clear analysis context** removes the analysis and resets this chat. "
                             "General Chat never receives that report, screenshots or OCR.",
                             elem_classes=["psa-note"],
                         )
                         with gr.Column(elem_classes=["psa-assistant-controls"]):
                             context_badge = gr.HTML(_context_badge(None))
-                            clear_ctx = gr.Button("Clear analysis context")
+                            with gr.Row():
+                                clear_conv = gr.Button("Clear conversation")
+                                clear_ctx = gr.Button("Clear analysis context")
                         with gr.Column(elem_classes=["psa-chat"]):
                             assistant_chatbot = gr.Chatbot(
                                 height="min(32rem, calc(100dvh - 22rem))",
@@ -694,6 +713,11 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                                 save_history=False,
                                 fill_height=False,
                             )
+                        clear_conv.click(
+                            clear_assistant_conversation,
+                            inputs=[],
+                            outputs=[assistant_chatbot],
+                        )
                         clear_ctx.click(
                             clear_assistant_context,
                             inputs=[],
@@ -711,13 +735,16 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                             "(Google, Brave, DuckDuckGo, Wikipedia and others; see `WEB_SEARCH_BACKEND`). "
                             "Attach a local PNG/JPEG/WEBP (for example a product photo): pixels stay on this machine. "
                             "It receives **no Analyzer or Assistant context, screenshots or OCR**. "
-                            "Do not paste customer logs, credentials or other sensitive data here; use **Assistant** for that.",
+                            "Do not paste customer logs, credentials or other sensitive data here; use **Assistant** for that. "
+                            "**Clear conversation** starts a new chat on this tab only.",
                             elem_classes=["psa-note"],
                         )
-                        with gr.Column(elem_classes=["psa-chat"]):
+                        with gr.Column(elem_classes=["psa-assistant-controls"]):
                             gr.HTML(
                                 f"<p class='psa-llm-meta'>{_model_hint('Web search enabled')}</p>"
                             )
+                            clear_web_conv = gr.Button("Clear conversation")
+                        with gr.Column(elem_classes=["psa-chat"]):
                             web_chatbot = gr.Chatbot(
                                 height="min(32rem, calc(100dvh - 22rem))",
                                 resizable=False,
@@ -738,6 +765,11 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                                 save_history=False,
                                 fill_height=False,
                             )
+                        clear_web_conv.click(
+                            clear_general_chat_conversation,
+                            inputs=[],
+                            outputs=[web_chatbot],
+                        )
 
             with gr.Tab("Config"):
                 with gr.Column(elem_classes=["psa-shell"]):

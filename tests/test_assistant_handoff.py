@@ -3,7 +3,15 @@ from __future__ import annotations
 import inspect
 from pathlib import Path
 
-from app import analyze, analyze_with_assistant, clear_assistant_context, send_to_assistant, _hero_text
+from app import (
+    analyze,
+    analyze_with_assistant,
+    clear_assistant_context,
+    clear_assistant_conversation,
+    clear_general_chat_conversation,
+    send_to_assistant,
+    _hero_text,
+)
 from config import OLLAMA_MODEL
 from chats import assistant_system_prompt, empty_assistant_history, assistant_chat, web_chat
 
@@ -41,6 +49,10 @@ assert "Assistant and General Chat" not in ui
 assert "PLUGIN_ASSISTANT" in ui
 assert "PLUGIN_GENERAL_CHAT" in ui
 assert "psa-chat-tab" in ui
+assert "Clear conversation" in ui
+assert "clear_assistant_conversation" in ui
+assert "clear_general_chat_conversation" in ui
+assert "Clear analysis context" in ui
 assert OLLAMA_MODEL not in _hero_text()
 assert "Model:" not in _hero_text()
 
@@ -64,7 +76,7 @@ assert '"case": "B"' in assistant_system_prompt(ctx)
 assert '"case": "A"' not in assistant_system_prompt(ctx)
 assert history == []
 
-# F: clear removes structured context and chat history.
+# F: clear analysis context removes structured context and chat history.
 ctx, badge, history = clear_assistant_context()
 assert ctx is None
 assert "No analysis context attached" in badge
@@ -72,6 +84,22 @@ assert "psa-context-off" in badge
 assert f"Model: {OLLAMA_MODEL}" in badge
 assert history == []
 assert "ANALYZER OUTPUT" not in assistant_system_prompt(ctx)
+
+# F2: clear conversation wipes this chat/OCR cache and keeps attached analysis.
+from vision import SCOPE_ASSISTANT, SCOPE_GENERAL_CHAT, _OCR_CACHES
+
+ctx, badge, history = send_to_assistant(analysis_a)
+_OCR_CACHES[SCOPE_ASSISTANT][("a", 1, 1)] = {"text": "x"}
+_OCR_CACHES[SCOPE_GENERAL_CHAT][("g", 1, 1)] = {"text": "y"}
+wiped = clear_assistant_conversation()
+assert wiped == []
+assert ctx == analysis_a
+assert "ANALYZER OUTPUT" in assistant_system_prompt(ctx)
+assert _OCR_CACHES[SCOPE_ASSISTANT] == {}
+assert _OCR_CACHES[SCOPE_GENERAL_CHAT][("g", 1, 1)]["text"] == "y"
+assert clear_general_chat_conversation() == []
+assert _OCR_CACHES[SCOPE_GENERAL_CHAT] == {}
+assert "ANALYZER OUTPUT" in assistant_system_prompt(ctx)
 
 # H: General Chat has no analysis argument; model hint is informational only.
 assert "assistant_context" not in inspect.signature(web_chat).parameters

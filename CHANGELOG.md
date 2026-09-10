@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## [0.17.1] - 2026-09-10
+
+### Added
+
+- Assistant and General Chat have **Clear conversation** to start a new chat on that tab. Assistant keeps the attached analysis; General Chat does not touch Assistant. Each button also clears that tab’s screenshot OCR cache
+
+### Changed
+
+- version bumped to `0.17.1`
+
 ## [0.17.0] - 2026-09-10
 
 ### Added

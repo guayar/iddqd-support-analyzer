@@ -20,11 +20,13 @@ Gradio UI (app.py)
   ├─ Assistant (optional module) ──> chats.assistant_chat ──> vision.py (scope=assistant) ──> llm.py
   │         └── latest Analyze result + optional PNG/JPEG/WEBP; no websearch
   │         └── pixels to Ollama when /api/show lists vision; OCR is auxiliary
+  │         └── Clear conversation resets this chat and OCR cache; analysis stays attached
   │         └── muted OLLAMA_MODEL env tag next to analysis-context status (not in the app header)
   │
   ├─ General Chat (optional module) ──> chats.web_chat ──> vision.py (scope=general_chat) ──> llm.py
   │         └── local by default; plan_web_search may call websearch.execute_web_search
   │         └── never receives Analyze or Assistant context; no OCR/image dumps to search
+  │         └── Clear conversation resets this chat and OCR cache only
   │
   └─ Config (always) ──> modules.py ──> .iddqd-modules.json + process restart
 
@@ -46,7 +48,7 @@ Input
 ## Security boundaries
 
 - Analyzer does not invoke web search or require Ollama.
-- Assistant (optional) does not invoke web search. It receives the latest Analyze result and optional local screenshots plus OCR. **Clear analysis context** can detach it.
+- Assistant (optional) does not invoke web search. It receives the latest Analyze result and optional local screenshots plus OCR. **Clear conversation** resets the transcript without detaching analysis. **Clear analysis context** can detach it.
 - General Chat (optional) does not inherit Analyzer or Assistant context, screenshots or OCR. Local by default. Public search only after a per-turn plan; queries are minimal text, never image bytes or OCR dumps.
 - Optional modules are off by default and enabled independently. Enabling them in Config requires a process restart. Tab order: Analyze → Anonymize → Assistant → General Chat → Config. A legacy `.iddqd-modules.json` value `llm` still turns on both chat modules.
 - `OLLAMA_MODEL` is the process env tag (default `qwen3.6:27b` if unset). Chats display that string; they do not parse model-file metadata or `ollama list`.
