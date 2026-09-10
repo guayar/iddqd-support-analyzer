@@ -1,3 +1,8 @@
+"""Deterministic log scan: shared record prefix, then hint-gated correlators.
+
+New log families should not add a full-file pass. Cheap hint, then on_line/flush.
+"""
+
 from __future__ import annotations
 
 import collections
@@ -7,6 +12,15 @@ import sys
 import time
 from datetime import datetime
 from typing import Any, NamedTuple
+
+from .log_ssh import (
+    BRUTE_FORCE_GAP_SECONDS,
+    BRUTE_FORCE_RAPID_WINDOW_SECONDS,
+    SshCorrelator,
+    ssh_line_hint,
+    ssh_pid as _ssh_pid,
+    ssh_rule,
+)
 
 _TIME = r"[0-2]\d:[0-5]\d:[0-5]\d(?:[.,]\d+)?"
 _TZ = r"(?:Z|[+-]\d{2}:?\d{2})?"
@@ -61,6 +75,7 @@ VENDOR_CODE_REPORT_CAP = 40
 VENDOR_EXAMPLE_REPORT_CAP = 8
 VENDOR_FAMILY_REPORT_CAP = 12
 VENDOR_AUX_JSON_CAP = 50
+GROUP_STORE_CAP = 2000
 MAX_EVENT_LINES = 500
 SAMPLE_CHARS = 50_000
 INLINE_EXC_RE = re.compile(
@@ -69,48 +84,6 @@ INLINE_EXC_RE = re.compile(
     re.I,
 )
 LEVEL_COLON_RE = re.compile(rf"(?i)\b(?P<level>{LEVEL_NAMES}):")
-SSHD_PID_RE = re.compile(r"\bsshd\[(?P<pid>\d+)\]")
-IPV4_RE = re.compile(r"\b(?P<ip>(?:\d{1,3}\.){3}\d{1,3})\b")
-REPEAT_RE = re.compile(r"message repeated (?P<n>\d+) times:\s*\[(?P<body>.*)\]\s*$", re.I)
-SSH_USER_RES = [
-    re.compile(r"invalid user\s+(?P<user>\S+)", re.I),
-    re.compile(r"Failed (?:password|none) for (?:invalid user )?(?P<user>\S+) from", re.I),
-    re.compile(r"failures? for (?P<user>\S+)", re.I),
-    re.compile(r"\buser=(?P<user>\S+)", re.I),
-]
-SSH_RULES = [
-    (re.compile(r"POSSIBLE BREAK-IN ATTEMPT", re.I), "WARN", "security", "reverse_dns_mismatch"),
-    (re.compile(r"\bfatal:", re.I), "ERROR", "ssh", "fatal"),
-    (re.compile(r"Too many authentication failures", re.I), "ERROR", "security", "too_many_failures"),
-    (re.compile(r"No more user authentication methods available", re.I), "ERROR", "security-auth", "no_more_methods"),
-    (re.compile(r"PAM\b.*\bauthentication failures?\b", re.I), "ERROR", "security-auth", "pam_failures"),
-    (re.compile(r"\berror:", re.I), "ERROR", "ssh", "error"),
-    (re.compile(r"Failed password", re.I), "WARN", "security-auth", "failed_password"),
-    (re.compile(r"Failed none", re.I), "WARN", "security-auth", "failed_none"),
-    (re.compile(r"authentication failure", re.I), "WARN", "security-auth", "auth_failure"),
-    (re.compile(r"Invalid user", re.I), "WARN", "security-auth", "invalid_user"),
-]
-_AUTH_KINDS = {
-    "reverse_dns_mismatch",
-    "fatal",
-    "too_many_failures",
-    "no_more_methods",
-    "pam_failures",
-    "error",
-    "failed_password",
-    "failed_none",
-    "auth_failure",
-    "invalid_user",
-}
-_FAILED_AUTH_KINDS = {
-    "failed_password",
-    "failed_none",
-    "auth_failure",
-    "invalid_user",
-    "too_many_failures",
-    "pam_failures",
-    "no_more_methods",
-}
 _LEVEL_RANK = {
     "CRITICAL": 0,
     "FATAL": 1,
@@ -119,9 +92,6 @@ _LEVEL_RANK = {
     "WARN": 4,
     "WARNING": 4,
 }
-BRUTE_FORCE_MIN_SESSIONS = 5
-BRUTE_FORCE_GAP_SECONDS = 15 * 60
-BRUTE_FORCE_RAPID_WINDOW_SECONDS = 60
 INCIDENT_RESULT_CAP = 100
 # Display caps for explicit source markers only (not semantic SSH_RULES).
 LINE_FINDING_CAPS = {
@@ -351,22 +321,6 @@ def colon_severity(line: str) -> str | None:
     return _normalize_level(m.group("level"))
 
 
-def ssh_rule(line: str) -> tuple[str, str, str] | None:
-    body = line
-    repeated = REPEAT_RE.search(line)
-    if repeated:
-        body = repeated.group("body")
-    for pat, level, category, kind in SSH_RULES:
-        if pat.search(body):
-            return level, category, kind
-    return None
-
-
-def _ssh_pid(line: str) -> str | None:
-    m = SSHD_PID_RE.search(line)
-    return m.group("pid") if m else None
-
-
 def _source_line_context(lines: list[str], idx: int, pid: str | None) -> list[str]:
     """Same-PID lines up to and including the finding (1-based idx). Isolated line if no PID."""
     if not pid:
@@ -380,210 +334,6 @@ def _source_line_context(lines: list[str], idx: int, pid: str | None) -> list[st
     if not ctx:
         return [lines[idx - 1]]
     return ctx[-LINE_FINDING_CONTEXT_MAX:]
-
-
-def _ssh_ip(line: str) -> str | None:
-    from_m = re.search(r"\bfrom (?P<ip>(?:\d{1,3}\.){3}\d{1,3})\b", line, re.I)
-    if from_m:
-        return from_m.group("ip")
-    by_m = re.search(r"\b(?:closed by|disconnect from) (?P<ip>(?:\d{1,3}\.){3}\d{1,3})\b", line, re.I)
-    if by_m:
-        return by_m.group("ip")
-    rhost = re.search(r"\brhost=(?P<host>\S+)", line, re.I)
-    if rhost:
-        host = rhost.group("host").rstrip(",")
-        if IPV4_RE.fullmatch(host):
-            return host
-    br = re.search(r"\[(?P<ip>(?:\d{1,3}\.){3}\d{1,3})\]", line)
-    if br:
-        return br.group("ip")
-    m = IPV4_RE.search(line)
-    return m.group("ip") if m else None
-
-
-def _ssh_user(line: str) -> str | None:
-    for pat in SSH_USER_RES:
-        m = pat.search(line)
-        if m:
-            return m.group("user")
-    return None
-
-
-def session_incident_level(kinds: set[str]) -> str:
-    """Correlated sshd[pid] incident level — not max(line rule)."""
-    failed_auth = bool(kinds & _FAILED_AUTH_KINDS)
-    reverse_dns = "reverse_dns_mismatch" in kinds
-    if reverse_dns and failed_auth:
-        return "ERROR"
-    if kinds & {"too_many_failures", "pam_failures", "no_more_methods"}:
-        return "ERROR"
-    if "error" in kinds:
-        return "ERROR"
-    if reverse_dns:
-        return "WARN"
-    if "fatal" in kinds:
-        return "ERROR"
-    if failed_auth:
-        return "WARN"
-    return "WARN"
-
-
-def _ssh_session_title(sess: dict[str, Any]) -> str:
-    kinds = sess["kinds"]
-    ip = sess.get("ip")
-    user = sess.get("user")
-    where = f" from {ip}" if ip else ""
-    who = f" for {user}" if user else ""
-    if "too_many_failures" in kinds:
-        return f"SSH too many authentication failures{who}{where}"
-    if "no_more_methods" in kinds:
-        return f"SSH authentication methods exhausted{who}{where}"
-    if kinds & {"failed_password", "auth_failure", "invalid_user", "failed_none", "pam_failures"}:
-        return f"SSH authentication failure{who}{where}"
-    if "reverse_dns_mismatch" in kinds:
-        return f"SSH reverse-DNS mismatch{where}{who}"
-    if "fatal" in kinds:
-        return f"SSH fatal{where}{who}"
-    if "error" in kinds:
-        return f"SSH error{where}"
-    return f"SSH security event{where}"
-
-
-def _incident_from_session(sess: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "signature": _ssh_session_title(sess),
-        "count": 1,
-        "level": sess["level"],
-        "category": sess.get("category"),
-        "kind": "ssh_session",
-        "root_cause": None,
-        "top_exception": None,
-        "causes": [],
-        "exception_chain": [],
-        "exit_code": None,
-        "codes": {},
-        "first_line": sess["first_line"],
-        "sample": "\n".join(sess["lines"])[:SAMPLE_CHARS],
-    }
-
-
-def _cluster_duration_seconds(cluster: list[dict[str, Any]]) -> float | None:
-    first_dt = _syslog_internal_dt(cluster[0]["stamp"]) if cluster[0].get("stamp") else None
-    last_dt = _syslog_internal_dt(cluster[-1]["stamp"]) if cluster[-1].get("stamp") else None
-    if first_dt is None or last_dt is None:
-        return None
-    return (last_dt - first_dt).total_seconds()
-
-
-def _brute_force_level_and_title(ip: str, n: int, duration: float | None) -> tuple[str, str]:
-    rapid = duration is not None and duration <= BRUTE_FORCE_RAPID_WINDOW_SECONDS
-    if n >= 10 or (n >= BRUTE_FORCE_MIN_SESSIONS and rapid):
-        return "ERROR", f"SSH brute-force from {ip} ({n} authentication attempts)"
-    return "WARN", f"Suspected SSH brute-force from {ip} ({n} authentication attempts)"
-
-
-def _brute_force_incidents(sessions: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    by_ip: dict[str, list[dict[str, Any]]] = collections.defaultdict(list)
-    for sess in sessions:
-        ip = sess.get("ip")
-        if ip:
-            by_ip[ip].append(sess)
-    out: list[dict[str, Any]] = []
-    for ip, group in by_ip.items():
-        dated = []
-        for sess in group:
-            dt = _syslog_internal_dt(sess["stamp"]) if sess.get("stamp") else None
-            dated.append((dt, sess))
-        dated.sort(key=lambda x: (x[0] is None, x[0] or datetime.min, x[1]["first_line"]))
-        cluster: list[dict[str, Any]] = []
-        prev: datetime | None = None
-
-        def flush_cluster():
-            if len(cluster) < BRUTE_FORCE_MIN_SESSIONS:
-                return
-            duration = _cluster_duration_seconds(cluster)
-            level, signature = _brute_force_level_and_title(ip, len(cluster), duration)
-            first = cluster[0]
-            sample_lines = []
-            for s in cluster[:8]:
-                sample_lines.extend(s["lines"][:3])
-            out.append({
-                "signature": signature,
-                "count": len(cluster),
-                "level": level,
-                "category": "security-auth",
-                "kind": "brute_force",
-                "root_cause": None,
-                "top_exception": None,
-                "causes": [],
-                "exception_chain": [],
-                "exit_code": None,
-                "codes": {},
-                "first_line": first["first_line"],
-                "sample": "\n".join(sample_lines)[:SAMPLE_CHARS],
-            })
-
-        for dt, sess in dated:
-            if not cluster:
-                cluster = [sess]
-                prev = dt
-                continue
-            gap_ok = True
-            if dt is not None and prev is not None:
-                gap_ok = (dt - prev).total_seconds() <= BRUTE_FORCE_GAP_SECONDS
-            if gap_ok:
-                cluster.append(sess)
-                prev = dt or prev
-            else:
-                flush_cluster()
-                cluster = [sess]
-                prev = dt
-        flush_cluster()
-    return out
-
-
-def collect_ssh_incidents(lines: list[str], enabled: bool = True) -> tuple[list[dict[str, Any]], int]:
-    if not enabled:
-        return [], 0
-    sessions: dict[str, dict[str, Any]] = {}
-    for idx, line in enumerate(lines, 1):
-        if "sshd[" not in line:
-            continue
-        pid = _ssh_pid(line)
-        rule = ssh_rule(line)
-        if not pid:
-            continue
-        sess = sessions.setdefault(pid, {
-            "pid": pid,
-            "lines": [],
-            "first_line": idx,
-            "ip": None,
-            "user": None,
-            "kinds": set(),
-            "level": None,
-            "category": None,
-            "stamp": syslog_stamp(line),
-        })
-        sess["lines"].append(line)
-        ip = _ssh_ip(line)
-        if ip:
-            sess["ip"] = ip
-        user = _ssh_user(line)
-        if user:
-            sess["user"] = user
-        stamp = syslog_stamp(line)
-        if stamp:
-            sess["stamp"] = stamp
-        if rule:
-            _, category, kind = rule
-            sess["kinds"].add(kind)
-            sess["category"] = category
-    auth_sessions = [s for s in sessions.values() if s["kinds"] & _AUTH_KINDS]
-    for sess in auth_sessions:
-        sess["level"] = session_incident_level(sess["kinds"])
-    incidents = [_incident_from_session(s) for s in auth_sessions]
-    incidents.extend(_brute_force_incidents(auth_sessions))
-    return incidents, len(auth_sessions)
 
 
 def _timestamp_at_start(line: str) -> _PrefixSpan | None:
@@ -610,7 +360,10 @@ def _normalize_level(level: str) -> str:
     return level
 
 
-def _first_vendor_code(line: str) -> str | None:
+def _first_vendor_code(line: str, prefix: dict[str, Any] | None = None) -> str | None:
+    if prefix is not None:
+        m = VENDOR_FIND_RE.search(prefix.get("rest") or "")
+        return f"{m.group('family')}-{m.group('num')}" if m else None
     s = line.lstrip()
     ts = _timestamp_at_start(line)
     after_ts = s[ts.end():] if ts else s
@@ -666,42 +419,67 @@ def _code_list(text: str) -> list[str]:
     return list(dict.fromkeys(found))
 
 
-def log_record_prefix(line: str) -> dict[str, Any] | None:
-    """Return a recognized log-record prefix, or None for continuations / message text."""
+def _split_record(line: str) -> tuple[dict[str, Any] | None, bool]:
+    """Parse record prefix once. Second value is True when this line starts a new record."""
     stripped = line.strip()
     if not stripped:
-        return None
+        return None, False
     bm = BRACKET_RE.match(stripped)
     if bm:
-        return {"level": _normalize_level(bm.group("level")), "style": "bracket", "rest": bm.group("rest")}
+        return (
+            {"level": _normalize_level(bm.group("level")), "style": "bracket", "rest": bm.group("rest")},
+            True,
+        )
     ts = _timestamp_at_start(line)
     if ts:
         rest = line.lstrip()[ts.end():]
         lm = TS_LEVEL_RE.match(rest)
         if lm:
-            return {"level": _normalize_level(lm.group("level")), "style": "timestamped", "rest": rest[lm.end():]}
+            return (
+                {
+                    "level": _normalize_level(lm.group("level")),
+                    "style": "timestamped",
+                    "rest": rest[lm.end():],
+                },
+                True,
+            )
         bm_ts = TS_BRACKET_LEVEL_RE.match(rest)
         if bm_ts:
-            return {
-                "level": _normalize_level(bm_ts.group("level")),
-                "style": "timestamp_bracket",
-                "rest": bm_ts.group("rest") or "",
-            }
-        return None
+            return (
+                {
+                    "level": _normalize_level(bm_ts.group("level")),
+                    "style": "timestamp_bracket",
+                    "rest": bm_ts.group("rest") or "",
+                },
+                True,
+            )
+        return None, True
     bm2 = BARE_ERROR_RE.match(stripped)
     if bm2:
-        return {"level": _normalize_level(bm2.group("level")), "style": "bare", "rest": stripped[bm2.end():]}
-    return None
+        return (
+            {
+                "level": _normalize_level(bm2.group("level")),
+                "style": "bare",
+                "rest": stripped[bm2.end():],
+            },
+            True,
+        )
+    return None, False
+
+
+def log_record_prefix(line: str) -> dict[str, Any] | None:
+    """Return a recognized log-record prefix, or None for continuations / message text."""
+    prefix, _ = _split_record(line)
+    return prefix
 
 
 def is_new_log_record(line: str) -> bool:
-    if log_record_prefix(line):
-        return True
-    return _timestamp_at_start(line) is not None
+    _prefix, new_rec = _split_record(line)
+    return new_rec
 
 
-def _is_maven_advisory(line: str) -> bool:
-    rec = log_record_prefix(line)
+def _is_maven_advisory(line: str, rec: dict[str, Any] | None = None) -> bool:
+    rec = rec if rec is not None else log_record_prefix(line)
     if not rec or rec["style"] != "bracket" or rec["level"] not in ERROR_LEVELS:
         return False
     rest = (rec.get("rest") or "").strip()
@@ -725,39 +503,75 @@ def _is_stack_continuation(line: str) -> bool:
     return False
 
 
-def _iter_error_events(lines: list[str]):
-    current: dict[str, Any] | None = None
+class _ErrorEventAssembler:
+    """Multiline ERROR records (Java/Maven/[ts][error]) with pending-event state."""
 
-    def flush():
-        nonlocal current
-        if current:
-            yield current
-            current = None
+    def __init__(self) -> None:
+        self.current: dict[str, Any] | None = None
 
-    for idx, line in enumerate(lines, 1):
-        rec = log_record_prefix(line)
+    def _flush(self):
+        if self.current:
+            ev = self.current
+            self.current = None
+            yield ev
+
+    def push(self, idx: int, line: str, rec: dict[str, Any] | None, new_record: bool):
         if rec and rec["level"] in ERROR_LEVELS:
-            if current and current.get("style") == "bracket" and _is_maven_advisory(line):
-                current["lines"].append(line)
-                continue
-            yield from flush()
-            current = {"start_line": idx, "lines": [line], "level": rec["level"], "style": rec["style"]}
-            continue
-        if rec or _timestamp_at_start(line):
-            yield from flush()
-            continue
-        if current and len(current["lines"]) < MAX_EVENT_LINES and _is_stack_continuation(line):
-            current["lines"].append(line)
-            continue
-        if current and not line.strip():
-            current["lines"].append(line)
-            continue
-        yield from flush()
-    yield from flush()
+            if self.current and self.current.get("style") == "bracket" and _is_maven_advisory(line, rec):
+                if len(self.current["lines"]) < MAX_EVENT_LINES:
+                    self.current["lines"].append(line)
+                return
+            yield from self._flush()
+            self.current = {
+                "start_line": idx,
+                "lines": [line],
+                "level": rec["level"],
+                "style": rec["style"],
+            }
+            return
+        if rec or new_record:
+            yield from self._flush()
+            return
+        if self.current and len(self.current["lines"]) < MAX_EVENT_LINES and _is_stack_continuation(line):
+            self.current["lines"].append(line)
+            return
+        if self.current and not line.strip():
+            if len(self.current["lines"]) < MAX_EVENT_LINES:
+                self.current["lines"].append(line)
+            return
+        yield from self._flush()
+
+    def finish(self):
+        yield from self._flush()
+
+
+def _iter_error_events(lines: list[str]):
+    asm = _ErrorEventAssembler()
+    for idx, line in enumerate(lines, 1):
+        rec, new_record = _split_record(line)
+        yield from asm.push(idx, line, rec, new_record)
+    yield from asm.finish()
 
 
 def _split_events(lines: list[str]) -> list[dict[str, Any]]:
     return list(_iter_error_events(lines))
+
+
+_EMPTY_JAVA_CHAIN = {
+    "top_exception": None,
+    "causes": [],
+    "suppressed": [],
+    "root_cause": None,
+    "exception_chain": [],
+}
+
+
+def _looks_like_java_event(ev: dict[str, Any]) -> bool:
+    lines = ev.get("lines") or []
+    if len(lines) > 1:
+        return True
+    first = lines[0] if lines else ""
+    return bool(INLINE_EXC_RE.search(first) or "Caused by:" in first)
 
 
 def _exc_class(body: str) -> str | None:
@@ -887,6 +701,53 @@ def _incident_title(event: dict[str, Any], chain: dict[str, Any]) -> str:
     return "Unknown error"
 
 
+def _add_grouped_event(
+    ev: dict[str, Any],
+    grouped: dict[tuple[str, str], dict[str, Any]],
+    unique_seen: set[tuple[str, str]],
+) -> None:
+    if _looks_like_java_event(ev):
+        chain = parse_java_exception_chain(ev["lines"])
+    else:
+        chain = _EMPTY_JAVA_CHAIN
+    key = _grouping_key(ev, chain)
+    unique_seen.add(key)
+    if key not in grouped:
+        if len(grouped) >= GROUP_STORE_CAP:
+            return
+        sample = "\n".join(ev["lines"])[:SAMPLE_CHARS]
+        exit_m = EXIT_CODE_RE.search(sample)
+        grouped[key] = {
+            "signature": _incident_title(ev, chain),
+            "count": 1,
+            "level": ev["level"],
+            "root_cause": chain["root_cause"],
+            "top_exception": chain["top_exception"],
+            "causes": chain["causes"],
+            "exception_chain": chain["exception_chain"],
+            "exit_code": int(exit_m.group(1)) if exit_m else None,
+            "codes": collections.Counter(),
+            "first_line": ev["start_line"],
+            "sample": sample,
+        }
+        for c in _code_list(sample):
+            grouped[key]["codes"][c] += 1
+        return
+    entry = grouped[key]
+    entry["count"] += 1
+    entry["first_line"] = min(entry["first_line"], ev["start_line"])
+    sample = "\n".join(ev["lines"])[:SAMPLE_CHARS]
+    if len(sample) > len(entry["sample"]):
+        entry["sample"] = sample
+    if chain["root_cause"] and not entry["root_cause"]:
+        entry["root_cause"] = chain["root_cause"]
+        entry["top_exception"] = chain["top_exception"]
+        entry["causes"] = chain["causes"]
+        entry["exception_chain"] = chain["exception_chain"]
+    for c in _code_list(sample):
+        entry["codes"][c] += 1
+
+
 def _profile_log(t0: float, label: str) -> float:
     now = time.perf_counter()
     if os.environ.get("IDDQD_LOG_PROFILE") == "1":
@@ -895,6 +756,7 @@ def _profile_log(t0: float, label: str) -> float:
 
 
 def analyze_log_text(text: str, filename: str | None = None) -> dict[str, Any]:
+    """One shared scan after an optional slash-date policy pass. New families: hint + correlator."""
     t0 = time.perf_counter()
     lines = text.splitlines()
     levels = collections.Counter()
@@ -908,15 +770,24 @@ def analyze_log_text(text: str, filename: str | None = None) -> dict[str, Any]:
     n_syslog = 0
     syslog_min: tuple[tuple[int, int, int, int, int], str] | None = None
     syslog_max: tuple[tuple[int, int, int, int, int], str] | None = None
-    saw_sshd = False
 
     policy = _ts_policy(lines, text)
     t1 = _profile_log(t0, "ts_policy")
     line_findings: list[dict[str, Any]] = []
     finding_shown = collections.Counter()
+    events = _ErrorEventAssembler()
+    ssh = SshCorrelator()
+    grouped: dict[tuple[str, str], dict[str, Any]] = {}
+    unique_seen: set[tuple[str, str]] = set()
+    event_count = 0
+
+    def on_error_event(ev: dict[str, Any]) -> None:
+        nonlocal event_count
+        event_count += 1
+        _add_grouped_event(ev, grouped, unique_seen)
+
     for idx, line in enumerate(lines, 1):
-        if "sshd[" in line:
-            saw_sshd = True
+        rec, new_record = _split_record(line)
         ts = _parse_ts(line, policy)
         if ts:
             n_cal += 1
@@ -936,7 +807,7 @@ def analyze_log_text(text: str, filename: str | None = None) -> dict[str, Any]:
                     syslog_max = item
         source_level = None
         rule = None
-        rec = log_record_prefix(line)
+        ssh_hit = ssh_line_hint(line)
         if rec:
             levels[rec["level"]] += 1
             source_level = rec["level"]
@@ -945,14 +816,14 @@ def analyze_log_text(text: str, filename: str | None = None) -> dict[str, Any]:
             if colon:
                 levels[colon] += 1
                 source_level = colon
-            elif "sshd" in line:
+            elif ssh_hit:
                 rule = ssh_rule(line)
                 if rule:
                     levels[_normalize_level(rule[0])] += 1
         cap = LINE_FINDING_CAPS.get(source_level or "")
         if cap and finding_shown[source_level] < cap:
             finding_shown[source_level] += 1
-            pid = _ssh_pid(line) if "sshd[" in line else None
+            pid = _ssh_pid(line) if ssh_hit else None
             if rule is None and pid:
                 rule = ssh_rule(line)
             line_findings.append({
@@ -964,7 +835,7 @@ def analyze_log_text(text: str, filename: str | None = None) -> dict[str, Any]:
                 "message": line,
                 "context": _source_line_context(lines, idx, pid),
             })
-        vendor = _first_vendor_code(line)
+        vendor = _first_vendor_code(line, rec)
         if vendor:
             family = vendor.split("-", 1)[0]
             families[family] += 1
@@ -984,10 +855,17 @@ def analyze_log_text(text: str, filename: str | None = None) -> dict[str, Any]:
                 }
         for aux in _aux_codes(line):
             aux_counts[aux] += 1
+        for ev in events.push(idx, line, rec, new_record):
+            on_error_event(ev)
+        if ssh_hit:
+            ssh.on_line(idx, line, raw)
+    for ev in events.finish():
+        on_error_event(ev)
+    ssh_incidents, ssh_event_count = ssh.flush()
     line_findings.sort(
         key=lambda f: (_LINE_FINDING_ORDER.get(f["source_level"] or "", 50), f["line"])
     )
-    t2 = _profile_log(t1, "line_scan")
+    t2 = _profile_log(t1, "scan")
 
     if ts_min is not None and ts_max is not None:
         time_range = {
@@ -1004,48 +882,12 @@ def analyze_log_text(text: str, filename: str | None = None) -> dict[str, Any]:
     else:
         time_range = {"from": None, "to": None}
 
-    event_count = 0
-    grouped: dict[tuple[str, str], dict[str, Any]] = {}
-    for ev in _iter_error_events(lines):
-        event_count += 1
-        chain = parse_java_exception_chain(ev["lines"])
-        key = _grouping_key(ev, chain)
-        sample = "\n".join(ev["lines"])[:SAMPLE_CHARS]
-        exit_m = EXIT_CODE_RE.search(sample)
-        entry = grouped.setdefault(key, {
-            "signature": _incident_title(ev, chain),
-            "count": 0,
-            "level": ev["level"],
-            "root_cause": chain["root_cause"],
-            "top_exception": chain["top_exception"],
-            "causes": chain["causes"],
-            "exception_chain": chain["exception_chain"],
-            "exit_code": int(exit_m.group(1)) if exit_m else None,
-            "codes": collections.Counter(),
-            "first_line": ev["start_line"],
-            "sample": sample,
-        })
-        entry["count"] += 1
-        entry["first_line"] = min(entry["first_line"], ev["start_line"])
-        if len(sample) > len(entry["sample"]):
-            entry["sample"] = sample
-        if chain["root_cause"] and not entry["root_cause"]:
-            entry["root_cause"] = chain["root_cause"]
-            entry["top_exception"] = chain["top_exception"]
-            entry["causes"] = chain["causes"]
-            entry["exception_chain"] = chain["exception_chain"]
-        for c in _code_list(sample):
-            entry["codes"][c] += 1
-    t3 = _profile_log(t2, "split_events")
-
     groups = []
     for v in grouped.values():
         v = dict(v)
         v["codes"] = dict(v["codes"])
         groups.append(v)
 
-    ssh_incidents, ssh_event_count = collect_ssh_incidents(lines, enabled=saw_sshd)
-    _profile_log(t3, "ssh_and_groups")
     groups.extend(ssh_incidents)
     groups.sort(
         key=lambda x: (
@@ -1054,7 +896,7 @@ def analyze_log_text(text: str, filename: str | None = None) -> dict[str, Any]:
             x["first_line"],
         )
     )
-    incident_unique_count = len(groups)
+    incident_unique_count = len(unique_seen) + len(ssh_incidents)
     shown = groups[:INCIDENT_RESULT_CAP]
     stored_occurrences = sum(codes.values())
     unique_n = len(codes)
@@ -1071,6 +913,7 @@ def analyze_log_text(text: str, filename: str | None = None) -> dict[str, Any]:
                 "family": code.split("-", 1)[0],
                 "count": count,
             })
+    _profile_log(t2, "scan")
     _profile_log(t0, "total")
 
     return {
@@ -1100,8 +943,8 @@ def analyze_log_text(text: str, filename: str | None = None) -> dict[str, Any]:
             "OpenSSH/auth lines are correlated by sshd PID into authentication attempts; repeated attempts from one IP can raise a brute-force incident when the gap between attempts is at most 15 minutes. Five or more attempts in a 60-second window, or ten or more in a slower cluster, are ERROR; five to nine slower attempts are suspected (WARN). Connection closed by itself is not an error. Reverse-DNS mismatch is not treated as a proven break-in.",
             "Line severity counts mix explicit source markers with deterministic per-line classification; they are not the same as incident severity. English `error:` inside an Oracle vendor-code message is not counted as a source ERROR.",
             "Explicit FATAL/CRITICAL/SEVERE source markers are listed under Notable line findings with source line numbers, independently of the incident display cap. A few explicit ERROR examples may be included; semantic WARN lines (for example Failed password) are not listed there.",
-            "Incident totals are computed before the displayed list is truncated.",
+            "Incident totals are computed before the displayed list is truncated. Stored incident details are capped; unique counts still include every signature.",
             "Numeric dates such as 09/01/26 are treated as record boundaries; ISO time_range is filled only when day/month order is unambiguous in this log.",
-            "Product-specific message IDs can be added as optional profiles when representative log samples are available.",
+            "A new log family should attach a cheap line hint and a correlator on the shared scan, not a separate full-file pass. Product-specific message IDs can be added as profiles when samples exist.",
         ],
     }

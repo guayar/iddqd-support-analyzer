@@ -11,7 +11,7 @@ Gradio UI (app.py)
   │
   ├─ Analyze (always) ──> actions.analyze ──> analyzers/saml,logs ──> reporting
   │         └── Auto-detect routes each artifact; SAML files stay one correlated bundle
-  │         └── log incidents: source-line vs semantic-line vs correlated SSH incident severity; RFC3164/syslog + Oracle alert stamps + `[ts] [error]` + OpenSSH auth; vendor PREFIX-NUMBER at record start (identifiers, not incidents; bounded list, exact unique/occurrence totals); notable explicit FATAL/CRITICAL lines kept in the report independently of the incident-detail cap
+  │         └── log scan: optional slash-date policy, then one sequential pass (prefix once; vendor/levels/events; OpenSSH correlator on `sshd[` hint). New families: hint + correlator, not a new full-file pass. RFC3164/syslog + Oracle alert stamps + `[ts] [error]` + Java/Maven events; vendor PREFIX-NUMBER at record start (identifiers, not incidents); bounded stored details, exact unique/occurrence totals
   │         └── optional fetched third-party corpora stay under testdata/external (not required to run Analyze)
   │         └── Clear resets uploads, paste, cert, report; mode and Assistant chat stay
   │
@@ -39,7 +39,7 @@ Input
   │                                                   ├─ optional supplied X.509 certificate
   │                                                   └─ metadata / embedded-cert comparison
   │
-  ├─ *.log ───────> parse ──> group errors / codes / stacks ─────────> report
+  ├─ *.log ───────> one scan + hint-gated correlators ──> bounded groups / report
   │
   └─ log anonymizer ──> deterministic pseudonymization ──> anonymized copy
             └── optional SAML XML audit: exact decoded XML (sensitive) + post-transform XML

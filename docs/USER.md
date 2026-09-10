@@ -83,7 +83,7 @@ If only a certificate embedded in `ds:KeyInfo` is available, the analyzer can ve
 - detected line severities: explicit source markers plus deterministic per-line classification (for example `Failed password` → WARN); this is not incident severity. Explicit FATAL/CRITICAL/SEVERE markers are listed under **Notable line findings** (line number, source marker, Relevant log) before **Correlated incidents**, even when incident details are truncated. Semantic WARN is not listed as an explicit source marker.
 - OpenSSH/auth.log patterns correlated by `sshd` PID. Reverse-DNS mismatch (`POSSIBLE BREAK-IN ATTEMPT`) alone is WARN, not a proven break-in; the same PID with failed authentication is ERROR. Brute-force roll-up is by source IP with a 15-minute gap (no global merge). Five or more attempts in 60 seconds, or ten or more in a slower cluster, are ERROR; five to nine slower attempts are suspected (WARN). `Connection closed` alone is not an incident. Incident totals are counted before the displayed list is truncated.
 - vendor / status codes: `PREFIX-NUMBER` at the start of a record (after an optional timestamp) or after an explicit log level; family roll-up in the report. Occurrence count is not importance. The displayed list is bounded; unique and occurrence totals include all vendor codes. Tokens later in the same line are ignored. Not correlated incidents and not an Oracle error dictionary
-- correlated incidents: Java/Maven ERROR records, SSH sessions, and timestamp-plus-bracket ERROR lines grouped by signature. A leading `[client …]` after the level is not the incident title. Client addresses and `child <id>` in the message are treated as context. Apache `notice` is INFO, not an incident. Zero correlated incidents does not mean the log is empty; vendor codes stay a separate list
+- correlated incidents: Java/Maven ERROR records, SSH sessions, and timestamp-plus-bracket ERROR lines grouped by signature. A leading `[client …]` after the level is not the incident title. Client addresses and `child <id>` in the message are treated as context. Apache `notice` is INFO, not an incident. Zero correlated incidents does not mean the log is empty; vendor codes stay a separate list. OpenSSH runs on a `sshd[` hint in the same scan as the rest of the log (not a second full-file pass). A new log family should add a cheap hint plus correlator, not another complete scan.
 - multiline incidents with Java exception chains and Maven `[ERROR]` blocks
 - root-cause extraction from `Caused by:` (not a separate incident)
 - first occurrence, numbered `Caused by` list, and a collapsible raw log sample
@@ -310,6 +310,7 @@ PYTHONPATH=. python tests/test_log_incidents.py
 PYTHONPATH=. python tests/test_log_timestamps.py
 PYTHONPATH=. python tests/test_log_oracle.py
 PYTHONPATH=. python tests/test_log_apache.py
+PYTHONPATH=. python tests/test_log_engine.py
 PYTHONPATH=. python tests/test_log_syslog_ssh.py
 PYTHONPATH=. python tests/test_regression_manifest.py
 PYTHONPATH=. python tests/test_signature_validation.py

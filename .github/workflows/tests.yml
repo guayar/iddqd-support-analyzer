@@ -32,6 +32,7 @@ jobs:
           PYTHONPATH=. python tests/test_log_timestamps.py
           PYTHONPATH=. python tests/test_log_oracle.py
           PYTHONPATH=. python tests/test_log_apache.py
+          PYTHONPATH=. python tests/test_log_engine.py
           PYTHONPATH=. python tests/test_log_syslog_ssh.py
           PYTHONPATH=. python tests/test_regression_manifest.py
           PYTHONPATH=. python tests/test_analyzers.py

@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## [0.17.2] - 2026-09-10
+
+### Changed
+
+- Log analyzer uses one shared scan after the optional slash-date pass: record prefix is parsed once per line; OpenSSH correlation runs on a `sshd[` hint in that scan instead of a second full-file pass
+- Java exception-chain parsing runs only when an ERROR event looks like a stack; stored incident details stay capped while unique counts stay exact
+- version bumped to `0.17.2`
+
 ## [0.17.1] - 2026-09-10
 
 ### Added
