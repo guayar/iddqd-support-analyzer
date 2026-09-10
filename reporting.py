@@ -484,12 +484,10 @@ def render_log_report(result: dict[str, Any]) -> str:
         out.append(f"Showing first {detail_n} incident details")
     if not groups:
         if (result.get("vendor_code_unique") or 0) > 0:
-            out.append(
-                "No Java/Maven ERROR records or SSH authentication events to group. "
-                "Vendor codes above are listed separately and are not incidents."
-            )
+            out.append("No correlated incident patterns in this log.")
+            out.append("Vendor codes above are reported separately and are not incidents.")
         else:
-            out.append("No Java/Maven ERROR records or SSH authentication events to group.")
+            out.append("No correlated incident patterns in this log.")
     for i, g in enumerate(groups[:INCIDENT_REPORT_DETAIL_CAP], 1):
         title = g.get("signature") or "Unknown error"
         out.append(f"\n### {i}. {title}")

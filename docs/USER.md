@@ -83,7 +83,7 @@ If only a certificate embedded in `ds:KeyInfo` is available, the analyzer can ve
 - detected line severities: explicit source markers plus deterministic per-line classification (for example `Failed password` → WARN); this is not incident severity. Explicit FATAL/CRITICAL/SEVERE markers are listed under **Notable line findings** (line number, source marker, Relevant log) before **Correlated incidents**, even when incident details are truncated. Semantic WARN is not listed as an explicit source marker.
 - OpenSSH/auth.log patterns correlated by `sshd` PID. Reverse-DNS mismatch (`POSSIBLE BREAK-IN ATTEMPT`) alone is WARN, not a proven break-in; the same PID with failed authentication is ERROR. Brute-force roll-up is by source IP with a 15-minute gap (no global merge). Five or more attempts in 60 seconds, or ten or more in a slower cluster, are ERROR; five to nine slower attempts are suspected (WARN). `Connection closed` alone is not an incident. Incident totals are counted before the displayed list is truncated.
 - vendor / status codes: `PREFIX-NUMBER` at the start of a record (after an optional timestamp) or after an explicit log level; family roll-up in the report. Occurrence count is not importance. The displayed list is bounded; unique and occurrence totals include all vendor codes. Tokens later in the same line are ignored. Not correlated incidents and not an Oracle error dictionary
-- correlated incidents: Java/Maven ERROR records, SSH sessions, and timestamp-plus-bracket ERROR lines grouped by signature. Client addresses and `child <id>` in the message are treated as context. Apache `notice` is INFO, not an incident. Zero incidents with many vendor codes is a valid result
+- correlated incidents: Java/Maven ERROR records, SSH sessions, and timestamp-plus-bracket ERROR lines grouped by signature. Client addresses and `child <id>` in the message are treated as context. Apache `notice` is INFO, not an incident. Zero correlated incidents does not mean the log is empty; vendor codes stay a separate list
 - multiline incidents with Java exception chains and Maven `[ERROR]` blocks
 - root-cause extraction from `Caused by:` (not a separate incident)
 - first occurrence, numbered `Caused by` list, and a collapsible raw log sample
@@ -365,15 +365,24 @@ Attribution, licenses, and pins: [THIRD_PARTY_TEST_DATA.md](THIRD_PARTY_TEST_DAT
 
 ## Versioning
 
-The project uses semantic versioning while it is pre-1.0. New functionality normally increments the minor version; compatibility fixes and focused improvements to an existing feature increment the patch version.
+Pre-1.0 SemVer, read as `0.MINOR.PATCH`. Numbers should move slowly. Judge the **user-facing capability**, not how many files or lines changed.
 
-When behavior, UI, modules, env vars or security boundaries change, update docs in the same change:
+- **No bump** — cosmetics and docs: copy that only clarifies shipped behavior, README/USER wording, changelog bullets under the **existing** heading.
+- **Patch** (`0.x.Z`) — small work on modules that already exist: grouping, caps, empty-state, a new line shape in the current log analyzer, report layout, bugfixes. Apache-style prefixes in Log are a patch if the Log tab already existed.
+- **Minor** (`0.Y.0`) — something large: a new tab or optional module, a new kind of input, or an existing analyzer gaining **new capabilities** (a different decision surface, a new report axis, breaking Analyze identity). Volume of refactor is not a minor by itself.
+- **Major** (`X.0.0`) — almost never before 1.0; reserved for a breaking product contract.
+
+Do **not** bump `VERSION` for docs-only follow-ups of a version that already shipped, or for report/UI wording that only clarifies behavior already in that version.
+
+Still update stale docs. Keep `VERSION`, the latest changelog heading and the README `**Current version:**` in lockstep when you do bump.
+
+When behavior, UI, modules, env vars or security boundaries change and you **do** bump, update in the same change:
 
 1. `VERSION`
 2. `CHANGELOG.md` — new heading matching `VERSION`
 3. `README.md` — short GitHub landing page only (`**Current version:**`, purpose, capability summary, start command, links into `docs/`). Finding-code catalogues, env dumps and install tables belong in this guide, not on the landing README.
 4. This file for user-facing detail. `docs/ARCHITECTURE.md` and `config.example.env` when architecture or env vars changed.
 
-The README `**Current version:**` string must equal `VERSION`. The latest changelog heading must equal `VERSION`. Do not bump the version for a docs-only follow-up of a change that already shipped that version; still fix stale wording.
+If the change stays on the current version (wording/docs-only), add a changelog bullet under that existing heading instead of a new version.
 
 The GitHub About box has no version number. Refresh it only when user-facing functionality changes (new or removed modules, privacy/search/vision boundaries, what the tool is). Skip About for patch-only or docs-only version bumps.

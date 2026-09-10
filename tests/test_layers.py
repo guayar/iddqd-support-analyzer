@@ -43,7 +43,7 @@ log_report = render_log_report({
 })
 assert "**File:** `app.log`" in log_report
 assert "❌ **ERROR:** 1" in log_report
-assert "No Java/Maven ERROR records or SSH authentication events to group." in log_report
+assert "No correlated incident patterns in this log." in log_report
 assert "## Correlated incidents" in log_report
 assert "## Detected line severities" in log_report
 

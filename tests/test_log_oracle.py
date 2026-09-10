@@ -62,7 +62,7 @@ def test_internal_error_after_oracle_code_is_not_source_error():
     assert "KUP-04057" in md
     assert "Example:" in md
     assert "## Correlated incidents" in md
-    assert "Vendor codes above are listed separately" in md
+    assert "Vendor codes above are reported separately" in md
     assert "not importance" in md
 
 

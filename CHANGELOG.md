@@ -10,6 +10,8 @@ All notable changes to this project are documented here.
 
 ### Changed
 
+- Correlated-incidents empty state: 0 incidents does not mean the log is empty; vendor codes stay a separate list
+- Versioning (user guide): no bump for cosmetics/docs; patch for small work on existing modules; minor only for new capabilities
 - version bumped to `0.17.0`
 
 ## [0.16.1] - 2026-09-10
