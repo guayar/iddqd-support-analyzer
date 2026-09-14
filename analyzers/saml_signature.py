@@ -6,6 +6,7 @@ import re
 from typing import Any
 
 from .saml import NS, _extract_candidates, _skip_xml_prologue
+from .saml_validation import _usable_metadata, select_role_metadata
 from .xml_safe import lxml_fromstring
 
 
@@ -30,6 +31,44 @@ def _issue(
         "standard": standard,
         "note": note,
     }
+
+
+def _spki_sha256_from_pem(pem: str) -> str | None:
+    try:
+        from cryptography import x509
+        from cryptography.hazmat.primitives import serialization
+    except Exception:
+        return None
+    try:
+        cert = x509.load_pem_x509_certificate(pem.encode("ascii"))
+        der = cert.public_key().public_bytes(
+            serialization.Encoding.DER,
+            serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        digest = hashlib.sha256(der).hexdigest().upper()
+        return ":".join(digest[i : i + 2] for i in range(0, len(digest), 2))
+    except Exception:
+        return None
+
+
+def _keys_equivalent(left: dict[str, str], right: dict[str, str]) -> str | None:
+    """Return how two cert dicts match: DER fingerprint, public-key, or None."""
+    if left.get("fingerprint") and left.get("fingerprint") == right.get("fingerprint"):
+        return "certificate SHA-256 fingerprint (DER)"
+    lp = left.get("spki") or _spki_sha256_from_pem(left.get("pem") or "")
+    rp = right.get("spki") or _spki_sha256_from_pem(right.get("pem") or "")
+    if lp and rp and lp == rp:
+        return "public key (SubjectPublicKeyInfo SHA-256)"
+    return None
+
+
+def _annotate_cert(item: dict[str, str]) -> dict[str, str]:
+    out = dict(item)
+    if "spki" not in out and out.get("pem"):
+        spki = _spki_sha256_from_pem(out["pem"])
+        if spki:
+            out["spki"] = spki
+    return out
 
 
 def _fingerprint_from_b64(value: str) -> str | None:
@@ -210,7 +249,7 @@ def _metadata_signing_certs(metadata_roots: list[Any]) -> dict[tuple[str, str], 
                             fp = _fingerprint_from_b64(value)
                             if not pem or not fp:
                                 continue
-                            item = {"pem": pem, "fingerprint": fp}
+                            item = _annotate_cert({"pem": pem, "fingerprint": fp})
                             bucket = trust.setdefault((role, entity_id), [])
                             if not any(x["fingerprint"] == fp for x in bucket):
                                 bucket.append(item)
@@ -230,7 +269,7 @@ def _embedded_certs(element: Any) -> list[dict[str, str]]:
         pem = _pem_from_b64(value)
         fp = _fingerprint_from_b64(value)
         if pem and fp and not any(x["fingerprint"] == fp for x in out):
-            out.append({"pem": pem, "fingerprint": fp})
+            out.append(_annotate_cert({"pem": pem, "fingerprint": fp}))
     return out
 
 
@@ -348,9 +387,50 @@ def _remove_crypto_warning(result: dict[str, Any], prefix: str, scope: str) -> N
     ]
 
 
+def _signature_parse_text(text: str, result: dict[str, Any]) -> str:
+    extras = [x for x in (result.get("slot_metadata_xml") or []) if x]
+    if not extras:
+        return text
+    return "\n\n".join([text, *extras])
+
+
+def _metadata_role_for_document(dtype: str) -> str:
+    return "SP" if dtype == "AuthnRequest" else "IdP"
+
+
+def _selected_metadata_certs(
+    trust: dict[tuple[str, str], list[dict[str, str]]],
+    result: dict[str, Any],
+    dtype: str,
+    issuer: str | None,
+) -> tuple[list[dict[str, str]], str | None, str | None]:
+    """Return (certs, entity_id, selection_state). selection_state is none/selected/ambiguous/not_selected."""
+    role = _metadata_role_for_document(dtype)
+    docs = _usable_metadata(result.get("documents") or [], role)
+    if not docs:
+        return [], None, "none"
+    selected, issue = select_role_metadata(docs, [issuer] if issuer else [])
+    if issue:
+        return [], None, "ambiguous" if issue == "METADATA_ENTITY_AMBIGUOUS" else "not_selected"
+    entity_id = selected[0].get("entity_id") if selected else None
+    if not entity_id:
+        return [], None, "not_selected"
+    return list(trust.get((role, entity_id)) or []), entity_id, "selected"
+
+
+def _verify_any(element: Any, certs: list[dict[str, str]]) -> tuple[dict[str, str] | None, str | None]:
+    last_error = None
+    for cert in certs:
+        ok, error = _verify_with_cert(element, cert["pem"])
+        if ok:
+            return cert, None
+        last_error = error
+    return None, last_error
+
+
 def _crypto_findings(text: str, result: dict[str, Any]) -> list[dict[str, Any]]:
     findings: list[dict[str, Any]] = []
-    saml_objects, metadata_roots = _parse_lxml_documents(text)
+    saml_objects, metadata_roots = _parse_lxml_documents(_signature_parse_text(text, result))
     trust = _metadata_signing_certs(metadata_roots)
 
     for dtype, obj, scope, prefix in _iter_result_objects(result):
@@ -361,8 +441,8 @@ def _crypto_findings(text: str, result: dict[str, Any]) -> list[dict[str, Any]]:
         signed_id = obj.get("id")
         element = saml_objects.get((dtype, signed_id)) if signed_id else None
         issuer = ((obj.get("issuer") or {}).get("value"))
-        role = "SP" if dtype == "AuthnRequest" else "IdP"
-        trusted = trust.get((role, issuer), []) if issuer else []
+        role = _metadata_role_for_document(dtype)
+        trusted, selected_entity_id, selection = _selected_metadata_certs(trust, result, dtype, issuer)
         embedded = _embedded_certs(element)
         trusted_fps = [x["fingerprint"] for x in trusted]
         embedded_fps = [x["fingerprint"] for x in embedded]
@@ -384,18 +464,25 @@ def _crypto_findings(text: str, result: dict[str, Any]) -> list[dict[str, Any]]:
             )
             continue
 
+        verified_cert = None
+        last_error = None
+        verified_via_metadata = False
         if trusted:
-            verified_cert = None
-            last_error = None
-            for cert in trusted:
-                ok, error = _verify_with_cert(element, cert["pem"])
-                if ok:
-                    verified_cert = cert
-                    break
-                last_error = error
+            verified_cert, last_error = _verify_any(element, trusted)
+            verified_via_metadata = verified_cert is not None
+        if verified_cert is None and embedded:
+            verified_cert, last_error = _verify_any(element, embedded)
 
+        if verified_cert:
+            match_kind = None
+            if trusted:
+                for meta_cert in trusted:
+                    match_kind = _keys_equivalent(verified_cert, meta_cert)
+                    if match_kind:
+                        verified_via_metadata = True
+                        break
             _remove_crypto_warning(result, prefix, scope)
-            if verified_cert:
+            if verified_via_metadata and trusted:
                 sig["crypto_verification"] = "VALID_TRUSTED_METADATA"
                 sig["verified_signing_cert_fingerprint"] = verified_cert["fingerprint"]
                 findings.append(
@@ -403,121 +490,159 @@ def _crypto_findings(text: str, result: dict[str, Any]) -> list[dict[str, Any]]:
                         f"{prefix}_XML_SIGNATURE_VALID",
                         "INFO",
                         scope,
-                        "XML Signature and referenced digest verified successfully with a signing certificate from matching SAML metadata.",
+                        "XML Signature and referenced digest verified successfully.",
                         observed=verified_cert["fingerprint"],
-                        expected=f"trusted {role} signing certificate",
+                        expected=trusted_fps,
                         standard="SAML Core 2.0 §5 + XML Signature",
                     )
                 )
-                if embedded_fps:
-                    if verified_cert["fingerprint"] in embedded_fps:
-                        findings.append(
-                            _issue(
-                                f"{prefix}_SIGNING_CERT_MATCHES_METADATA",
-                                "INFO",
-                                scope,
-                                "The certificate embedded in ds:KeyInfo matches the metadata signing certificate that verified the signature.",
-                                observed=verified_cert["fingerprint"],
-                                standard="SAML metadata trust comparison",
-                            )
-                        )
-                    else:
-                        findings.append(
-                            _issue(
-                                f"{prefix}_EMBEDDED_CERT_NOT_METADATA_SIGNING_CERT",
-                                "WARNING",
-                                scope,
-                                "The signature verifies with trusted metadata, but the certificate embedded in ds:KeyInfo does not match that trusted signing certificate.",
-                                observed=embedded_fps,
-                                expected=verified_cert["fingerprint"],
-                                standard="SAML metadata trust comparison",
-                                note="Trust is established by the configured metadata certificate, not by an arbitrary embedded certificate.",
-                            )
-                        )
-            else:
-                policy_blocked = str(last_error or "").startswith("algorithm_policy:")
-                if policy_blocked:
-                    sig["crypto_verification"] = "NOT_CHECKED_ALGORITHM_POLICY"
+                match_code = (
+                    f"{prefix}_SIGNING_KEY_MATCHES_SP_METADATA"
+                    if role == "SP"
+                    else f"{prefix}_SIGNING_KEY_MATCHES_IDP_METADATA"
+                )
+                findings.append(
+                    _issue(
+                        match_code,
+                        "INFO",
+                        scope,
+                        f"The signing key matches a signing key published in the supplied {role} metadata.",
+                        observed=verified_cert["fingerprint"],
+                        expected=trusted_fps,
+                        standard="SAML metadata KeyDescriptor comparison",
+                        note=f"Match method: {match_kind or 'certificate SHA-256 fingerprint (DER)'}. This is not a claim that the metadata file itself was obtained from a trusted distribution channel.",
+                    )
+                )
+                if embedded_fps and not any(_keys_equivalent(verified_cert, e) for e in embedded):
                     findings.append(
                         _issue(
-                            f"{prefix}_SIGNATURE_CRYPTO_NOT_CHECKED_ALGORITHM_UNSUPPORTED",
+                            f"{prefix}_EMBEDDED_CERT_NOT_METADATA_SIGNING_CERT",
                             "WARNING",
                             scope,
-                            "Cryptographic verification was not completed because the signature uses an algorithm the verifier cannot evaluate. This is not classified as a cryptographic signature failure.",
-                            observed=last_error,
-                            standard="XML Signature validation",
+                            "The signature verifies with a signing key from supplied metadata, but the certificate embedded in ds:KeyInfo is a different key.",
+                            observed=embedded_fps,
+                            expected=verified_cert["fingerprint"],
+                            standard="SAML metadata key comparison",
+                            note="An embedded ds:KeyInfo certificate is not automatically an authorized partner key.",
                         )
                     )
-                else:
-                    sig["crypto_verification"] = "INVALID_TRUSTED_METADATA"
-                    findings.append(
-                        _issue(
-                            f"{prefix}_XML_SIGNATURE_INVALID",
-                            "ERROR",
-                            scope,
-                            "XML Signature could not be verified with any signing certificate from matching SAML metadata.",
-                            observed=last_error,
-                            expected=trusted_fps,
-                            standard="SAML Core 2.0 §5 + XML Signature",
-                        )
-                    )
-            continue
-
-        if embedded:
-            verified_cert = None
-            last_error = None
-            for cert in embedded:
-                ok, error = _verify_with_cert(element, cert["pem"])
-                if ok:
-                    verified_cert = cert
-                    break
-                last_error = error
-
-            _remove_crypto_warning(result, prefix, scope)
-            if verified_cert:
-                sig["crypto_verification"] = "VALID_EMBEDDED_CERT_UNTRUSTED"
+            elif selection in {"ambiguous", "not_selected"}:
+                _remove_crypto_warning(result, prefix, scope)
+                sig["crypto_verification"] = "VALID_EMBEDDED_CERT"
                 sig["verified_signing_cert_fingerprint"] = verified_cert["fingerprint"]
                 findings.append(
                     _issue(
-                        f"{prefix}_XML_SIGNATURE_VALID_EMBEDDED_CERT_ONLY",
-                        "WARNING",
+                        f"{prefix}_XML_SIGNATURE_VALID",
+                        "INFO",
                         scope,
-                        "The XML Signature is cryptographically valid with the certificate embedded in ds:KeyInfo, but signer trust is not established because matching SAML metadata was not supplied.",
+                        "XML Signature and referenced digest verified successfully with the certificate embedded in ds:KeyInfo.",
                         observed=verified_cert["fingerprint"],
-                        expected="matching trusted SP/IdP metadata signing certificate",
-                        standard="XML Signature + SAML metadata trust model",
+                        standard="XML Signature",
+                    )
+                )
+                findings.append(
+                    _issue(
+                        f"{prefix}_SIGNER_TRUST_NOT_EVALUATED",
+                        "INFO",
+                        scope,
+                        f"Signer metadata comparison was not evaluated because the {role} metadata entity was not uniquely selected.",
+                        observed=verified_cert["fingerprint"],
+                        expected="a unique metadata entityID matching the message Issuer",
+                        standard="SAML metadata trust model",
+                        note="Missing or ambiguous metadata is not a signature failure.",
+                    )
+                )
+            elif selection == "selected":
+                _remove_crypto_warning(result, prefix, scope)
+                sig["crypto_verification"] = "VALID_EMBEDDED_CERT"
+                sig["verified_signing_cert_fingerprint"] = verified_cert["fingerprint"]
+                findings.append(
+                    _issue(
+                        f"{prefix}_XML_SIGNATURE_VALID",
+                        "INFO",
+                        scope,
+                        "XML Signature and referenced digest verified successfully with the certificate embedded in ds:KeyInfo.",
+                        observed=verified_cert["fingerprint"],
+                        standard="XML Signature",
+                    )
+                )
+                mismatch_code = (
+                    f"{prefix}_SIGNING_KEY_NOT_IN_SP_METADATA"
+                    if role == "SP"
+                    else f"{prefix}_SIGNING_KEY_NOT_IN_IDP_METADATA"
+                )
+                findings.append(
+                    _issue(
+                        mismatch_code,
+                        "ERROR",
+                        scope,
+                        f"The signing certificate does not match any signing key in the supplied {role} metadata.",
+                        observed=verified_cert["fingerprint"],
+                        expected=trusted_fps or f"{role} metadata signing keys for {selected_entity_id}",
+                        standard="SAML metadata KeyDescriptor comparison",
+                        note=f"Compared {len(trusted)} published signing key(s) using certificate SHA-256 fingerprints and public-key equality. This is not a public WebPKI trust decision.",
                     )
                 )
             else:
-                policy_blocked = str(last_error or "").startswith("algorithm_policy:")
-                if policy_blocked:
-                    sig["crypto_verification"] = "NOT_CHECKED_ALGORITHM_POLICY"
-                    findings.append(
-                        _issue(
-                            f"{prefix}_SIGNATURE_CRYPTO_NOT_CHECKED_ALGORITHM_UNSUPPORTED",
-                            "WARNING",
-                            scope,
-                            "Cryptographic verification was not completed because the signature uses an algorithm the verifier cannot evaluate. This is not classified as a cryptographic signature failure.",
-                            observed=last_error,
-                            standard="XML Signature validation",
-                        )
+                _remove_crypto_warning(result, prefix, scope)
+                sig["crypto_verification"] = "VALID_EMBEDDED_CERT"
+                sig["verified_signing_cert_fingerprint"] = verified_cert["fingerprint"]
+                findings.append(
+                    _issue(
+                        f"{prefix}_XML_SIGNATURE_VALID",
+                        "INFO",
+                        scope,
+                        "XML Signature and referenced digest verified successfully with the certificate embedded in ds:KeyInfo.",
+                        observed=verified_cert["fingerprint"],
+                        standard="XML Signature",
                     )
-                else:
-                    sig["crypto_verification"] = "INVALID_EMBEDDED_CERT"
-                    findings.append(
-                        _issue(
-                            f"{prefix}_XML_SIGNATURE_INVALID",
-                            "ERROR",
-                            scope,
-                            "XML Signature could not be verified with the certificate embedded in ds:KeyInfo.",
-                            observed=last_error,
-                            expected=embedded_fps,
-                            standard="XML Signature",
-                        )
+                )
+                findings.append(
+                    _issue(
+                        f"{prefix}_SIGNER_TRUST_NOT_EVALUATED",
+                        "INFO",
+                        scope,
+                        f"Signer trust against {role} metadata was not evaluated: no matching {role} metadata or explicit trusted signing key was supplied.",
+                        observed=verified_cert["fingerprint"],
+                        expected=f"optional {role} metadata signing KeyDescriptor(s) or an operator-supplied signing certificate",
+                        standard="SAML metadata trust model",
+                        note="Cryptographic validity of the signature is not the same as partner-key authorization.",
                     )
+                )
             continue
 
-        # Keep the base SIGNATURE_NOT_CRYPTO_VERIFIED warning in this case.
+        policy_blocked = str(last_error or "").startswith("algorithm_policy:")
+        if policy_blocked:
+            _remove_crypto_warning(result, prefix, scope)
+            sig["crypto_verification"] = "NOT_CHECKED_ALGORITHM_POLICY"
+            findings.append(
+                _issue(
+                    f"{prefix}_SIGNATURE_CRYPTO_NOT_CHECKED_ALGORITHM_UNSUPPORTED",
+                    "WARNING",
+                    scope,
+                    "Cryptographic verification was not completed because the signature uses an algorithm the verifier cannot evaluate. This is not classified as a cryptographic signature failure.",
+                    observed=last_error,
+                    standard="XML Signature validation",
+                )
+            )
+            continue
+
+        if trusted or embedded:
+            _remove_crypto_warning(result, prefix, scope)
+            sig["crypto_verification"] = "INVALID_TRUSTED_METADATA" if trusted else "INVALID_EMBEDDED_CERT"
+            findings.append(
+                _issue(
+                    f"{prefix}_XML_SIGNATURE_INVALID",
+                    "ERROR",
+                    scope,
+                    "XML Signature could not be verified with the available signing certificates.",
+                    observed=last_error,
+                    expected=trusted_fps or embedded_fps,
+                    standard="SAML Core 2.0 §5 + XML Signature",
+                )
+            )
+            continue
+
         sig["crypto_verification"] = "NOT_CHECKED_NO_CERT"
         findings.append(
             _issue(
@@ -525,7 +650,7 @@ def _crypto_findings(text: str, result: dict[str, Any]) -> list[dict[str, Any]]:
                 "WARNING",
                 scope,
                 "No usable signing certificate was available from matching metadata or ds:KeyInfo, so cryptographic verification could not be performed.",
-                expected="trusted metadata signing certificate",
+                expected="metadata signing certificate or embedded ds:KeyInfo certificate",
                 standard="SAML Core 2.0 §5 + XML Signature",
             )
         )
@@ -561,6 +686,7 @@ def enhance_saml_signature_validation(text: str, result: dict[str, Any]) -> dict
     summary = result.setdefault("summary", {})
     summary["validation_errors"] = sum(1 for f in result["findings"] if f.get("severity") == "ERROR")
     summary["validation_warnings"] = sum(1 for f in result["findings"] if f.get("severity") == "WARNING")
+    summary["validation_info"] = sum(1 for f in result["findings"] if f.get("severity") == "INFO")
     summary["signature_crypto_valid_trusted"] = sum(
         1
         for _dtype, obj, _scope, _prefix in _iter_result_objects(result)

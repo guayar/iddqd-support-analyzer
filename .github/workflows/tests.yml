@@ -38,6 +38,7 @@ jobs:
           PYTHONPATH=. python tests/test_analyzers.py
           PYTHONPATH=. python tests/test_saml_clock_skew.py
           PYTHONPATH=. python tests/test_saml_tracer_json.py
+          PYTHONPATH=. python tests/test_saml_metadata.py
           PYTHONPATH=. python tests/test_input_hardening.py
           PYTHONPATH=. python tests/test_signature_validation.py
           PYTHONPATH=. python tests/test_anonymizer_residual.py

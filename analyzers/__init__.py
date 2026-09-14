@@ -4,8 +4,14 @@ from .saml_supplied_cert import extract_pem_certificates_from_text, verify_with_
 from .logs import analyze_log_text
 
 
-def analyze_saml_input(text: str, signing_cert: bytes | str | None = None):
-    result = _analyze_saml_input(text)
+def analyze_saml_input(
+    text: str,
+    signing_cert: bytes | str | None = None,
+    *,
+    idp_metadata: str | None = None,
+    sp_metadata: str | None = None,
+):
+    result = _analyze_saml_input(text, idp_metadata=idp_metadata, sp_metadata=sp_metadata)
     result = enhance_saml_signature_validation(text, result)
 
     # PEM certificate files dropped into the existing multi-file Analyze input

@@ -61,7 +61,7 @@ valid = analyze_saml_input(signed_xml + "\n" + metadata)
 codes = {f["code"] for f in valid["findings"]}
 assert "RESPONSE_SIGNATURE_REFERENCE_URI_VALID" in codes
 assert "RESPONSE_XML_SIGNATURE_VALID" in codes
-assert "RESPONSE_SIGNING_CERT_MATCHES_METADATA" in codes
+assert "RESPONSE_SIGNING_KEY_MATCHES_IDP_METADATA" in codes
 assert "RESPONSE_SIGNATURE_NOT_CRYPTO_VERIFIED" not in codes
 response = next(d for d in valid["documents"] if d["type"] == "Response")
 assert response["signature"]["crypto_verification"] == "VALID_TRUSTED_METADATA"
@@ -152,11 +152,14 @@ assert sha1_trusted_resp["signature"]["crypto_verification"] == "VALID_TRUSTED_M
 sha1_embedded = analyze_saml_input(sha1_signed)
 sha1_embedded_codes = {f["code"] for f in sha1_embedded["findings"]}
 assert "RESPONSE_XML_SIGNATURE_INVALID" not in sha1_embedded_codes
-assert "RESPONSE_XML_SIGNATURE_VALID_EMBEDDED_CERT_ONLY" in sha1_embedded_codes
+assert "RESPONSE_XML_SIGNATURE_VALID" in sha1_embedded_codes
+assert "RESPONSE_SIGNER_TRUST_NOT_EVALUATED" in sha1_embedded_codes
+assert "RESPONSE_XML_SIGNATURE_VALID_EMBEDDED_CERT_ONLY" not in sha1_embedded_codes
+assert "VALID_EMBEDDED_CERT_UNTRUSTED" not in {f.get("code") for f in sha1_embedded["findings"]}
 assert "RESPONSE_SIGNATURE_ALGORITHM_WEAK" in sha1_embedded_codes
 assert "RESPONSE_DIGEST_ALGORITHM_WEAK" in sha1_embedded_codes
 sha1_embedded_resp = next(d for d in sha1_embedded["documents"] if d["type"] == "Response")
-assert sha1_embedded_resp["signature"]["crypto_verification"] == "VALID_EMBEDDED_CERT_UNTRUSTED"
+assert sha1_embedded_resp["signature"]["crypto_verification"] == "VALID_EMBEDDED_CERT"
 
 # Nested Response + Assertion signatures, both legacy SHA-1.
 SAML_ASSERTION = (

@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## [0.17.9] - 2026-09-14
+
+### Added
+
+- Optional independent IdP and SP metadata uploads. Missing metadata is not a validation failure; signer trust and configuration checks stay not evaluated until a matching role descriptor is supplied
+- Deterministic metadata comparisons: destination/ACS/issuer/audience/recipient and signing-key match against published `KeyDescriptor`s (including unspecified `use` and certificate rollover)
+
+### Changed
+
+- Cryptographically valid embedded signatures no longer report an untrusted certificate when no IdP metadata is present (`SIGNER_TRUST_NOT_EVALUATED` instead)
+- version bumped to `0.17.9`
+
 ## [0.17.8] - 2026-09-14
 
 ### Fixed

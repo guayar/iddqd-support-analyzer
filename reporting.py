@@ -68,6 +68,25 @@ def _bullet(label: str, value: Any, indent: int = 0) -> str:
     return f"{pad}- **{label}:** `{_fmt(value)}`"
 
 
+def _finding_group(code: str) -> str:
+    c = code or ""
+    if c in {"METADATA_PARSE_FAILED", "METADATA_WRONG_ROLE", "METADATA_ENTITY_AMBIGUOUS", "METADATA_ENTITY_NOT_SELECTED"}:
+        return "Metadata input"
+    if c == "HTTP_RESULT_OBSERVED":
+        return "HTTP result"
+    if any(x in c for x in ("SIGNATURE", "SIGNING_KEY", "SIGNER_TRUST", "DIGEST", "SUPPLIED_CERT")):
+        return "Signature validation"
+    if "IDP" in c or c.startswith("AUTHNREQUEST_DESTINATION") or c.endswith("IDP_SSO") or c.endswith("IDP_ENTITY_ID") or c.endswith("IDP_ENTITYID_MISMATCH"):
+        return "IdP metadata validation"
+    if "SP_" in c or "ACS" in c or "AUDIENCE" in c or "RECIPIENT" in c or c.startswith("AUTHNREQUEST_ISSUER") or c.startswith("AUTHNREQUEST_ACS") or c.startswith("RESPONSE_DESTINATION"):
+        return "SP metadata validation"
+    if any(x in c for x in ("NOTBEFORE", "NOTONORAFTER", "SESSION", "CLOCK", "EXPIRED", "NOT_YET")):
+        return "Timing"
+    if any(x in c for x in ("INRESPONSETO", "RESPONSE_ASSERTION_ISSUER")):
+        return "Request / Response correlation"
+    return "Protocol / XML structure"
+
+
 def _md_signature(sig: dict[str, Any] | None, indent: int = 0) -> list[str]:
     sig = sig or {}
     out = [_bullet("Signature present", sig.get("present"), indent)]
@@ -260,6 +279,30 @@ def _md_metadata(d: dict[str, Any], index: int) -> list[str]:
     return out
 
 
+def _metadata_context_line(side: dict[str, Any] | None) -> str:
+    side = side or {}
+    if side.get("parse_failed"):
+        return "✗ supplied, but the XML could not be parsed"
+    if side.get("wrong_role"):
+        return "✗ supplied, but the document has no matching SPSSODescriptor/IDPSSODescriptor for this slot"
+    if not side.get("supplied"):
+        return "— not supplied"
+    selected = side.get("selected_entity_id")
+    entities = [x for x in (side.get("entity_ids") or []) if x]
+    selection = side.get("selection")
+    if selected:
+        line = f"✓ supplied · entityID: `{selected}`"
+    elif entities:
+        line = "✓ supplied · entityIDs: " + ", ".join(f"`{x}`" for x in entities)
+    else:
+        line = "✓ supplied"
+    if selection in {"METADATA_ENTITY_AMBIGUOUS", "ambiguous"}:
+        line += " · entity selection ambiguous (not guessed)"
+    elif selection in {"METADATA_ENTITY_NOT_SELECTED", "not_selected"}:
+        line += " · entity not uniquely selected"
+    return line
+
+
 def render_saml_report(result: dict[str, Any]) -> str:
     summary = result.get("summary") or {}
     out = [
@@ -271,6 +314,26 @@ def render_saml_report(result: dict[str, Any]) -> str:
         f"**Standards/profile validation:** ❌ {summary.get('validation_errors', 0)} error(s) · ⚠️ {summary.get('validation_warnings', 0)} warning(s)  ",
         f"**Cross-checks:** ✅ {summary.get('matches', 0)} · ❌ {summary.get('mismatches', 0)} · ⚪ {summary.get('unknown_checks', 0)}",
     ]
+
+    ctx = result.get("validation_context") or {}
+    if ctx or result.get("slot_metadata_xml") is not None:
+        idp_ctx = ctx.get("idp_metadata") or {}
+        sp_ctx = ctx.get("sp_metadata") or {}
+        out += [
+            "\n## SAML validation context",
+            f"- **Trace:** {'✓ SAML flow detected' if ctx.get('trace_present') else '— no SAML protocol document detected'}",
+            f"- **IdP metadata:** {_metadata_context_line(idp_ctx)}",
+            f"- **SP metadata:** {_metadata_context_line(sp_ctx)}",
+        ]
+        http_obs = ctx.get("observed_http") or []
+        if http_obs:
+            out.append("- **Observed HTTP result(s):** " + ", ".join(
+                f"`{row.get('status')}`" + (f" `{row.get('method')}`" if row.get("method") else "") +
+                (f" `{row.get('url')}`" if row.get("url") else "")
+                for row in http_obs
+            ))
+            if any(row.get("status") == 401 for row in http_obs):
+                out.append("- **Root cause:** cannot be determined from this network trace alone. HTTP 401 is an observed SP/HTTP result, not a SAML-layer diagnosis.")
 
     if result.get("supplied_signing_certificates"):
         out.append("\n## Supplied signing certificate")
@@ -362,19 +425,37 @@ def render_saml_report(result: dict[str, Any]) -> str:
 
     if result.get("findings"):
         out.append("\n## Standards / SSO validation findings")
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        order = [
+            "Protocol / XML structure",
+            "Request / Response correlation",
+            "Signature validation",
+            "IdP metadata validation",
+            "SP metadata validation",
+            "Metadata input",
+            "Timing",
+            "HTTP result",
+        ]
         for f in result["findings"]:
-            severity = f.get("severity")
-            icon = _severity_icon(severity)
-            line = f"- {icon} **{f.get('code')}** — `{severity}` — **{f.get('scope')}**\n  - {f.get('message')}"
-            if f.get("observed") is not None:
-                line += f"\n  - observed: `{_fmt(f.get('observed'))}`"
-            if f.get("expected") is not None:
-                line += f"\n  - expected: `{_fmt(f.get('expected'))}`"
-            if f.get("standard"):
-                line += f"\n  - basis: {f.get('standard')}"
-            if f.get("note"):
-                line += f"\n  - note: {f.get('note')}"
-            out.append(line)
+            grouped.setdefault(_finding_group(str(f.get("code") or "")), []).append(f)
+        for group in order + [g for g in grouped if g not in order]:
+            items = grouped.get(group) or []
+            if not items:
+                continue
+            out.append(f"\n### {group}")
+            for f in items:
+                severity = f.get("severity")
+                icon = _severity_icon(severity)
+                line = f"- {icon} **{f.get('code')}** — `{severity}` — **{f.get('scope')}**\n  - {f.get('message')}"
+                if f.get("observed") is not None:
+                    line += f"\n  - observed: `{_fmt(f.get('observed'))}`"
+                if f.get("expected") is not None:
+                    line += f"\n  - expected: `{_fmt(f.get('expected'))}`"
+                if f.get("standard"):
+                    line += f"\n  - basis: {f.get('standard')}"
+                if f.get("note"):
+                    line += f"\n  - note: {f.get('note')}"
+                out.append(line)
 
     if result.get("checks"):
         out.append("\n## Mapping / consistency checks")

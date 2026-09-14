@@ -58,6 +58,15 @@ def join_saml_artifacts(artifacts: list[tuple[str, str]]) -> str:
     return SAML_ARTIFACT_SEP.join(text.strip() for _name, text in artifacts if (text or "").strip())
 
 
+def read_optional_metadata_xml(file) -> str | None:
+    if not file:
+        return None
+    p = Path(getattr(file, "name", file))
+    if p.stat().st_size > MAX_FILE_MB * 1024 * 1024:
+        raise InputError(f"{p.name}: file exceeds {MAX_FILE_MB} MB limit")
+    return p.read_bytes().decode("utf-8", errors="replace")
+
+
 def read_signing_certificate(file) -> bytes | None:
     if not file:
         return None

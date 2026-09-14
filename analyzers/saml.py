@@ -19,6 +19,7 @@ from .saml_validation import (
     clock_skew_assisted_note,
     instant_expired,
     instant_not_yet_valid,
+    select_role_metadata,
     validate_saml,
 )
 from .xml_safe import decompress_limited
@@ -847,6 +848,124 @@ def _extract_metadata_roots(root) -> list[dict[str, Any]]:
     return []
 
 
+def _slot_finding(code: str, slot: str, message: str, *, observed: Any = None, expected: Any = None, note: str | None = None) -> dict[str, Any]:
+    return {
+        "code": code,
+        "severity": "ERROR" if code == "METADATA_PARSE_FAILED" else "INFO",
+        "scope": f"{slot.upper()} metadata",
+        "message": message,
+        "observed": observed,
+        "expected": expected,
+        "standard": "SAML Metadata 2.0",
+        "note": note,
+    }
+
+
+def _ingest_metadata_slot(blob: str | None, slot: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]], str | None]:
+    """Parse optional SP/IdP metadata XML. Failures are findings, not trace aborts."""
+    text = (blob or "").strip()
+    if not text:
+        return [], [], None
+    root, parse_error = _parse_xml_detailed(text)
+    if root is None:
+        for candidate, _source in _extract_candidates(text):
+            root, parse_error = _parse_xml_detailed(candidate)
+            if root is not None:
+                break
+    if root is None:
+        return [], [_slot_finding(
+            "METADATA_PARSE_FAILED",
+            slot,
+            "Optional metadata XML could not be parsed. Trace analysis continues without this metadata.",
+            observed=parse_error or "not well-formed XML",
+            expected="md:EntityDescriptor or md:EntitiesDescriptor",
+            note="Missing or unusable metadata is not treated as a SAML protocol failure.",
+        )], text
+    typ = _local(root.tag)
+    if typ not in {"EntityDescriptor", "EntitiesDescriptor"}:
+        return [], [_slot_finding(
+            "METADATA_PARSE_FAILED",
+            slot,
+            "Optional metadata upload is not a SAML metadata document.",
+            observed=typ,
+            expected="EntityDescriptor or EntitiesDescriptor",
+        )], text
+    extracted = _extract_metadata_roots(root)
+    findings: list[dict[str, Any]] = []
+    expected_role = "IdP" if slot == "idp" else "SP"
+    roles = {role for d in extracted for role in (d.get("roles") or [])}
+    if extracted and expected_role not in roles:
+        findings.append(_slot_finding(
+            "METADATA_WRONG_ROLE",
+            slot,
+            f"The XML in the {slot.upper()} metadata slot has no {expected_role} role descriptor.",
+            observed=sorted(roles) or "no SPSSODescriptor/IDPSSODescriptor",
+            expected=f"md:{'IDP' if expected_role == 'IdP' else 'SP'}SSODescriptor",
+            note="This file is not used for that party's configuration checks. It is not reported as a SAML protocol mismatch.",
+        ))
+        for d in extracted:
+            d["wrong_slot_role"] = True
+    for d in extracted:
+        d["metadata_slot"] = slot
+        d["source"] = f"{slot} metadata upload"
+    return extracted, findings, text
+
+
+def _http_status_from_tracer_row(req: dict[str, Any]) -> int | None:
+    for key in ("status", "statusCode", "responseStatus"):
+        value = req.get(key)
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str) and value.strip().isdigit():
+            return int(value.strip())
+    nested = req.get("response")
+    if isinstance(nested, dict):
+        value = nested.get("status") or nested.get("statusCode")
+        if isinstance(value, int):
+            return value
+    for key in ("statusLine", "responseStatusLine", "statusText"):
+        line = req.get(key)
+        if isinstance(line, str):
+            match = re.search(r"\b([1-5]\d{2})\b", line)
+            if match:
+                return int(match.group(1))
+    return None
+
+
+def _row_has_saml_response(req: dict[str, Any]) -> bool:
+    saml = req.get("saml")
+    if isinstance(saml, str) and "Response" in saml and "AuthnRequest" not in saml[:200]:
+        return True
+    post = req.get("postData")
+    if isinstance(post, dict) and post.get("SAMLResponse"):
+        return True
+    url = req.get("url")
+    if isinstance(url, str) and "SAMLResponse=" in url:
+        return True
+    return False
+
+
+def _observed_http_from_text(text: str) -> list[dict[str, Any]]:
+    obj = _try_json(text)
+    if obj is None:
+        return []
+    rows = _tracer_http_requests(obj)
+    if not rows:
+        return []
+    out: list[dict[str, Any]] = []
+    for req in rows:
+        status = _http_status_from_tracer_row(req)
+        if status is None:
+            continue
+        out.append({
+            "status": status,
+            "method": req.get("method"),
+            "url": req.get("url"),
+            "has_saml_response": _row_has_saml_response(req),
+        })
+    return out
+
+
 def _check(name: str, left: Any, right: Any, note: str) -> dict[str, Any]:
     if left is None or right is None or left == [] or right == []:
         return {"check": name, "status": "UNKNOWN", "left": left, "right": right, "note": note}
@@ -1063,10 +1182,17 @@ def decoded_artifacts_for_named_inputs(artifacts: list[tuple[str, str]]) -> list
     return assign_decoded_export_names(items)
 
 
-def analyze_saml_input(text: str) -> dict[str, Any]:
+def analyze_saml_input(
+    text: str,
+    *,
+    idp_metadata: str | None = None,
+    sp_metadata: str | None = None,
+) -> dict[str, Any]:
     docs: list[dict[str, Any]] = []
     encodings: list[dict[str, str]] = []
     parse_failures: list[dict[str, str]] = []
+    slot_findings: list[dict[str, Any]] = []
+    slot_metadata_xml: list[str] = []
 
     for candidate, source in _extract_candidates(text):
         root, parse_error = _parse_xml_detailed(candidate)
@@ -1102,11 +1228,23 @@ def analyze_saml_input(text: str) -> dict[str, Any]:
                 docs.append(d)
                 encodings.append({"document_type": d["type"], "source": source})
 
+    for slot, blob in (("idp", idp_metadata), ("sp", sp_metadata)):
+        extracted, extra_findings, xml_text = _ingest_metadata_slot(blob, slot)
+        slot_findings.extend(extra_findings)
+        if xml_text:
+            slot_metadata_xml.append(xml_text)
+        for d in extracted:
+            compare = {k: v for k, v in d.items() if k not in {"source", "metadata_slot", "wrong_slot_role"}}
+            if not any({k: v for k, v in x.items() if k not in {"source", "metadata_slot", "wrong_slot_role"}} == compare for x in docs):
+                docs.append(d)
+                encodings.append({"document_type": d["type"], "source": d.get("source") or f"{slot} metadata upload"})
+
     requests = [d for d in docs if d["type"] == "AuthnRequest"]
     responses = [d for d in docs if d["type"] == "Response"]
     standalone_assertions = [d for d in docs if d["type"] == "Assertion"]
     metadata = [d for d in docs if d["type"] == "Metadata"]
     checks: list[dict[str, Any]] = []
+    observed_http = _observed_http_from_text(text)
 
     req = requests[-1] if requests else None
     resp = responses[-1] if responses else None
@@ -1144,8 +1282,15 @@ def analyze_saml_input(text: str) -> dict[str, Any]:
                     ))
             checks.append(_check(f"Response Issuer vs Assertion #{ai} Issuer", _issuer_value(resp.get("issuer")), _issuer_value(ass.get("issuer")), "A mismatch is suspicious unless the deployment intentionally uses different issuers."))
 
-    sp_metadata = [m for m in metadata if "SP" in (m.get("roles") or [])]
-    idp_metadata = [m for m in metadata if "IdP" in (m.get("roles") or [])]
+    all_sp_metadata = [m for m in metadata if "SP" in (m.get("roles") or []) and not m.get("wrong_slot_role")]
+    all_idp_metadata = [m for m in metadata if "IdP" in (m.get("roles") or []) and not m.get("wrong_slot_role")]
+    req_issuer = _issuer_value(req.get("issuer")) if req else None
+    resp_issuer = _issuer_value(resp.get("issuer")) if resp else None
+    sp_selected, _sp_sel = select_role_metadata(all_sp_metadata, [req_issuer])
+    idp_selected, _idp_sel = select_role_metadata(
+        all_idp_metadata,
+        [resp_issuer, *(_issuer_value(a.get("issuer")) for a in assertions)],
+    )
 
     # Explicitly show important checks that cannot be completed because the
     # corresponding request/metadata was not supplied. This avoids a false
@@ -1165,7 +1310,7 @@ def analyze_saml_input(text: str) -> dict[str, Any]:
             "right": None,
             "note": "AuthnRequest was not supplied, so the requested ACS cannot be compared.",
         })
-    if resp and not sp_metadata:
+    if resp and not all_sp_metadata:
         checks.append({
             "check": "Response Destination / Recipient vs SP metadata ACS",
             "status": "UNKNOWN",
@@ -1181,7 +1326,7 @@ def analyze_saml_input(text: str) -> dict[str, Any]:
                 "right": None,
                 "note": "SP metadata was not supplied; the intended SP entityID cannot be verified.",
             })
-    if resp and not idp_metadata:
+    if resp and not all_idp_metadata:
         checks.append({
             "check": "Response / Assertion Issuer vs IdP metadata entityID",
             "status": "UNKNOWN",
@@ -1190,7 +1335,7 @@ def analyze_saml_input(text: str) -> dict[str, Any]:
             "note": "IdP metadata was not supplied; issuer identity cannot be verified against metadata.",
         })
 
-    for mi, md in enumerate(sp_metadata, 1):
+    for mi, md in enumerate(sp_selected, 1):
         sp = md.get("sp") or {}
         acs_locations = [x.get("location") for x in sp.get("assertion_consumer_services", []) if x.get("location")]
         if req:
@@ -1213,7 +1358,7 @@ def analyze_saml_input(text: str) -> dict[str, Any]:
                     "note": "This checks signature presence only, not cryptographic validity.",
                 })
 
-    for mi, md in enumerate(idp_metadata, 1):
+    for mi, md in enumerate(idp_selected, 1):
         idp = md.get("idp") or {}
         sso_locations = [x.get("location") for x in idp.get("single_sign_on_services", []) if x.get("location")]
         if req:
@@ -1243,7 +1388,42 @@ def analyze_saml_input(text: str) -> dict[str, Any]:
         }
         for pf in parse_failures
     ]
-    findings = parse_findings + findings
+    findings = slot_findings + parse_findings + findings
+
+    if observed_http:
+        findings.append({
+            "code": "HTTP_RESULT_OBSERVED",
+            "severity": "INFO",
+            "scope": "HTTP",
+            "message": "HTTP status values were present on the SAML tracer export. They are reported as observed transport results only.",
+            "observed": observed_http,
+            "expected": None,
+            "standard": None,
+            "note": "An HTTP 401 after a successful SAML Response does not by itself prove certificate, Audience, Recipient, or signature-policy failure. The SP's internal rejection reason is not in this trace.",
+        })
+
+    idp_slot_docs = [d for d in docs if d.get("type") == "Metadata" and d.get("metadata_slot") == "idp"]
+    sp_slot_docs = [d for d in docs if d.get("type") == "Metadata" and d.get("metadata_slot") == "sp"]
+    validation_context = {
+        "trace_present": bool(requests or responses or standalone_assertions),
+        "idp_metadata": {
+            "supplied": bool(all_idp_metadata) or bool(idp_slot_docs) or any(f.get("scope") == "IDP metadata" for f in slot_findings),
+            "parse_failed": any(f.get("code") == "METADATA_PARSE_FAILED" and f.get("scope") == "IDP metadata" for f in slot_findings),
+            "wrong_role": any(f.get("code") == "METADATA_WRONG_ROLE" and f.get("scope") == "IDP metadata" for f in slot_findings),
+            "entity_ids": [m.get("entity_id") for m in all_idp_metadata],
+            "selected_entity_id": (idp_selected[0].get("entity_id") if idp_selected else None),
+            "selection": (_idp_sel or ("selected" if idp_selected else "none")),
+        },
+        "sp_metadata": {
+            "supplied": bool(all_sp_metadata) or bool(sp_slot_docs) or any(f.get("scope") == "SP metadata" for f in slot_findings),
+            "parse_failed": any(f.get("code") == "METADATA_PARSE_FAILED" and f.get("scope") == "SP metadata" for f in slot_findings),
+            "wrong_role": any(f.get("code") == "METADATA_WRONG_ROLE" and f.get("scope") == "SP metadata" for f in slot_findings),
+            "entity_ids": [m.get("entity_id") for m in all_sp_metadata],
+            "selected_entity_id": (sp_selected[0].get("entity_id") if sp_selected else None),
+            "selection": (_sp_sel or ("selected" if sp_selected else "none")),
+        },
+        "observed_http": observed_http,
+    }
 
     return {
         "kind": "saml",
@@ -1251,6 +1431,8 @@ def analyze_saml_input(text: str) -> dict[str, Any]:
         "documents": docs,
         "detected_sources": encodings,
         "parse_failures": parse_failures,
+        "slot_metadata_xml": slot_metadata_xml,
+        "validation_context": validation_context,
         "decoded_artifacts": assign_decoded_export_names(
             collect_decoded_artifacts(text, "pasted text")
         ),
@@ -1263,8 +1445,8 @@ def analyze_saml_input(text: str) -> dict[str, Any]:
             "standalone_assertions": len(standalone_assertions),
             "assertions_inside_responses": sum(len(r.get("assertions") or []) for r in responses),
             "metadata_entities": len(metadata),
-            "sp_metadata_entities": len(sp_metadata),
-            "idp_metadata_entities": len(idp_metadata),
+            "sp_metadata_entities": len(all_sp_metadata),
+            "idp_metadata_entities": len(all_idp_metadata),
             "mismatches": sum(1 for c in checks if c.get("status") == "MISMATCH"),
             "matches": sum(1 for c in checks if c.get("status") == "MATCH"),
             "unknown_checks": sum(1 for c in checks if c.get("status") == "UNKNOWN"),
@@ -1273,11 +1455,13 @@ def analyze_saml_input(text: str) -> dict[str, Any]:
             "validation_info": sum(1 for f in findings if f.get("severity") == "INFO"),
         },
         "limitations": [
-            "Signature presence and algorithms are reported, but cryptographic trust validation is not performed by the current validator.",
+            "XML Signature cryptographic validity is evaluated when a certificate is available. Partner-key authorization is evaluated only against supplied IdP/SP metadata or an operator-supplied signing certificate; missing metadata is NOT_EVALUATED, not failure.",
+            "A match against supplied metadata means the signing key is published in that file. It does not prove the metadata file was obtained from a trusted distribution channel. Public WebPKI / certificate CN is not SAML partner trust.",
             "A standard SAML Response contains Assertion XML directly; the analyzer decodes whole Base64 SAMLRequest/SAMLResponse payloads and standalone Base64 Assertions, but intentionally does not recursively decode arbitrary Base64 text nodes such as X509 certificates.",
             "EncryptedAssertion is detected but cannot be decrypted without the SP private key.",
             "EncryptedAttribute and EncryptedID are detected; XML Encryption algorithms and KeyInfo presence are reported, but plaintext is not recovered without the corresponding private key.",
             "Assertion Conditions NotBefore/NotOnOrAfter and bearer SubjectConfirmationData.NotOnOrAfter use analyzer UTC with configurable clock skew (SAML_CLOCK_SKEW_SECONDS; IDDQD default 120): NotBefore minus skew through NotOnOrAfter plus skew. Bearer SubjectConfirmationData.NotBefore is forbidden and is not a skew window. Set 0 for no extra tolerance. SessionNotOnOrAfter is evaluated strictly (IDDQD policy). Metadata validUntil is compared strictly. Traces that expired hours or years ago still expire.",
             "Standards validation combines SAML 2.0 Core requirements with Web Browser SSO profile rules where the supplied documents indicate an SSO Response. Binding-dependent checks are only hard errors when the binding can be inferred; otherwise they are warnings.",
+            "HTTP statuses copied from a tracer export are observed transport facts. They are not used to infer SAML configuration failures.",
         ],
     }

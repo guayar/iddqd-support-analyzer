@@ -69,12 +69,16 @@ RESPONSE_DESTINATION_MISMATCH
 RESPONSE_DESTINATION_MATCH
 RESPONSE_XML_SIGNATURE_VALID
 RESPONSE_XML_SIGNATURE_VALID_SUPPLIED_CERT
+RESPONSE_SIGNING_KEY_MATCHES_IDP_METADATA
+RESPONSE_SIGNING_KEY_NOT_IN_IDP_METADATA
+RESPONSE_SIGNER_TRUST_NOT_EVALUATED
 ASSERTION_SIGNATURE_ALGORITHM_WEAK
 ASSERTION_DIGEST_ALGORITHM_WEAK
-RESPONSE_SIGNING_CERT_MATCHES_METADATA
 ```
 
-XML Signature verification does **not** require a private key. When matching SAML metadata is supplied, the analyzer verifies the signature using the trusted public signing certificate from that metadata. If metadata is unavailable, the Analyze tab accepts an optional standalone X.509 signing certificate and can use it to verify the signature and referenced digest. The report still distinguishes cryptographic validity from metadata-backed signer trust.
+XML Signature verification does **not** require a private key. When matching SAML metadata is supplied, the analyzer verifies the signature using the public signing certificates published in that metadata (`use="signing"` or unspecified `KeyDescriptor`). A match means the signing key is in the supplied metadata file; it does not prove the file came from a trusted distribution channel, and it is not public WebPKI trust. If metadata is absent, a cryptographically valid embedded signature is `RESPONSE_XML_SIGNATURE_VALID` plus `RESPONSE_SIGNER_TRUST_NOT_EVALUATED` — not an “untrusted certificate” failure.
+
+The Analyze tab has independent optional **IdP metadata** and **SP metadata** uploads, plus an optional standalone X.509 signing certificate. Supply neither, either, or both. Missing metadata never fails the trace; dependent checks stay not evaluated. The report **SAML validation context** shows whether each side was supplied and which `entityID` was selected. An HTTP 401 on a tracer export is an observed transport result, not a SAML root-cause diagnosis.
 
 A bare `-----BEGIN PUBLIC KEY-----` file is not accepted in this path; upload the corresponding X.509 certificate instead. Private keys are neither required nor accepted for signature verification.
 
@@ -320,6 +324,7 @@ source .venv/bin/activate
 PYTHONPATH=. python tests/test_analyzers.py
 PYTHONPATH=. python tests/test_saml_clock_skew.py
 PYTHONPATH=. python tests/test_saml_tracer_json.py
+PYTHONPATH=. python tests/test_saml_metadata.py
 PYTHONPATH=. python tests/test_log_incidents.py
 PYTHONPATH=. python tests/test_log_timestamps.py
 PYTHONPATH=. python tests/test_log_oracle.py

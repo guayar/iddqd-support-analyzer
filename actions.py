@@ -16,6 +16,7 @@ from uploads import (
     collect_analyze_artifacts,
     join_analyze_artifacts,
     join_saml_artifacts,
+    read_optional_metadata_xml,
     read_signing_certificate,
     read_text_file_and_paste,
 )
@@ -25,13 +26,27 @@ _SAML_PROTOCOL_ROOTS = {"AuthnRequest", "Response", "Assertion"}
 _SAML_METADATA_ROOTS = {"EntityDescriptor", "EntitiesDescriptor"}
 
 
-def _run_saml(artifacts: list[tuple[str, str]], signing_cert_file, all_artifacts: list[tuple[str, str]]):
+def _run_saml(
+    artifacts: list[tuple[str, str]],
+    signing_cert_file,
+    all_artifacts: list[tuple[str, str]],
+    *,
+    idp_metadata_file=None,
+    sp_metadata_file=None,
+):
     cert_data = read_signing_certificate(signing_cert_file)
     if cert_data is None:
         cert_data = extract_pem_certificates_from_text("\n".join(t for _n, t in all_artifacts))
+    idp_xml = read_optional_metadata_xml(idp_metadata_file)
+    sp_xml = read_optional_metadata_xml(sp_metadata_file)
 
     def run(arts: list[tuple[str, str]]):
-        result = analyze_saml_input(join_saml_artifacts(arts), signing_cert=cert_data)
+        result = analyze_saml_input(
+            join_saml_artifacts(arts),
+            signing_cert=cert_data,
+            idp_metadata=idp_xml,
+            sp_metadata=sp_xml,
+        )
         result["decoded_artifacts"] = decoded_artifacts_for_named_inputs(arts)
         return result
 
@@ -72,13 +87,19 @@ def _run_log(artifacts: list[tuple[str, str]]):
         raise InputError(str(e)) from e
 
 
-def analyze(files, pasted, mode, signing_cert_file=None) -> tuple[str, str, dict[str, Any]]:
+def analyze(files, pasted, mode, signing_cert_file=None, idp_metadata_file=None, sp_metadata_file=None) -> tuple[str, str, dict[str, Any]]:
     artifacts = collect_analyze_artifacts(files, pasted)
     if not artifacts:
         raise InputError("Upload a log/SAML tracer or paste text first.")
 
     if mode == "SAML":
-        result = _run_saml(artifacts, signing_cert_file, artifacts)
+        result = _run_saml(
+            artifacts,
+            signing_cert_file,
+            artifacts,
+            idp_metadata_file=idp_metadata_file,
+            sp_metadata_file=sp_metadata_file,
+        )
         md = render_saml_output(result)
     elif mode == "Log":
         result = _run_log(artifacts)
@@ -91,7 +112,13 @@ def analyze(files, pasted, mode, signing_cert_file=None) -> tuple[str, str, dict
         saml_arts = [(n, t) for n, t, kind in classified if kind == "SAML"]
         log_arts = [(n, t) for n, t, kind in classified if kind == "Log"]
         if saml_arts and log_arts:
-            saml_result = _run_saml(saml_arts, signing_cert_file, artifacts)
+            saml_result = _run_saml(
+                saml_arts,
+                signing_cert_file,
+                artifacts,
+                idp_metadata_file=idp_metadata_file,
+                sp_metadata_file=sp_metadata_file,
+            )
             log_result = _run_log(log_arts)
             result = {
                 "kind": "mixed",
@@ -101,7 +128,13 @@ def analyze(files, pasted, mode, signing_cert_file=None) -> tuple[str, str, dict
             }
             md = render_mixed_report(result)
         elif saml_arts:
-            result = _run_saml(saml_arts, signing_cert_file, artifacts)
+            result = _run_saml(
+                saml_arts,
+                signing_cert_file,
+                artifacts,
+                idp_metadata_file=idp_metadata_file,
+                sp_metadata_file=sp_metadata_file,
+            )
             md = render_saml_output(result)
         else:
             result = _run_log(log_arts)

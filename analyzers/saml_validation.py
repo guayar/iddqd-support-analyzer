@@ -481,6 +481,56 @@ def _detect_transport(raw_input: str) -> dict[str, Any]:
     return info
 
 
+def _usable_metadata(metadata: list[dict[str, Any]], role: str) -> list[dict[str, Any]]:
+    return [
+        m
+        for m in metadata
+        if role in (m.get("roles") or []) and not m.get("wrong_slot_role")
+    ]
+
+
+def select_role_metadata(
+    items: list[dict[str, Any]],
+    hint_ids: list[str | None] | None = None,
+) -> tuple[list[dict[str, Any]], str | None]:
+    """Pick at most one metadata entity for a role. Never guess among several.
+
+    Returns (selected_entities, selection_issue_code).
+    Duplicate EntityDescriptors with the same entityID count as one entity.
+    """
+    if not items:
+        return [], None
+    hints = [h for h in (hint_ids or []) if h]
+    if hints:
+        matched = [m for m in items if m.get("entity_id") in hints]
+        unique = list(dict.fromkeys(m.get("entity_id") for m in matched if m.get("entity_id")))
+        if len(unique) == 1:
+            return [next(m for m in matched if m.get("entity_id") == unique[0])], None
+        if len(unique) > 1:
+            return [], "METADATA_ENTITY_AMBIGUOUS"
+        if len(items) == 1:
+            return items, None
+        return [], "METADATA_ENTITY_NOT_SELECTED"
+    unique_all = list(dict.fromkeys(m.get("entity_id") for m in items if m.get("entity_id")))
+    if len(items) == 1 or len(unique_all) == 1:
+        return [items[0]], None
+    return [], "METADATA_ENTITY_NOT_SELECTED"
+
+
+def _sso_locations(idp_mds: list[dict[str, Any]], preferred_binding: str | None = None) -> list[str]:
+    endpoints = [
+        ep
+        for m in idp_mds
+        for ep in ((m.get("idp") or {}).get("single_sign_on_services") or [])
+        if ep.get("location")
+    ]
+    if preferred_binding:
+        filtered = [ep for ep in endpoints if ep.get("binding") == preferred_binding]
+        if filtered:
+            return list(dict.fromkeys(ep.get("location") for ep in filtered if ep.get("location")))
+    return list(dict.fromkeys(ep.get("location") for ep in endpoints))
+
+
 def _selected_acs(sp_md: dict[str, Any], req: dict[str, Any] | None, resp: dict[str, Any] | None) -> list[dict[str, Any]]:
     sp = sp_md.get("sp") or {}
     endpoints = sp.get("assertion_consumer_services") or []
@@ -548,10 +598,42 @@ def validate_saml(
     resp = responses[-1] if responses else None
     response_assertions = (resp.get("assertions") or []) if resp else []
     assertions = response_assertions or standalone_assertions
-    sp_metadata = [m for m in metadata if "SP" in (m.get("roles") or [])]
-    idp_metadata = [m for m in metadata if "IdP" in (m.get("roles") or [])]
+    all_sp_metadata = _usable_metadata(metadata, "SP")
+    all_idp_metadata = _usable_metadata(metadata, "IdP")
+    req_issuer = _issuer_value(req.get("issuer")) if req else None
+    resp_issuer = _issuer_value(resp.get("issuer")) if resp else None
+    assertion_issuers = [_issuer_value(a.get("issuer")) for a in assertions]
+    sp_metadata, sp_selection = select_role_metadata(all_sp_metadata, [req_issuer])
+    idp_metadata, idp_selection = select_role_metadata(
+        all_idp_metadata,
+        [resp_issuer, *assertion_issuers],
+    )
+    if all_sp_metadata and sp_selection:
+        issues.append(_issue(
+            sp_selection,
+            "INFO",
+            "SP metadata",
+            "SP metadata entity was not selected; SP configuration checks that need a single entityID are not evaluated.",
+            observed=[m.get("entity_id") for m in all_sp_metadata],
+            expected=req_issuer or "a unique SP entityID or AuthnRequest Issuer",
+            standard="SAML Metadata 2.0",
+            note="The analyzer does not guess among multiple EntityDescriptors.",
+        ))
+    if all_idp_metadata and idp_selection:
+        issues.append(_issue(
+            idp_selection,
+            "INFO",
+            "IdP metadata",
+            "IdP metadata entity was not selected; IdP configuration checks that need a single entityID are not evaluated.",
+            observed=[m.get("entity_id") for m in all_idp_metadata],
+            expected=resp_issuer or "a unique IdP entityID or Response/Assertion Issuer",
+            standard="SAML Metadata 2.0",
+            note="The analyzer does not guess among multiple EntityDescriptors.",
+        ))
     sp_entity_ids = [m.get("entity_id") for m in sp_metadata if m.get("entity_id")]
     idp_entity_ids = [m.get("entity_id") for m in idp_metadata if m.get("entity_id")]
+    all_sp_entity_ids = [m.get("entity_id") for m in all_sp_metadata if m.get("entity_id")]
+    all_idp_entity_ids = [m.get("entity_id") for m in all_idp_metadata if m.get("entity_id")]
 
     # -------- AuthnRequest: Core + Web Browser SSO profile --------
     for i, r in enumerate(requests, 1):
@@ -1189,29 +1271,30 @@ def validate_saml(
                         issues.append(_issue("IDP_METADATA_ENCRYPTION_METHOD_INVALID", "ERROR", key_scope, "EncryptionMethod Algorithm is not a valid URI.", observed=alg))
 
     # -------- Cross-document SSO consistency: turn important mismatches into errors --------
-    sp_entity_ids = [m.get("entity_id") for m in sp_metadata if m.get("entity_id")]
-    idp_entity_ids = [m.get("entity_id") for m in idp_metadata if m.get("entity_id")]
     sp_acs_locations = list(dict.fromkeys(
         ep.get("location")
         for m in sp_metadata
         for ep in ((m.get("sp") or {}).get("assertion_consumer_services") or [])
         if ep.get("location")
     ))
-    idp_sso_locations = list(dict.fromkeys(
-        ep.get("location")
-        for m in idp_metadata
-        for ep in ((m.get("idp") or {}).get("single_sign_on_services") or [])
-        if ep.get("location")
-    ))
+    request_binding = transport.get("request_binding")
+    idp_sso_locations = _sso_locations(idp_metadata, request_binding)
 
     if req:
         req_issuer = _issuer_value(req.get("issuer"))
-        if sp_entity_ids and req_issuer and req_issuer not in sp_entity_ids:
-            issues.append(_issue("AUTHNREQUEST_ISSUER_SP_ENTITYID_MISMATCH", "ERROR", "AuthnRequest", "AuthnRequest Issuer does not match any supplied SP metadata entityID.", observed=req_issuer, expected=sp_entity_ids, standard="SAML Profiles 2.0 Web Browser SSO + SAML Metadata 2.0"))
+        issuer_ids = sp_entity_ids or all_sp_entity_ids
+        if issuer_ids and req_issuer and req_issuer not in issuer_ids:
+            issues.append(_issue("AUTHNREQUEST_ISSUER_SP_ENTITYID_MISMATCH", "ERROR", "AuthnRequest", "AuthnRequest Issuer does not match any supplied SP metadata entityID.", observed=req_issuer, expected=issuer_ids, standard="SAML Profiles 2.0 Web Browser SSO + SAML Metadata 2.0"))
+        elif sp_entity_ids and req_issuer and req_issuer in sp_entity_ids:
+            issues.append(_issue("AUTHNREQUEST_ISSUER_MATCHES_SP_ENTITY_ID", "INFO", "AuthnRequest", "AuthnRequest Issuer matches the selected SP metadata entityID.", observed=req_issuer, expected=sp_entity_ids, standard="SAML Profiles 2.0 Web Browser SSO + SAML Metadata 2.0"))
         if idp_sso_locations and req.get("destination") and req.get("destination") not in idp_sso_locations:
-            issues.append(_issue("AUTHNREQUEST_DESTINATION_IDP_SSO_MISMATCH", "ERROR", "AuthnRequest", "AuthnRequest Destination is not an SSO endpoint advertised by the supplied IdP metadata.", observed=req.get("destination"), expected=idp_sso_locations, standard="SAML Core Destination processing + SAML Metadata 2.0"))
+            issues.append(_issue("AUTHNREQUEST_DESTINATION_IDP_SSO_MISMATCH", "ERROR", "AuthnRequest", "AuthnRequest Destination is not an SSO endpoint advertised by the supplied IdP metadata for the request binding.", observed=req.get("destination"), expected=idp_sso_locations, standard="SAML Core Destination processing + SAML Metadata 2.0"))
+        elif idp_sso_locations and req.get("destination") and req.get("destination") in idp_sso_locations:
+            issues.append(_issue("AUTHNREQUEST_DESTINATION_MATCHES_IDP_SSO", "INFO", "AuthnRequest", "AuthnRequest Destination matches an IdP SingleSignOnService endpoint in the selected IdP metadata.", observed=req.get("destination"), expected=idp_sso_locations, standard="SAML Core Destination processing + SAML Metadata 2.0"))
         if sp_acs_locations and req.get("acs_url") and req.get("acs_url") not in sp_acs_locations:
             issues.append(_issue("AUTHNREQUEST_ACS_SP_METADATA_MISMATCH", "ERROR", "AuthnRequest", "AuthnRequest AssertionConsumerServiceURL is not registered in supplied SP metadata.", observed=req.get("acs_url"), expected=sp_acs_locations, standard="SAML Web Browser SSO / SP metadata ACS selection"))
+        elif sp_acs_locations and req.get("acs_url") and req.get("acs_url") in sp_acs_locations:
+            issues.append(_issue("AUTHNREQUEST_ACS_MATCHES_SP_METADATA", "INFO", "AuthnRequest", "AuthnRequest AssertionConsumerServiceURL matches an ACS endpoint in the selected SP metadata.", observed=req.get("acs_url"), expected=sp_acs_locations, standard="SAML Web Browser SSO / SP metadata ACS selection"))
         if req.get("attribute_consuming_service_index") is not None and sp_metadata:
             available = [
                 str(svc.get("index"))
@@ -1231,15 +1314,22 @@ def validate_saml(
             issues.extend(_validate_response_destination(r, f"Response #{ri}", expected_acs))
         if sp_acs_locations and resp.get("destination") and resp.get("destination") not in sp_acs_locations:
             issues.append(_issue("RESPONSE_DESTINATION_SP_ACS_MISMATCH", "ERROR", "Response", "Response Destination is not one of the ACS endpoints registered in supplied SP metadata.", observed=resp.get("destination"), expected=sp_acs_locations, standard="SAML Core Destination processing + SAML Metadata 2.0"))
+        elif sp_acs_locations and resp.get("destination") and resp.get("destination") in sp_acs_locations:
+            issues.append(_issue("RESPONSE_DESTINATION_MATCHES_SP_ACS", "INFO", "Response", "Response Destination matches an ACS endpoint in the selected SP metadata.", observed=resp.get("destination"), expected=sp_acs_locations, standard="SAML Core Destination processing + SAML Metadata 2.0"))
         response_issuer = _issuer_value(resp.get("issuer"))
-        if idp_entity_ids and response_issuer and response_issuer not in idp_entity_ids:
-            issues.append(_issue("RESPONSE_ISSUER_IDP_ENTITYID_MISMATCH", "ERROR", "Response", "Response Issuer does not match any supplied IdP metadata entityID.", observed=response_issuer, expected=idp_entity_ids, standard="SAML Web Browser SSO issuer identification"))
+        idp_ids_for_issuer = idp_entity_ids or all_idp_entity_ids
+        if idp_ids_for_issuer and response_issuer and response_issuer not in idp_ids_for_issuer:
+            issues.append(_issue("RESPONSE_ISSUER_IDP_ENTITYID_MISMATCH", "ERROR", "Response", "Response Issuer does not match any supplied IdP metadata entityID.", observed=response_issuer, expected=idp_ids_for_issuer, standard="SAML Web Browser SSO issuer identification"))
+        elif idp_entity_ids and response_issuer and response_issuer in idp_entity_ids:
+            issues.append(_issue("RESPONSE_ISSUER_MATCHES_IDP_ENTITY_ID", "INFO", "Response", "Response Issuer matches the selected IdP metadata entityID.", observed=response_issuer, expected=idp_entity_ids, standard="SAML Web Browser SSO issuer identification"))
 
         for ai, a in enumerate(assertions, 1):
             ascope = f"Assertion #{ai}"
             assertion_issuer = _issuer_value(a.get("issuer"))
-            if idp_entity_ids and assertion_issuer and assertion_issuer not in idp_entity_ids:
-                issues.append(_issue("ASSERTION_ISSUER_IDP_ENTITYID_MISMATCH", "ERROR", ascope, "Assertion Issuer does not match any supplied IdP metadata entityID.", observed=assertion_issuer, expected=idp_entity_ids, standard="SAML Profiles 2.0 Web Browser SSO"))
+            if idp_ids_for_issuer and assertion_issuer and assertion_issuer not in idp_ids_for_issuer:
+                issues.append(_issue("ASSERTION_ISSUER_IDP_ENTITYID_MISMATCH", "ERROR", ascope, "Assertion Issuer does not match any supplied IdP metadata entityID.", observed=assertion_issuer, expected=idp_ids_for_issuer, standard="SAML Profiles 2.0 Web Browser SSO"))
+            elif idp_entity_ids and assertion_issuer and assertion_issuer in idp_entity_ids:
+                issues.append(_issue("ASSERTION_ISSUER_MATCHES_IDP_ENTITY_ID", "INFO", ascope, "Assertion Issuer matches the selected IdP metadata entityID.", observed=assertion_issuer, expected=idp_entity_ids, standard="SAML Profiles 2.0 Web Browser SSO"))
             if response_issuer and assertion_issuer and response_issuer != assertion_issuer:
                 issues.append(_issue("RESPONSE_ASSERTION_ISSUER_MISMATCH", "ERROR", ascope, "Response Issuer and Assertion Issuer identify different entities.", observed={"Response": response_issuer, "Assertion": assertion_issuer}, expected="same issuing IdP for Browser SSO", standard="SAML Profiles 2.0 Web Browser SSO"))
 
@@ -1252,12 +1342,16 @@ def validate_saml(
                     # must satisfy every restriction, not merely appear somewhere in the flattened list.
                     if group and not any(spid in group for spid in expected_sp_ids):
                         issues.append(_issue("AUDIENCE_SP_ENTITYID_MISMATCH", "ERROR", f"{ascope} AudienceRestriction #{gi}", "AudienceRestriction does not include the expected SP entityID.", observed=group, expected=expected_sp_ids, standard="SAML Core AudienceRestriction + Web Browser SSO profile"))
+                    elif sp_entity_ids and group and any(spid in group for spid in sp_entity_ids):
+                        issues.append(_issue("ASSERTION_AUDIENCE_MATCHES_SP_ENTITY_ID", "INFO", f"{ascope} AudienceRestriction #{gi}", "Assertion Audience matches the selected SP metadata entityID.", observed=group, expected=sp_entity_ids, standard="SAML Core AudienceRestriction + Web Browser SSO profile"))
 
             bearer = [sc for sc in ((a.get("subject") or {}).get("confirmations") or []) if sc.get("method") == BEARER_METHOD]
             recipients = [((sc.get("data") or {}).get("Recipient")) for sc in bearer if (sc.get("data") or {}).get("Recipient")]
             allowed_acs = sp_acs_locations or ([req.get("acs_url")] if req and req.get("acs_url") else ([resp.get("destination")] if resp.get("destination") else []))
             if recipients and allowed_acs and not any(rec in allowed_acs for rec in recipients):
                 issues.append(_issue("BEARER_RECIPIENT_ACS_MISMATCH", "ERROR", ascope, "No bearer SubjectConfirmation Recipient matches the expected/registered ACS endpoint.", observed=recipients, expected=allowed_acs, standard="SAML Profiles 2.0 §4.1.4.3"))
+            elif sp_acs_locations and recipients and any(rec in sp_acs_locations for rec in recipients):
+                issues.append(_issue("SUBJECT_RECIPIENT_MATCHES_SP_ACS", "INFO", ascope, "Bearer SubjectConfirmationData Recipient matches an ACS endpoint in the selected SP metadata.", observed=recipients, expected=sp_acs_locations, standard="SAML Profiles 2.0 §4.1.4.3"))
             if recipients and resp.get("destination") and resp.get("destination") not in recipients:
                 issues.append(_issue("RESPONSE_DESTINATION_RECIPIENT_MISMATCH", "ERROR", ascope, "Response Destination does not match any bearer SubjectConfirmation Recipient.", observed=resp.get("destination"), expected=recipients, standard="SAML Profiles 2.0 bearer recipient processing"))
             if req and recipients and req.get("acs_url") and req.get("acs_url") not in recipients:

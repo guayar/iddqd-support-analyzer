@@ -75,11 +75,13 @@ Time validity for assertion Conditions `NotBefore`/`NotOnOrAfter` and bearer `Su
 
 A private key is not required to verify an XML Signature. Verification uses the signer's public X.509 certificate.
 
-When matching metadata is supplied, its `KeyDescriptor` entries with `use="signing"` (or unspecified use) are treated as the preferred trust source. The analyzer verifies the signature and referenced digest against those certificates. A certificate embedded in `ds:KeyInfo` is compared with metadata but is not automatically trusted merely because it is embedded in the signed message.
+When matching metadata is supplied, `KeyDescriptor` entries with `use="signing"` or with no `use` (usable for signing and encryption per SAML metadata) are the published signing keys. The analyzer verifies the XML Signature cryptographically, then compares the actual signer to those keys (certificate SHA-256 / public key). A match is reported as a deterministic metadata comparison, not as “certificate trusted.” Encryption-only `KeyDescriptor`s are not used for signer comparison. Multiple signing keys are normal during rollover; any matching key is sufficient.
 
-An operator may also supply a standalone X.509 signing certificate in PEM or DER form. If it verifies the XML Signature, the analyzer reports cryptographic validity and the certificate fingerprint, while keeping identity/provenance distinct from metadata-backed trust. If both metadata and a standalone certificate are available, metadata remains the primary trust source and the supplied certificate is compared against it. Differences are surfaced as troubleshooting evidence, including certificate-rollover scenarios.
+An operator may also supply a standalone X.509 signing certificate in PEM or DER form. That is an explicit trust input, separate from metadata. If both are present, metadata remains the primary comparison source and the supplied certificate is compared against it.
 
-If metadata is unavailable but an embedded certificate is present, the analyzer may prove that the signature is cryptographically self-consistent with that certificate, while reporting that signer trust is not established.
+If IdP metadata is unavailable, a valid embedded signature is cryptographic validity plus `SIGNER_TRUST_NOT_EVALUATED`. Missing metadata is not a failure and is not reported as an untrusted certificate.
+
+Optional SP and IdP metadata uploads are independent. Entity selection among `EntitiesDescriptor` members uses AuthnRequest Issuer (SP) and Response/Assertion Issuer (IdP). If selection is ambiguous, dependent checks are not evaluated and the analyzer does not guess. Metadata XML is parsed with the same safe XML settings as SAML messages; metadata URLs are not fetched.
 
 For SAML assertions and protocol messages, SAML Core 2.0 §5.4.2 is applied strictly: the signature must contain exactly one `ds:Reference`, and its URI must be the same-document fragment `#<ID>` of the signed SAML root element.
 

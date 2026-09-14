@@ -470,9 +470,11 @@ def _ui_error(message: str):
     raise gr.Error(message, duration=8, print_exception=False)
 
 
-def analyze(files, pasted, mode, signing_cert_file=None):
+def analyze(files, pasted, mode, signing_cert_file=None, idp_metadata_file=None, sp_metadata_file=None):
     try:
-        markdown, raw_json, result = run_analyze(files, pasted, mode, signing_cert_file)
+        markdown, raw_json, result = run_analyze(
+            files, pasted, mode, signing_cert_file, idp_metadata_file, sp_metadata_file
+        )
     except InputError as e:
         _ui_error(str(e))
     return markdown, raw_json, result, write_decoded_artifact_download(result)
@@ -486,14 +488,16 @@ def send_to_assistant(latest_analysis):
     return latest_analysis, _context_badge(latest_analysis), empty_assistant_history()
 
 
-def analyze_with_assistant(files, pasted, mode, signing_cert_file=None):
-    markdown, raw_json, result, download = analyze(files, pasted, mode, signing_cert_file)
+def analyze_with_assistant(files, pasted, mode, signing_cert_file=None, idp_metadata_file=None, sp_metadata_file=None):
+    markdown, raw_json, result, download = analyze(
+        files, pasted, mode, signing_cert_file, idp_metadata_file, sp_metadata_file
+    )
     ctx, badge, history = send_to_assistant(result)
     return markdown, raw_json, result, download, ctx, badge, history
 
 
 def clear_analyze():
-    return None, "", None, "", "", None, None
+    return None, "", None, None, None, "", "", None, None
 
 
 def clear_analyze_with_assistant():
@@ -595,9 +599,29 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                             elem_classes=["psa-control", "psa-mode"],
                         )
 
+                    with gr.Row(equal_height=True):
+                        idp_metadata = gr.File(
+                            label="IdP metadata XML (optional)",
+                            file_count="single",
+                            file_types=[".xml"],
+                            height=CONTROL_HEIGHT,
+                            scale=1,
+                            elem_classes=["psa-control"],
+                        )
+                        sp_metadata = gr.File(
+                            label="SP metadata XML (optional)",
+                            file_count="single",
+                            file_types=[".xml"],
+                            height=CONTROL_HEIGHT,
+                            scale=1,
+                            elem_classes=["psa-control"],
+                        )
+
                     gr.Markdown(
                         "Standalone certificate upload is used only for SAML XML Signature verification. "
-                        "Upload the **public X.509 certificate**; private keys are not required or accepted.",
+                        "Upload the **public X.509 certificate**; private keys are not required or accepted. "
+                        "Optional IdP and SP metadata are independent: supply neither, either, or both. "
+                        "Missing metadata does not fail the trace; dependent checks stay not evaluated.",
                         elem_classes=["psa-note"],
                     )
 
@@ -817,7 +841,7 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
             if ASSISTANT_ON:
                 run.click(
                     analyze_with_assistant,
-                    inputs=[files, pasted, mode, signing_cert],
+                    inputs=[files, pasted, mode, signing_cert, idp_metadata, sp_metadata],
                     outputs=[report, raw, analysis_state, decoded_download, assistant_context, context_badge, assistant_chatbot],
                 )
                 clear_analyze_btn.click(
@@ -827,6 +851,8 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                         files,
                         pasted,
                         signing_cert,
+                        idp_metadata,
+                        sp_metadata,
                         report,
                         raw,
                         analysis_state,
@@ -836,11 +862,15 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                     ],
                 )
             else:
-                run.click(analyze, inputs=[files, pasted, mode, signing_cert], outputs=[report, raw, analysis_state, decoded_download])
+                run.click(
+                    analyze,
+                    inputs=[files, pasted, mode, signing_cert, idp_metadata, sp_metadata],
+                    outputs=[report, raw, analysis_state, decoded_download],
+                )
                 clear_analyze_btn.click(
                     clear_analyze,
                     inputs=[],
-                    outputs=[files, pasted, signing_cert, report, raw, analysis_state, decoded_download],
+                    outputs=[files, pasted, signing_cert, idp_metadata, sp_metadata, report, raw, analysis_state, decoded_download],
                 )
 
             demo.load(fn=None, js=COPY_REPORT_JS)

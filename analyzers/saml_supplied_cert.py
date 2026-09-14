@@ -198,7 +198,7 @@ def verify_with_supplied_certificate(
                         f"{prefix}_SUPPLIED_CERT_DIFFERS_FROM_VERIFIED_METADATA",
                         "WARNING",
                         scope,
-                        "The XML Signature is valid with trusted metadata, but the separately supplied certificate is different.",
+                        "The XML Signature is valid with a signing key published in the supplied metadata, but the separately supplied certificate is a different key.",
                         observed=supplied_fps,
                         expected=verified_fp,
                         note="This may be intentional during certificate rollover; verify which certificate is currently configured as trusted.",
@@ -218,6 +218,11 @@ def verify_with_supplied_certificate(
         if verified:
             _remove_crypto_warning(result, prefix, scope)
             _remove_no_cert_warning(result, prefix, scope)
+            result["findings"] = [
+                f
+                for f in result.get("findings") or []
+                if not (f.get("scope") == scope and f.get("code") == f"{prefix}_SIGNER_TRUST_NOT_EVALUATED")
+            ]
             sig["crypto_verification"] = "VALID_SUPPLIED_CERT"
             sig["verified_signing_cert_fingerprint"] = verified["fingerprint"]
             additions.append(
@@ -229,7 +234,7 @@ def verify_with_supplied_certificate(
                     observed=verified["fingerprint"],
                     expected="operator-supplied signing certificate",
                     standard="SAML Core 2.0 §5 + XML Signature",
-                    note="Cryptographic validity is proven. The certificate's identity/provenance must be trusted out of band unless it is also present in trusted SAML metadata.",
+                    note="Cryptographic validity is proven. Matching this certificate is not the same as proving the metadata file came from a trusted distribution channel.",
                 )
             )
 
