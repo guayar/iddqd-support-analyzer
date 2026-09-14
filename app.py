@@ -583,23 +583,6 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                         )
 
                     with gr.Row(equal_height=True):
-                        signing_cert = gr.File(
-                            label="Signing certificate (optional) — X.509 .pem / .crt / .cer",
-                            file_count="single",
-                            file_types=[".pem", ".crt", ".cer"],
-                            height=CONTROL_HEIGHT,
-                            scale=1,
-                            elem_classes=["psa-control"],
-                        )
-                        mode = gr.Radio(
-                            ["Auto-detect", "SAML", "Log"],
-                            value="Auto-detect",
-                            label="Analyzer",
-                            scale=1,
-                            elem_classes=["psa-control", "psa-mode"],
-                        )
-
-                    with gr.Row(equal_height=True):
                         idp_metadata = gr.File(
                             label="IdP metadata XML (optional)",
                             file_count="single",
@@ -615,6 +598,23 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                             height=CONTROL_HEIGHT,
                             scale=1,
                             elem_classes=["psa-control"],
+                        )
+
+                    with gr.Row(equal_height=True):
+                        signing_cert = gr.File(
+                            label="Signing certificate (optional) — X.509 .pem / .crt / .cer",
+                            file_count="single",
+                            file_types=[".pem", ".crt", ".cer"],
+                            height=CONTROL_HEIGHT,
+                            scale=1,
+                            elem_classes=["psa-control"],
+                        )
+                        mode = gr.Radio(
+                            ["Auto-detect", "SAML", "Log"],
+                            value="Auto-detect",
+                            label="Analyzer",
+                            scale=1,
+                            elem_classes=["psa-control", "psa-mode"],
                         )
 
                     gr.Markdown(
