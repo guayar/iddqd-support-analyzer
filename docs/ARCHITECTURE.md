@@ -64,7 +64,7 @@ Input
 
 Validation is separated into four layers:
 
-1. **Transport decoding** — raw XML, Base64, URL encoding and Redirect-binding DEFLATE.
+1. **Transport decoding** — JSON (SAML-tracer / HAR) is parsed structurally first; then raw XML, Base64, URL encoding and Redirect-binding DEFLATE from decoded values. XML is not scraped from JSON-escaped source text.
 2. **Document and protocol structure** — well-formed XML, document type, required fields and profile rules.
 3. **Signature and trust validation** — SAML XML Signature profile checks, same-document Reference validation, cryptographic signature/digest verification with public X.509 certificates, and comparison with matching metadata signing certificates.
 4. **Cross-document consistency** — comparisons between Request, Response, Assertion and supplied SP/IdP metadata.

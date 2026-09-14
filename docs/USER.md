@@ -11,6 +11,7 @@ Built to learn SAML and support-style log analysis by implementing the checks, i
 ### SAML / SSO analysis
 
 - raw `AuthnRequest`, `Response` and standalone `Assertion` XML
+- SAML-tracer JSON exports (parse JSON, then XML from decoded string values; do not scrape escaped markup from the serialized file)
 - HTTP-POST Base64 decoding
 - HTTP-Redirect URL decoding, Base64 decoding and raw-DEFLATE decompression (output capped at `MAX_FILE_MB`)
 - download of each transport-decoded SAML document (raw XML, source filename preserved)
@@ -318,6 +319,7 @@ The update script refuses to overwrite tracked local changes. Commit or stash th
 source .venv/bin/activate
 PYTHONPATH=. python tests/test_analyzers.py
 PYTHONPATH=. python tests/test_saml_clock_skew.py
+PYTHONPATH=. python tests/test_saml_tracer_json.py
 PYTHONPATH=. python tests/test_log_incidents.py
 PYTHONPATH=. python tests/test_log_timestamps.py
 PYTHONPATH=. python tests/test_log_oracle.py

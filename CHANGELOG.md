@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## [0.17.8] - 2026-09-14
+
+### Fixed
+
+- SAML-tracer JSON exports are parsed as JSON first. Embedded SAML is taken from decoded string values (`saml`, GET/POST fields), not from regex over JSON-escaped markup, so `\"` no longer yields false `XML_NOT_WELL_FORMED`
+- version bumped to `0.17.8`
+
 ## [0.17.7] - 2026-09-10
 
 ### Changed

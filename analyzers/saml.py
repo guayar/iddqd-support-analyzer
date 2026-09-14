@@ -250,26 +250,151 @@ def _decode_saml_payload(value: str) -> list[tuple[str, str]]:
     return out
 
 
-def _har_payloads(text: str) -> list[tuple[str, str]]:
+def _try_json(text: str):
+    body = text.lstrip("\ufeff \t\r\n")
+    if not body or body[0] not in "{[":
+        return None
     try:
-        obj = json.loads(text)
-    except Exception:
+        return json.loads(body)
+    except json.JSONDecodeError:
+        return None
+
+
+def _saml_form_params(obj) -> dict[str, str]:
+    out: dict[str, str] = {}
+    if isinstance(obj, dict):
+        for key in ("SAMLRequest", "SAMLResponse"):
+            value = obj.get(key)
+            if isinstance(value, str) and value:
+                out[key] = value
+            elif isinstance(value, (int, float)):
+                continue
+        params = obj.get("params")
+        if isinstance(params, list):
+            for item in params:
+                if not isinstance(item, dict):
+                    continue
+                name = item.get("name")
+                value = item.get("value")
+                if name in {"SAMLRequest", "SAMLResponse"} and value:
+                    out[str(name)] = str(value)
+        text = obj.get("text")
+        if isinstance(text, str) and text:
+            parsed = urllib.parse.parse_qs(text, keep_blank_values=True)
+            for key in ("SAMLRequest", "SAMLResponse"):
+                if key not in out:
+                    vals = parsed.get(key) or []
+                    if vals and vals[0]:
+                        out[key] = vals[0]
+        return out
+    if isinstance(obj, list):
+        for item in obj:
+            if not isinstance(item, dict):
+                continue
+            name = item.get("name")
+            value = item.get("value")
+            if name in {"SAMLRequest", "SAMLResponse"} and value:
+                out[str(name)] = str(value)
+    return out
+
+
+def _looks_like_saml_xml_text(value: str) -> bool:
+    return "<" in value and any(name in value for name in SAMLISH_ROOTS)
+
+
+def _har_payloads_from_obj(obj) -> list[tuple[str, str]]:
+    if not isinstance(obj, dict):
+        return []
+    entries = ((obj.get("log") or {}).get("entries") or []) if isinstance(obj.get("log"), dict) else []
+    if not isinstance(entries, list) or not entries:
         return []
     out: list[tuple[str, str]] = []
-    entries = (((obj or {}).get("log") or {}).get("entries") or []) if isinstance(obj, dict) else []
     for entry in entries:
+        if not isinstance(entry, dict):
+            continue
         req = entry.get("request") or {}
+        if not isinstance(req, dict):
+            continue
         post = req.get("postData") or {}
-        params = post.get("params") or []
-        for p in params:
-            if p.get("name") in {"SAMLRequest", "SAMLResponse"} and p.get("value"):
-                out.append((str(p["value"]), f"HAR {p.get('name')}"))
-        if post.get("text"):
-            out.append((str(post["text"]), "HAR POST body"))
+        for name, value in _saml_form_params(post).items():
+            out.append((value, f"HAR {name}"))
         url = req.get("url")
-        if url and ("SAMLRequest=" in url or "SAMLResponse=" in url):
+        if isinstance(url, str) and ("SAMLRequest=" in url or "SAMLResponse=" in url):
             out.append((url, "HAR URL"))
     return out
+
+
+def _tracer_http_requests(obj) -> list[dict[str, Any]] | None:
+    if isinstance(obj, list):
+        rows = [item for item in obj if isinstance(item, dict)]
+        if rows and any("saml" in item or "postData" in item or "get" in item for item in rows):
+            return rows
+        return None
+    if not isinstance(obj, dict):
+        return None
+    if isinstance(obj.get("log"), dict) and obj["log"].get("entries"):
+        return None
+    for key in ("requests", "entries"):
+        rows = obj.get(key)
+        if isinstance(rows, list) and any(
+            isinstance(item, dict) and ("saml" in item or "postData" in item or "get" in item)
+            for item in rows
+        ):
+            return [item for item in rows if isinstance(item, dict)]
+    if "saml" in obj or (("method" in obj or "url" in obj) and ("postData" in obj or "get" in obj)):
+        return [obj]
+    return None
+
+
+def _tracer_payloads_from_obj(obj) -> list[tuple[str, str]]:
+    rows = _tracer_http_requests(obj)
+    if not rows:
+        return []
+    out: list[tuple[str, str]] = []
+    for index, req in enumerate(rows, 1):
+        saml = req.get("saml")
+        if isinstance(saml, str) and _looks_like_saml_xml_text(saml):
+            out.append((saml, f"SAML-tracer saml #{index}"))
+            continue
+        for name, value in _saml_form_params(req.get("get")).items():
+            out.append((value, f"SAML-tracer GET {name} #{index}"))
+        for name, value in _saml_form_params(req.get("postData")).items():
+            out.append((value, f"SAML-tracer POST {name} #{index}"))
+        url = req.get("url")
+        if isinstance(url, str) and ("SAMLRequest=" in url or "SAMLResponse=" in url):
+            out.append((url, f"SAML-tracer URL #{index}"))
+    return out
+
+
+def _json_string_payloads(obj, *, _out: list[tuple[str, str]] | None = None) -> list[tuple[str, str]]:
+    out = _out if _out is not None else []
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            if key in {"SAMLRequest", "SAMLResponse"} and isinstance(value, str) and value:
+                out.append((value, f"JSON {key}"))
+            else:
+                _json_string_payloads(value, _out=out)
+    elif isinstance(obj, list):
+        for item in obj:
+            _json_string_payloads(item, _out=out)
+    elif isinstance(obj, str) and _looks_like_saml_xml_text(obj):
+        out.append((obj, "JSON string"))
+    return out
+
+
+def _candidates_from_json(obj) -> list[tuple[str, str]]:
+    har = _har_payloads_from_obj(obj)
+    tracer = _tracer_payloads_from_obj(obj)
+    if har or tracer:
+        return har + tracer
+    return _json_string_payloads(obj)
+
+
+def _har_payloads(text: str) -> list[tuple[str, str]]:
+    obj = _try_json(text)
+    if obj is None:
+        return []
+    return _har_payloads_from_obj(obj)
 
 
 _SAML_ARTIFACT_SEP_RE = re.compile(r"<!--\s*iddqd-artifact\s*-->")
@@ -284,29 +409,37 @@ def _input_segments(text: str) -> list[str]:
     return [part.strip() for part in parts if part.strip()]
 
 
-def _extract_candidates(text: str) -> list[tuple[str, str]]:
-    text = html.unescape(text.strip())
-    segments = _input_segments(text)
-    if len(segments) <= 1:
-        candidates: list[tuple[str, str]] = [(text, "input")]
-    else:
-        candidates = [(seg, f"input #{i}") for i, seg in enumerate(segments, 1)]
-    candidates.extend(_har_payloads(text))
-
-    for name in ("SAMLRequest", "SAMLResponse"):
-        for m in re.finditer(rf"(?:^|[?&\s]){name}=([^&\s]+)", text):
-            candidates.append((m.group(1), name))
-
-    # Raw embedded XML documents from SAML-tracer exports or pasted bundles.
+def _extract_xml_fragments(text: str, *, include_assertion: bool) -> list[tuple[str, str]]:
     xml_patterns = [
         ("AuthnRequest", r"(<(?:\w+:)?AuthnRequest\b.*?</(?:\w+:)?AuthnRequest>)"),
         ("Response", r"(<(?:\w+:)?Response\b.*?</(?:\w+:)?Response>)"),
-        ("Assertion", r"(<(?:\w+:)?Assertion\b.*?</(?:\w+:)?Assertion>)"),
         ("EntityDescriptor", r"(<(?:\w+:)?EntityDescriptor\b.*?</(?:\w+:)?EntityDescriptor>)"),
         ("EntitiesDescriptor", r"(<(?:\w+:)?EntitiesDescriptor\b.*?</(?:\w+:)?EntitiesDescriptor>)"),
     ]
+    if include_assertion:
+        xml_patterns.insert(2, ("Assertion", r"(<(?:\w+:)?Assertion\b.*?</(?:\w+:)?Assertion>)"))
+    out: list[tuple[str, str]] = []
     for label, pat in xml_patterns:
-        candidates.extend((m.group(1), f"embedded {label}") for m in re.finditer(pat, text, re.I | re.S))
+        out.extend((m.group(1), f"embedded {label}") for m in re.finditer(pat, text, re.I | re.S))
+    return out
+
+
+def _extract_candidates(text: str) -> list[tuple[str, str]]:
+    raw = text.strip()
+    obj = _try_json(raw)
+    if obj is not None:
+        candidates = _candidates_from_json(obj)
+    else:
+        unescaped = html.unescape(raw)
+        segments = _input_segments(unescaped)
+        if len(segments) <= 1:
+            candidates = [(unescaped, "input")]
+        else:
+            candidates = [(seg, f"input #{i}") for i, seg in enumerate(segments, 1)]
+        for name in ("SAMLRequest", "SAMLResponse"):
+            for m in re.finditer(rf"(?:^|[?&\s]){name}=([^&\s]+)", unescaped):
+                candidates.append((m.group(1), name))
+        candidates.extend(_extract_xml_fragments(unescaped, include_assertion=True))
 
     expanded: list[tuple[str, str]] = []
     for candidate, source in candidates:
@@ -314,7 +447,6 @@ def _extract_candidates(text: str) -> list[tuple[str, str]]:
         for decoded, chain in _decode_saml_payload(candidate):
             expanded.append((decoded, f"{source}: {chain}"))
 
-        # Form body parsing also handles SAMLResponse=<...>&RelayState=...
         try:
             parsed = urllib.parse.parse_qs(candidate, keep_blank_values=True)
             for key in ("SAMLRequest", "SAMLResponse"):
