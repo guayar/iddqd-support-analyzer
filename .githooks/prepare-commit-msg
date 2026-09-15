@@ -1,4 +1,5 @@
 #!/bin/sh
+# git prepare-commit-msg: sanitize the message before the editor.
 root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
 strip="$root/.githooks/strip-injected-coauthor"
 [ -x "$strip" ] || strip="$(dirname "$0")/strip-injected-coauthor"
