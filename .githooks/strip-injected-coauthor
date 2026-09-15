@@ -1,5 +1,5 @@
 #!/bin/sh
-# Remove injected Cursor/agent Co-authored-by trailers from a git message file.
+# Remove injected Co-authored-by trailers from a git message file.
 # Used by commit-msg and prepare-commit-msg.
 set -eu
 file=${1:-}
