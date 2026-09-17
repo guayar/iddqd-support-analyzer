@@ -14,7 +14,21 @@ git pull --ff-only origin main
 
 if [[ -x .venv/bin/python ]]; then
   echo "Refreshing Python dependencies..."
-  .venv/bin/python -m pip install -r requirements.txt
+  REQ=requirements.txt
+  if [[ -f .env ]]; then
+    set -a
+    # shellcheck disable=SC1091
+    source .env
+    set +a
+  fi
+  if [[ "${IDDQD_EDITION:-}" == "core" || "${IDDQD_EDITION:-}" == "light" || -f LIGHT_EDITION || -f CORE_EDITION ]]; then
+    REQ=requirements-core.txt
+  fi
+  .venv/bin/python -m pip install -r "$REQ"
 fi
 
-echo "IDDQD Support Analyzer is up to date."
+if [[ "${IDDQD_EDITION:-}" == "core" || "${IDDQD_EDITION:-}" == "light" || -f LIGHT_EDITION || -f CORE_EDITION ]]; then
+  echo "IDDQD Support Analyzer Light is up to date."
+else
+  echo "IDDQD Support Analyzer is up to date."
+fi

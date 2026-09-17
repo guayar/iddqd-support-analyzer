@@ -198,20 +198,23 @@ A deliberately separate web-enabled chat. It receives **no** Analyzer or Assista
 
 The application binds to `127.0.0.1` by default and blocks non-local model endpoints unless explicitly enabled. Loopback and RFC1918 Ollama URLs count as local; public cloud endpoints need `ALLOW_REMOTE_LLM=true`.
 
-Default UI is **Analyze** and **Config** only. Optional tabs appear only after they are enabled and the application is restarted. Tab order with modules on: Analyze → Anonymize → Assistant → General Chat → Config.
+**Full edition** (default `./run.sh`): Analyze and Config only until optional tabs are enabled and the application is restarted. Tab order with modules on: Analyze → Anonymize → Assistant → General Chat → Config.
+
+**Light edition** (`IDDQD Support Analyzer Light`, `./run-light.sh` or a zip from `./scripts/export-light.sh`): Analyze + Anonymize always on. No Assistant, no General Chat, no Ollama. Config explains that this is the Light install. `./run-core.sh` is an alias.
 
 ## Requirements
 
-Install order: OS packages → `./run.sh` (creates `.venv` and installs `requirements.txt`) → optional Ollama/Tesseract only for the chat modules you enable in Config.
+Install order: OS packages → `./run.sh` or `./run-light.sh` (creates `.venv`) → optional Ollama/Tesseract only for chat modules on the **full** edition.
 
-### Always — Analyze and Config
+### Always — Analyze
 
 | Need | Install |
 |---|---|
 | Ubuntu / Linux, Python 3.12+ | distro packages (`python3`, `python3-venv`) |
-| Python libraries | `./run.sh` (includes SAML/XML, Gradio, and also chat extras such as `ddgs`, `pillow`, `pytesseract` even when those tabs are off) |
+| Full Python libraries | `./run.sh` → `requirements.txt` (includes chat extras `ddgs`, `pillow`, `pytesseract` even when those tabs are off) |
+| Light Python libraries | `./run-light.sh` → `requirements-core.txt` (Gradio, SAML/XML, cryptography; no chat stack) |
 
-No GPU, no Ollama, no Tesseract. Binding defaults to `http://127.0.0.1:7860`.
+No GPU. Binding defaults to `http://127.0.0.1:7860`. Light edition does not need Ollama or Tesseract.
 
 ### Anonymize (optional Config module)
 
@@ -260,11 +263,14 @@ The certificate is read for the current analysis only. It is not copied into the
 
 ## Configuration
 
-Use the **Config** tab to enable optional modules independently (**Anonymize**, **Assistant**, **General Chat**). Changes are saved immediately to a local `.iddqd-modules.json` file (gitignored). A red notice appears until you click **Restart application** and refresh the browser. Default UI is **Analyze** and **Config**. A previously saved combined `llm` plugin still enables both chat tabs.
+Use the **Config** tab (full edition) to enable optional modules independently (**Anonymize**, **Assistant**, **General Chat**). Changes are saved immediately to a local `.iddqd-modules.json` file (gitignored). A red notice appears until you click **Restart application** and refresh the browser. Default UI is **Analyze** and **Config**. A previously saved combined `llm` plugin still enables both chat tabs.
+
+Light edition ignores chat flags: Anonymize is always on; Assistant and General Chat cannot be enabled. `IDDQD_EDITION=light` (alias `core`) or a `LIGHT_EDITION` file (Light zip) selects that mode.
 
 `config.example.env` contains the supported environment variables. Common settings:
 
 ```text
+IDDQD_EDITION=full
 OLLAMA_URL=http://127.0.0.1:11434
 OLLAMA_MODEL=qwen3.6:27b
 ALLOW_REMOTE_LLM=false
@@ -339,6 +345,7 @@ PYTHONPATH=. python tests/test_saml_anonymizer.py
 PYTHONPATH=. python tests/test_layers.py
 PYTHONPATH=. python tests/test_nameid.py
 PYTHONPATH=. python tests/test_modules.py
+PYTHONPATH=. python tests/test_edition.py
 PYTHONPATH=. python tests/test_assistant_handoff.py
 PYTHONPATH=. python tests/test_chat_history.py
 PYTHONPATH=. python tests/test_vision.py
@@ -376,7 +383,10 @@ Attribution, licenses, and pins: [THIRD_PARTY_TEST_DATA.md](THIRD_PARTY_TEST_DAT
 ├── app.py              # Gradio UI shell
 ├── config.example.env
 ├── requirements.txt
+├── requirements-core.txt
 ├── run.sh
+├── run-light.sh
+├── run-core.sh
 ├── start-analyzer.sh
 ├── update.sh
 ├── CHANGELOG.md

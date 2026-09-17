@@ -51,6 +51,43 @@ jobs:
           PYTHONPATH=. python tests/test_decoded_saml_export.py
           PYTHONPATH=. python tests/test_nameid.py
           PYTHONPATH=. python tests/test_modules.py
+          PYTHONPATH=. python tests/test_edition.py
           PYTHONPATH=. python tests/test_assistant_handoff.py
           PYTHONPATH=. python tests/test_chat_history.py
           PYTHONPATH=. python tests/test_vision.py
+
+  light-edition:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Light dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-core.txt
+
+      - name: Compile Light tree
+        run: python -m py_compile app.py actions.py config.py modules.py reporting.py uploads.py analyzers/*.py
+
+      - name: Run Light analyzer tests
+        run: |
+          PYTHONPATH=. python tests/test_analyzers.py
+          PYTHONPATH=. python tests/test_saml_metadata.py
+          PYTHONPATH=. python tests/test_nameid.py
+          PYTHONPATH=. python tests/test_anonymizer_saml.py
+          PYTHONPATH=. python tests/test_edition.py
+
+      - name: Pack Light zip
+        run: bash scripts/export-light.sh
+
+      - name: Upload Light zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: iddqd-support-analyzer-light
+          path: dist/iddqd-support-analyzer-light-*.zip

@@ -50,6 +50,7 @@ anonymized_*
 Thumbs.db
 
 # Archives and local release bundles
+dist/
 *.zip
 *.tar
 *.tar.gz

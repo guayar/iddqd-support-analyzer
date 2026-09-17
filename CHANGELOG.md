@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## [0.18.0] - 2026-09-17
+
+### Added
+
+- Light install flavor (**IDDQD Support Analyzer Light**): Analyze + Anonymize only (`./run-light.sh`, `IDDQD_EDITION=light`, or `./scripts/export-light.sh` zip). No Ollama, Assistant, or General Chat. Full edition remains the default `./run.sh`. `./run-core.sh` and `IDDQD_EDITION=core` remain aliases.
+- version bumped to `0.18.0`
+
 ## [0.17.9] - 2026-09-14
 
 ### Added

@@ -8,7 +8,7 @@ import gradio as gr
 
 from actions import analyze as run_analyze
 from actions import write_decoded_artifact_download
-from config import APP_PORT, APP_TITLE, APP_VERSION, MAX_FILE_MB, OLLAMA_MODEL, UI_THEME
+from config import APP_PORT, APP_TITLE, APP_VERSION, IS_CORE_EDITION, IS_LIGHT_EDITION, MAX_FILE_MB, OLLAMA_MODEL, UI_THEME
 from modules import (
     PLUGIN_ANONYMIZE,
     PLUGIN_ASSISTANT,
@@ -429,15 +429,17 @@ COPY_REPORT_HTML = """
 
 def _hero_text() -> str:
     extras = []
+    if IS_CORE_EDITION:
+        extras.append("no LLM")
     if ANONYMIZE_ON:
-        extras.append("optional log anonymizer")
+        extras.append("log anonymizer" if IS_CORE_EDITION else "optional log anonymizer")
     if ASSISTANT_ON:
         extras.append("optional local assistant")
     if GENERAL_CHAT_ON:
         extras.append("separate web-enabled general chat")
     extra = (" · " + " · ".join(extras)) if extras else ""
     return (
-        "# IDDQD Support Analyzer\n"
+        f"# {APP_TITLE}\n"
         f"**Local SAML + `*.log` analysis{extra}**"
     )
 
@@ -797,46 +799,56 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
 
             with gr.Tab("Config"):
                 with gr.Column(elem_classes=["psa-shell"]):
-                    gr.Markdown(
-                        "### Modules\n"
-                        "Analyze and Config are always available. Optional modules load only after **Restart application** and a browser refresh. "
-                        "Default UI: Analyze + Config. No optional modules are enabled by default.",
-                        elem_classes=["psa-note"],
-                    )
-                    saved = read_saved_plugins()
-                    anon_box = gr.Checkbox(
-                        label="Anonymize",
-                        info="Local log and SAML pseudonymization. No language model.",
-                        value=PLUGIN_ANONYMIZE in saved,
-                    )
-                    assistant_box = gr.Checkbox(
-                        label="Assistant",
-                        info="Requires local Ollama. Sees the latest Analyze result and local screenshots. No web search.",
-                        value=PLUGIN_ASSISTANT in saved,
-                    )
-                    general_chat_box = gr.Checkbox(
-                        label="General Chat",
-                        info="Requires local Ollama. Public web search. Optional local images stay on this tab; only text queries leave the machine. Never receives Analyzer or Assistant material.",
-                        value=PLUGIN_GENERAL_CHAT in saved,
-                    )
-                    restart_md = gr.Markdown(_restart_notice(saved))
-                    restart_btn = gr.Button("Restart application", variant="primary", elem_classes=["psa-primary"])
-                    anon_box.change(
-                        save_modules,
-                        inputs=[anon_box, assistant_box, general_chat_box],
-                        outputs=[restart_md],
-                    )
-                    assistant_box.change(
-                        save_modules,
-                        inputs=[anon_box, assistant_box, general_chat_box],
-                        outputs=[restart_md],
-                    )
-                    general_chat_box.change(
-                        save_modules,
-                        inputs=[anon_box, assistant_box, general_chat_box],
-                        outputs=[restart_md],
-                    )
-                    restart_btn.click(restart_clicked)
+                    if IS_CORE_EDITION:
+                        gr.Markdown(
+                            "### Light edition\n"
+                            "This install is **IDDQD Support Analyzer Light** — **Analyze + Anonymize** only. "
+                            "Chat modules are not included (no Ollama, no web search). The full edition lives in the "
+                            "same repository: run `./run.sh` without `IDDQD_EDITION=light`.",
+                            elem_classes=["psa-note"],
+                        )
+                    else:
+                        gr.Markdown(
+                            "### Modules\n"
+                            "Analyze and Config are always available. Optional modules load only after **Restart application** and a browser refresh. "
+                            "Default UI: Analyze + Config. No optional modules are enabled by default. "
+                            "For Light (Analyze + Anonymize, no LLM), use `./run-light.sh`.",
+                            elem_classes=["psa-note"],
+                        )
+                        saved = read_saved_plugins()
+                        anon_box = gr.Checkbox(
+                            label="Anonymize",
+                            info="Local log and SAML pseudonymization. No language model.",
+                            value=PLUGIN_ANONYMIZE in saved,
+                        )
+                        assistant_box = gr.Checkbox(
+                            label="Assistant",
+                            info="Requires local Ollama. Sees the latest Analyze result and local screenshots. No web search.",
+                            value=PLUGIN_ASSISTANT in saved,
+                        )
+                        general_chat_box = gr.Checkbox(
+                            label="General Chat",
+                            info="Requires local Ollama. Public web search. Optional local images stay on this tab; only text queries leave the machine. Never receives Analyzer or Assistant material.",
+                            value=PLUGIN_GENERAL_CHAT in saved,
+                        )
+                        restart_md = gr.Markdown(_restart_notice(saved))
+                        restart_btn = gr.Button("Restart application", variant="primary", elem_classes=["psa-primary"])
+                        anon_box.change(
+                            save_modules,
+                            inputs=[anon_box, assistant_box, general_chat_box],
+                            outputs=[restart_md],
+                        )
+                        assistant_box.change(
+                            save_modules,
+                            inputs=[anon_box, assistant_box, general_chat_box],
+                            outputs=[restart_md],
+                        )
+                        general_chat_box.change(
+                            save_modules,
+                            inputs=[anon_box, assistant_box, general_chat_box],
+                            outputs=[restart_md],
+                        )
+                        restart_btn.click(restart_clicked)
 
             if ASSISTANT_ON:
                 run.click(

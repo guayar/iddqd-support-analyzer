@@ -12,8 +12,12 @@ fi
 PORT="${APP_PORT:-7860}"
 URL="http://127.0.0.1:${PORT}"
 
+TITLE="IDDQD Support Analyzer"
+if [[ "${FORCE_CORE:-}" == "1" || "${FORCE_LIGHT:-}" == "1" || "${IDDQD_EDITION:-}" == "core" || "${IDDQD_EDITION:-}" == "light" || -f LIGHT_EDITION || -f CORE_EDITION ]]; then
+  TITLE="IDDQD Support Analyzer Light"
+fi
 echo "========================================"
-echo "  IDDQD Support Analyzer"
+echo "  ${TITLE}"
 echo "========================================"
 echo
 echo "Starting at $URL"
@@ -25,7 +29,7 @@ if command -v curl >/dev/null 2>&1 && curl -fsS "$URL" >/dev/null 2>&1; then
   if command -v xdg-open >/dev/null 2>&1; then
     xdg-open "$URL" >/dev/null 2>&1 || true
   fi
-  echo "IDDQD Support Analyzer is already running at $URL"
+  echo "${TITLE} is already running at $URL"
   echo
   echo "Press Enter to close this window."
   read -r

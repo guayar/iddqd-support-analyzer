@@ -50,8 +50,9 @@ Input
 - Analyzer does not invoke web search or require Ollama.
 - Assistant (optional) does not invoke web search. It receives the latest Analyze result and optional local screenshots plus OCR. **Clear conversation** resets the transcript without detaching analysis. **Clear analysis context** can detach it.
 - General Chat (optional) does not inherit Analyzer or Assistant context, screenshots or OCR. Local by default. Public search only after a per-turn plan; queries are minimal text, never image bytes or OCR dumps.
-- Optional modules are off by default and enabled independently. Enabling them in Config requires a process restart. Tab order: Analyze → Anonymize → Assistant → General Chat → Config. A legacy `.iddqd-modules.json` value `llm` still turns on both chat modules.
-- `OLLAMA_MODEL` is the process env tag (default `qwen3.6:27b` if unset). Chats display that string; they do not parse model-file metadata or `ollama list`.
+- Optional modules are off by default on the **full** edition and enabled independently. Enabling them in Config requires a process restart. Tab order: Analyze → Anonymize → Assistant → General Chat → Config. A legacy `.iddqd-modules.json` value `llm` still turns on both chat modules.
+- **Light edition** (`IDDQD Support Analyzer Light`; `IDDQD_EDITION=light`, alias `core`; `./run-light.sh`; or a `LIGHT_EDITION` marker in the Light zip): Analyze + Anonymize only. Chat modules are not loaded and are omitted from the exported zip. Analyzer and anonymizer code is shared; LLM files stay on the full tree.
+- `OLLAMA_MODEL` is the process env tag (default `qwen3.6:27b` if unset). Chats display that string; they do not parse model-file metadata or `ollama list`. Light edition does not use it.
 - Model endpoints must be loopback or RFC1918 unless `ALLOW_REMOTE_LLM=true`.
 - Screenshot/photo uploads are local files only (type/size/pixel limits, no URLs). Original pixels are sent to Ollama; OCR runs on a derived copy via local Tesseract. Assistant and General Chat use separate OCR caches and never copy attachments between tabs.
 - Gradio Screen Studio (browser-tab recording) is disabled. Run history is off so Analyze/Anonymize payloads are not stored in the Gradio runs UI.

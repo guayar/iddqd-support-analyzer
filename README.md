@@ -2,9 +2,9 @@
 
 [![Tests](https://github.com/guayar/iddqd-support-analyzer/actions/workflows/tests.yml/badge.svg)](https://github.com/guayar/iddqd-support-analyzer/actions/workflows/tests.yml)
 
-**Current version:** `0.17.9`
+**Current version:** `0.18.0`
 
-Local workstation tool for SAML/SSO and `*.log` troubleshooting. The core **Analyze** path is deterministic and does not use an LLM. Optional modules (anonymize, local chat) load from **Config** after a restart. Early-stage; built for my Ubuntu workstation, not a packaged product.
+Local workstation tool for SAML/SSO and `*.log` troubleshooting. The **Analyze** path is deterministic and does not use an LLM. Install **full** (optional Anonymize / Assistant / General Chat) or **Light** (`IDDQD Support Analyzer Light` — Analyze + Anonymize only). Early-stage; built for my Ubuntu workstation, not a packaged product.
 
 I own the requirements, validation rules, tests and spec interpretation; implementation is AI-assisted.
 
@@ -37,6 +37,17 @@ Paste a log or a SAML tracer, Auto-detect, Analyze. Samples below are synthetic 
 
 ## Start
 
+Two install flavors, same repository:
+
+| | **Full** (default) | **Light** |
+|---|---|---|
+| Product name | IDDQD Support Analyzer | IDDQD Support Analyzer Light |
+| Tabs | Analyze + Config; optional Anonymize, Assistant, General Chat | Analyze + Anonymize (always) + Config note |
+| LLM / Ollama / web search | Optional, from Config | Not included |
+| Python extras | `requirements.txt` (`ddgs`, `pillow`, `pytesseract`, …) | `requirements-core.txt` (SAML/log/anonymize only) |
+
+**Full**
+
 ```bash
 git clone https://github.com/guayar/iddqd-support-analyzer.git
 cd iddqd-support-analyzer
@@ -44,9 +55,28 @@ cp config.example.env .env
 ./run.sh
 ```
 
-UI: `http://127.0.0.1:7860`. Desktop: `./start-analyzer.sh`. Update a checkout: `./update.sh`.
+**Light** (deterministic only — no Ollama):
 
-Analyze needs Python 3.12+ and `./run.sh`. Assistant / General Chat also need [Ollama](https://ollama.com) and `OLLAMA_MODEL`. OCR is optional Tesseract. Details: [docs/USER.md](docs/USER.md#requirements).
+```bash
+git clone https://github.com/guayar/iddqd-support-analyzer.git
+cd iddqd-support-analyzer
+cp config.example.env .env
+./run-light.sh
+```
+
+A first-time `./run-light.sh` creates `.venv` from `requirements-core.txt`. If `.venv` already exists from a full install, delete it first (or the extra chat libraries stay on disk; they still are not loaded). `./run-core.sh` is the same launcher under the old name.
+
+To pack a tree **without** `chats.py` / `llm.py` / `vision.py` / `websearch.py`:
+
+```bash
+./scripts/export-light.sh
+```
+
+That writes `dist/iddqd-support-analyzer-light-<version>.zip`. Unpack, `./run.sh` (the zip contains `LIGHT_EDITION`, so it starts as Light).
+
+UI: `http://127.0.0.1:7860`. Desktop: `./start-analyzer.sh` (respects `IDDQD_EDITION` / `./run-light.sh`). Update a checkout: `./update.sh`.
+
+Analyze needs Python 3.12+. Full install: `./run.sh`. Light (no LLM): `./run-light.sh`. Assistant / General Chat (full edition only) also need [Ollama](https://ollama.com) and `OLLAMA_MODEL`. OCR is optional Tesseract. Details: [docs/USER.md](docs/USER.md#requirements).
 
 ## Docs
 

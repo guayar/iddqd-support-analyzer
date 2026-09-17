@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-APP_TITLE = "IDDQD Support Analyzer"
 APP_VERSION = (Path(__file__).resolve().parent / "VERSION").read_text(encoding="utf-8").strip()
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3.6:27b")
@@ -39,3 +38,18 @@ ASSISTANT_IMAGES_PER_MESSAGE = int(os.getenv("ASSISTANT_IMAGES_PER_MESSAGE", "3"
 OCR_TIMEOUT_SECONDS = int(os.getenv("OCR_TIMEOUT_SECONDS", "5"))
 _UI_THEME = os.getenv("UI_THEME", "system").strip().lower()
 UI_THEME = _UI_THEME if _UI_THEME in {"light", "dark", "system"} else "system"
+
+
+def parse_edition(raw: str | None) -> str:
+    value = (raw if raw is not None else "full").strip().lower() or "full"
+    if value in {"core", "light"}:
+        return "light"
+    if value != "full":
+        raise ValueError(f"IDDQD_EDITION must be 'full' or 'light' (alias: core), got {raw!r}")
+    return value
+
+
+IDDQD_EDITION = parse_edition(os.getenv("IDDQD_EDITION"))
+IS_LIGHT_EDITION = IDDQD_EDITION == "light"
+IS_CORE_EDITION = IS_LIGHT_EDITION
+APP_TITLE = "IDDQD Support Analyzer Light" if IS_LIGHT_EDITION else "IDDQD Support Analyzer"

@@ -5,6 +5,8 @@ import os
 import sys
 from pathlib import Path
 
+from config import IS_CORE_EDITION
+
 PLUGIN_ANONYMIZE = "anonymize"
 PLUGIN_ASSISTANT = "assistant"
 PLUGIN_GENERAL_CHAT = "general_chat"
@@ -50,6 +52,8 @@ def write_saved_plugins(values) -> tuple[str, ...]:
 
 
 def plugin_enabled(plugin_id: str, enabled: tuple[str, ...] | None = None) -> bool:
+    if IS_CORE_EDITION:
+        return plugin_id == PLUGIN_ANONYMIZE
     return plugin_id in (enabled if enabled is not None else RUNNING_PLUGINS)
 
 
