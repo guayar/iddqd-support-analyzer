@@ -38,6 +38,7 @@ jobs:
           PYTHONPATH=. python tests/test_analyzers.py
           PYTHONPATH=. python tests/test_saml_clock_skew.py
           PYTHONPATH=. python tests/test_saml_tracer_json.py
+          PYTHONPATH=. python tests/test_saml_incident_timing.py
           PYTHONPATH=. python tests/test_saml_metadata.py
           PYTHONPATH=. python tests/test_input_hardening.py
           PYTHONPATH=. python tests/test_signature_validation.py
@@ -79,6 +80,7 @@ jobs:
         run: |
           PYTHONPATH=. python tests/test_analyzers.py
           PYTHONPATH=. python tests/test_saml_metadata.py
+          PYTHONPATH=. python tests/test_saml_incident_timing.py
           PYTHONPATH=. python tests/test_nameid.py
           PYTHONPATH=. python tests/test_anonymizer_saml.py
           PYTHONPATH=. python tests/test_edition.py

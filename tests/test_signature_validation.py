@@ -159,7 +159,7 @@ assert "VALID_EMBEDDED_CERT_UNTRUSTED" not in {f.get("code") for f in sha1_embed
 assert "RESPONSE_SIGNATURE_ALGORITHM_WEAK" in sha1_embedded_codes
 assert "RESPONSE_DIGEST_ALGORITHM_WEAK" in sha1_embedded_codes
 sha1_embedded_resp = next(d for d in sha1_embedded["documents"] if d["type"] == "Response")
-assert sha1_embedded_resp["signature"]["crypto_verification"] == "VALID_EMBEDDED_CERT"
+assert sha1_embedded_resp["signature"]["crypto_verification"] == "XML_SIGNATURE_VALID_WITH_EMBEDDED_CERT"
 
 # Nested Response + Assertion signatures, both legacy SHA-1.
 SAML_ASSERTION = (

@@ -70,7 +70,7 @@ Validation is separated into four layers:
 3. **Signature and trust validation** — SAML XML Signature profile checks, same-document Reference validation, cryptographic signature/digest verification with public X.509 certificates, and comparison with matching metadata signing certificates.
 4. **Cross-document consistency** — comparisons between Request, Response, Assertion and supplied SP/IdP metadata.
 
-Time validity for assertion Conditions `NotBefore`/`NotOnOrAfter` and bearer `SubjectConfirmationData.NotOnOrAfter` uses analyzer UTC with `SAML_CLOCK_SKEW_SECONDS` (IDDQD default 120; not a SAML-mandated value). `SessionNotOnOrAfter` is evaluated strictly (IDDQD policy). Metadata `validUntil` is compared strictly.
+Time validity for assertion Conditions `NotBefore`/`NotOnOrAfter` and bearer `SubjectConfirmationData.NotOnOrAfter` uses a chosen `validation_time` with `SAML_CLOCK_SKEW_SECONDS` (IDDQD default 120; not a SAML-mandated value). SAML-tracer/HAR ACS posts use `incident_trace_mode` (ACS response `Date`, else request timestamp; never analyzer runtime as the primary clock). Raw XML without ACS transport evidence uses `replay_now_mode` (analyzer UTC). `SessionNotOnOrAfter` follows the same mode. Metadata `validUntil` uses the same validation time.
 
 ### XML Signature trust model
 

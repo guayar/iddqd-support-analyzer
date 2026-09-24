@@ -144,7 +144,7 @@ def test_trace_only_signature_trust_not_evaluated():
     assert "RESPONSE_XML_SIGNATURE_VALID_EMBEDDED_CERT_ONLY" not in codes
     assert "VALID_EMBEDDED_CERT_UNTRUSTED" not in codes
     resp = next(d for d in result["documents"] if d["type"] == "Response")
-    assert resp["signature"]["crypto_verification"] == "VALID_EMBEDDED_CERT"
+    assert resp["signature"]["crypto_verification"] == "XML_SIGNATURE_VALID_WITH_EMBEDDED_CERT"
     ctx = result["validation_context"]
     assert ctx["idp_metadata"]["supplied"] is False
     assert ctx["sp_metadata"]["supplied"] is False

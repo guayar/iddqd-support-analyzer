@@ -4,6 +4,7 @@ import json
 import re
 import urllib.parse
 from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from typing import Any
 
 import config as app_config
@@ -116,6 +117,232 @@ def _parse_time(value: str | None) -> datetime | None:
         return dt.astimezone(timezone.utc)
     except Exception:
         return None
+
+
+def _parse_http_date(value: str | None) -> datetime | None:
+    if not value or not str(value).strip():
+        return None
+    raw = str(value).strip()
+    try:
+        return parsedate_to_datetime(raw).astimezone(timezone.utc)
+    except Exception:
+        return _parse_time(raw)
+
+
+def _header_pairs(headers: Any) -> list[tuple[str, str]]:
+    out: list[tuple[str, str]] = []
+    if isinstance(headers, dict):
+        for name, value in headers.items():
+            if name is None:
+                continue
+            if isinstance(value, list):
+                for item in value:
+                    out.append((str(name), str(item)))
+            else:
+                out.append((str(name), str(value)))
+        return out
+    if not isinstance(headers, list):
+        return out
+    for item in headers:
+        if isinstance(item, dict):
+            name = item.get("name") or item.get("Name") or item.get("key")
+            value = item.get("value") if "value" in item else item.get("Value")
+            if name is not None and value is not None:
+                out.append((str(name), str(value)))
+        elif isinstance(item, (list, tuple)) and len(item) >= 2:
+            out.append((str(item[0]), str(item[1])))
+    return out
+
+
+def _header_value(headers: Any, wanted: str) -> str | None:
+    wanted_l = wanted.lower()
+    for name, value in _header_pairs(headers):
+        if name.lower() == wanted_l and value.strip():
+            return value
+    return None
+
+
+def _row_has_saml_response_payload(req: dict[str, Any]) -> bool:
+    saml = req.get("saml")
+    if isinstance(saml, str) and "Response" in saml and "AuthnRequest" not in saml[:200]:
+        return True
+    post = req.get("postData")
+    if isinstance(post, dict):
+        if post.get("SAMLResponse"):
+            return True
+        params = post.get("params")
+        if isinstance(params, list):
+            for p in params:
+                if isinstance(p, dict) and str(p.get("name") or "") == "SAMLResponse" and p.get("value"):
+                    return True
+        text = post.get("text")
+        if isinstance(text, str) and "SAMLResponse=" in text:
+            return True
+    get = req.get("get")
+    if isinstance(get, dict) and get.get("SAMLResponse"):
+        return True
+    url = req.get("url")
+    if isinstance(url, str) and "SAMLResponse=" in url:
+        return True
+    return False
+
+
+def _row_request_timestamp(req: dict[str, Any], entry: dict[str, Any] | None = None) -> datetime | None:
+    for container in (req, entry or {}):
+        for key in (
+            "startedDateTime",
+            "startedDateTimeISO",
+            "requestTime",
+            "timestamp",
+            "timeStamp",
+            "datetime",
+            "date",
+            "time",
+        ):
+            parsed = _parse_http_date(container.get(key) if isinstance(container.get(key), str) else None)
+            if parsed is None and isinstance(container.get(key), (int, float)):
+                try:
+                    # Prefer milliseconds when the value looks like epoch ms.
+                    raw = float(container[key])
+                    seconds = raw / 1000.0 if raw > 1e12 else raw
+                    parsed = datetime.fromtimestamp(seconds, tz=timezone.utc)
+                except Exception:
+                    parsed = None
+            if parsed is not None:
+                return parsed
+        headers = container.get("headers") or container.get("requestHeaders")
+        date_hdr = _header_value(headers, "Date")
+        parsed = _parse_http_date(date_hdr)
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _row_response_date(req: dict[str, Any], entry: dict[str, Any] | None = None) -> datetime | None:
+    response = req.get("response") if isinstance(req.get("response"), dict) else None
+    if response is None and entry is not None and isinstance(entry.get("response"), dict):
+        response = entry.get("response")
+    for headers in (
+        req.get("responseHeaders"),
+        req.get("response_headers"),
+        (response or {}).get("headers"),
+        (response or {}).get("responseHeaders"),
+    ):
+        parsed = _parse_http_date(_header_value(headers, "Date"))
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _iter_trace_http_rows(raw_input: str) -> list[tuple[dict[str, Any], dict[str, Any] | None]]:
+    """Return (request_like, optional HAR entry) rows from tracer JSON or HAR."""
+    try:
+        obj = json.loads(raw_input)
+    except Exception:
+        return []
+    out: list[tuple[dict[str, Any], dict[str, Any] | None]] = []
+    if isinstance(obj, list):
+        for item in obj:
+            if isinstance(item, dict) and (
+                "saml" in item or "postData" in item or "get" in item or "url" in item or "method" in item
+            ):
+                out.append((item, None))
+        return out
+    if not isinstance(obj, dict):
+        return []
+    log = obj.get("log")
+    if isinstance(log, dict) and isinstance(log.get("entries"), list):
+        for entry in log["entries"]:
+            if not isinstance(entry, dict):
+                continue
+            req = entry.get("request")
+            if isinstance(req, dict):
+                out.append((req, entry))
+        return out
+    for key in ("requests", "entries"):
+        rows = obj.get(key)
+        if isinstance(rows, list):
+            for item in rows:
+                if isinstance(item, dict):
+                    out.append((item, None))
+            if out:
+                return out
+    if "saml" in obj or (("method" in obj or "url" in obj) and ("postData" in obj or "get" in obj)):
+        return [(obj, None)]
+    return []
+
+
+def resolve_saml_timing(raw_input: str) -> dict[str, Any]:
+    """Choose validation_time for Conditions / bearer NotOnOrAfter checks.
+
+    incident_trace_mode: evaluate at the ACS event time from a tracer/HAR.
+    replay_now_mode: evaluate whether the message would still be accepted now.
+    """
+    analyzer_runtime = _now_utc()
+    rows = _iter_trace_http_rows(raw_input)
+    acs_rows = [
+        (req, entry)
+        for req, entry in rows
+        if _row_has_saml_response_payload(req)
+    ]
+    if not rows or not acs_rows:
+        # Raw XML / paste without ACS transport evidence: replay-now semantics.
+        return {
+            "mode": "replay_now",
+            "validation_time": analyzer_runtime,
+            "validation_time_source": "analyzer_runtime",
+            "analyzer_runtime": analyzer_runtime,
+            "acs_response_date": None,
+            "request_timestamp": None,
+        }
+
+    req, entry = acs_rows[-1]
+    acs_response_date = _row_response_date(req, entry)
+    request_timestamp = _row_request_timestamp(req, entry)
+    if acs_response_date is not None:
+        return {
+            "mode": "incident_trace",
+            "validation_time": acs_response_date,
+            "validation_time_source": "acs_response_date",
+            "analyzer_runtime": analyzer_runtime,
+            "acs_response_date": acs_response_date,
+            "request_timestamp": request_timestamp,
+        }
+    if request_timestamp is not None:
+        return {
+            "mode": "incident_trace",
+            "validation_time": request_timestamp,
+            "validation_time_source": "request_timestamp",
+            "analyzer_runtime": analyzer_runtime,
+            "acs_response_date": None,
+            "request_timestamp": request_timestamp,
+        }
+    return {
+        "mode": "incident_trace",
+        "validation_time": None,
+        "validation_time_source": None,
+        "analyzer_runtime": analyzer_runtime,
+        "acs_response_date": None,
+        "request_timestamp": None,
+    }
+
+
+def _timing_label(timing: dict[str, Any]) -> str:
+    mode = timing.get("mode")
+    source = timing.get("validation_time_source")
+    if mode == "incident_trace":
+        if source == "acs_response_date":
+            return "observed ACS POST response Date"
+        if source == "request_timestamp":
+            return "observed ACS request timestamp"
+        return "observed ACS event time"
+    return "analyzer runtime"
+
+
+def _iso_z(dt: datetime | None) -> str | None:
+    if dt is None:
+        return None
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _is_utc_time(value: str | None) -> bool:
@@ -397,6 +624,7 @@ def _detect_transport(raw_input: str) -> dict[str, Any]:
         "response_binding": None,
         "request_http_method": None,
         "response_http_method": None,
+        "response_post_target": None,
         "redirect_signature_present": False,
         "redirect_sigalg": None,
         "redirect_signature_parameter_present": False,
@@ -404,7 +632,7 @@ def _detect_transport(raw_input: str) -> dict[str, Any]:
         "evidence": [],
     }
 
-    def inspect_params(params: dict[str, list[str]], method: str | None, source: str):
+    def inspect_params(params: dict[str, list[str]], method: str | None, source: str, *, url: str | None = None):
         keys = set(params)
         if "SAMLRequest" in keys:
             if method == "GET" or ("SigAlg" in keys and "Signature" in keys):
@@ -416,9 +644,14 @@ def _detect_transport(raw_input: str) -> dict[str, Any]:
         if "SAMLResponse" in keys:
             if method == "GET" or ("SigAlg" in keys and "Signature" in keys):
                 info["response_binding"] = HTTP_REDIRECT
-            elif method == "POST":
+                info["response_http_method"] = method or "GET"
+            else:
+                # Form/body SAMLResponse without Redirect signature → HTTP-POST.
                 info["response_binding"] = HTTP_POST
-            info["response_http_method"] = method or info["response_http_method"]
+                resolved_method = method or "POST"
+                info["response_http_method"] = resolved_method
+                if resolved_method == "POST" and url:
+                    info["response_post_target"] = url
             info["evidence"].append(f"SAMLResponse in {source}")
         if "SigAlg" in keys:
             info["redirect_sigalg"] = params.get("SigAlg", [None])[0]
@@ -428,29 +661,43 @@ def _detect_transport(raw_input: str) -> dict[str, Any]:
             info["redirect_signature_present"] = True
         info["relaystate_values"].extend(params.get("RelayState", []))
 
-    # HAR provides the strongest binding evidence.
-    try:
-        obj = json.loads(raw_input)
-        entries = (((obj or {}).get("log") or {}).get("entries") or []) if isinstance(obj, dict) else []
-        for entry in entries:
-            req = entry.get("request") or {}
-            method = str(req.get("method") or "").upper() or None
-            url = req.get("url") or ""
-            if url:
-                q = urllib.parse.parse_qs(urllib.parse.urlsplit(url).query, keep_blank_values=True)
-                inspect_params(q, method, "HAR URL")
-            post = req.get("postData") or {}
-            params: dict[str, list[str]] = {}
-            for p in post.get("params") or []:
-                if p.get("name"):
-                    params.setdefault(str(p["name"]), []).append(str(p.get("value") or ""))
-            if post.get("text"):
-                for k, vals in urllib.parse.parse_qs(str(post["text"]), keep_blank_values=True).items():
-                    params.setdefault(k, []).extend(vals)
-            if params:
-                inspect_params(params, method or "POST", "HAR POST body")
-    except Exception:
-        pass
+    def form_params_from_post(post: Any) -> dict[str, list[str]]:
+        params: dict[str, list[str]] = {}
+        if not isinstance(post, dict):
+            return params
+        for name, value in post.items():
+            if name in {"params", "text", "mimeType", "encoding"}:
+                continue
+            if value is not None and not isinstance(value, (dict, list)):
+                params.setdefault(str(name), []).append(str(value))
+        for p in post.get("params") or []:
+            if isinstance(p, dict) and p.get("name"):
+                params.setdefault(str(p["name"]), []).append(str(p.get("value") or ""))
+        if post.get("text"):
+            for k, vals in urllib.parse.parse_qs(str(post["text"]), keep_blank_values=True).items():
+                params.setdefault(k, []).extend(vals)
+        return params
+
+    # HAR / SAML-tracer provide the strongest binding evidence.
+    for req, _entry in _iter_trace_http_rows(raw_input):
+        method = str(req.get("method") or "").upper() or None
+        url = req.get("url") if isinstance(req.get("url"), str) else None
+        if url:
+            q = urllib.parse.parse_qs(urllib.parse.urlsplit(url).query, keep_blank_values=True)
+            inspect_params(q, method, "trace URL", url=url)
+        get = req.get("get")
+        if isinstance(get, dict):
+            params = {str(k): [str(v)] if not isinstance(v, list) else [str(x) for x in v] for k, v in get.items()}
+            inspect_params(params, method or "GET", "trace GET", url=url)
+        post_params = form_params_from_post(req.get("postData"))
+        if post_params:
+            inspect_params(post_params, method or "POST", "trace POST body", url=url)
+        # Decoded SAML on the row is still ACS POST evidence when method/url exist.
+        if _row_has_saml_response_payload(req) and not post_params and method == "POST" and url:
+            info["response_binding"] = HTTP_POST
+            info["response_http_method"] = "POST"
+            info["response_post_target"] = url
+            info["evidence"].append("SAMLResponse in trace row")
 
     # Pasted query strings / form bodies.
     candidates = [raw_input]
@@ -576,6 +823,87 @@ def _relevant_sp_entity_ids(assertion: dict[str, Any], sp_entity_ids: list[str])
     return []
 
 
+def _validity_window_issues(
+    *,
+    code: str,
+    replay_code: str,
+    unknown_code: str,
+    scope: str,
+    bound_raw: str | None,
+    bound: datetime | None,
+    kind: str,
+    message_expired: str,
+    message_replay: str,
+    message_unknown: str,
+    standard: str,
+    timing_mode: str,
+    validation_time: datetime | None,
+    analyzer_now: datetime,
+    timing_ctx: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Evaluate NotBefore (lower) or NotOnOrAfter (upper) against the chosen validation time."""
+    if bound is None:
+        return []
+    out: list[dict[str, Any]] = []
+    label_ctx = dict(timing_ctx or {})
+    label_ctx.setdefault("mode", timing_mode)
+    when = _timing_label(label_ctx)
+    if timing_mode == "incident_trace" and validation_time is None:
+        if unknown_code:
+            out.append(_issue(
+                unknown_code,
+                "INFO",
+                scope,
+                message_unknown,
+                observed=bound_raw,
+                expected="ACS response Date or request timestamp in the tracer/HAR",
+                standard=standard,
+                note="Incident-trace timing is not compared against analyzer runtime. Missing event time is not treated as expiry.",
+            ))
+        return out
+
+    check_time = validation_time if timing_mode == "incident_trace" else analyzer_now
+    assert check_time is not None
+    failed = instant_not_yet_valid(check_time, bound) if kind == "lower" else instant_expired(check_time, bound)
+    if failed:
+        edge = f"{'>= NotBefore −' if kind == 'lower' else '< NotOnOrAfter +'} {_skew_seconds()}s"
+        out.append(_issue(
+            code,
+            "ERROR",
+            scope,
+            message_expired.format(when=when),
+            observed=bound_raw,
+            expected=f"{edge} relative to {check_time.isoformat()}",
+            standard=standard,
+            note=_skew_note(),
+        ))
+        return out
+
+    # Optional replay-now note for historical traces that were valid at ACS time.
+    if timing_mode == "incident_trace":
+        replay_failed = (
+            instant_not_yet_valid(analyzer_now, bound)
+            if kind == "lower"
+            else instant_expired(analyzer_now, bound)
+        )
+        if replay_failed:
+            out.append(_issue(
+                replay_code,
+                "INFO",
+                scope,
+                message_replay,
+                observed={
+                    "bound": bound_raw,
+                    "validation_time": _iso_z(check_time),
+                    "analyzer_runtime": _iso_z(analyzer_now),
+                },
+                expected=None,
+                standard=standard,
+                note=_skew_note(),
+            ))
+    return out
+
+
 def validate_saml(
     *,
     raw_input: str,
@@ -583,6 +911,7 @@ def validate_saml(
     responses: list[dict[str, Any]],
     standalone_assertions: list[dict[str, Any]],
     metadata: list[dict[str, Any]],
+    timing: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Standards/profile-oriented SAML validation.
 
@@ -592,8 +921,21 @@ def validate_saml(
     concern rather than an XML/SAML validity failure.
     """
     issues: list[dict[str, Any]] = []
-    now = _now_utc()
+    timing_ctx = timing or resolve_saml_timing(raw_input)
+    analyzer_now = timing_ctx.get("analyzer_runtime") or _now_utc()
+    validation_time = timing_ctx.get("validation_time")
+    timing_mode = timing_ctx.get("mode") or "replay_now"
+    # replay_now always has a time; incident_trace may lack an event timestamp.
+    now = validation_time if validation_time is not None else analyzer_now
     transport = _detect_transport(raw_input)
+    transport["timing"] = {
+        "mode": timing_mode,
+        "validation_time": _iso_z(validation_time) if validation_time is not None else None,
+        "validation_time_source": timing_ctx.get("validation_time_source"),
+        "analyzer_runtime": _iso_z(analyzer_now),
+        "acs_response_date": _iso_z(timing_ctx.get("acs_response_date")),
+        "request_timestamp": _iso_z(timing_ctx.get("request_timestamp")),
+    }
     req = requests[-1] if requests else None
     resp = responses[-1] if responses else None
     response_assertions = (resp.get("assertions") or []) if resp else []
@@ -862,17 +1204,24 @@ def validate_saml(
                 issues.append(_issue("BEARER_NOTONORAFTER_INVALID", "ERROR", sc_scope, "SubjectConfirmationData NotOnOrAfter is not a valid timezone-aware dateTime.", observed=data.get("NotOnOrAfter")))
             elif not _is_utc_time(data.get("NotOnOrAfter")):
                 issues.append(_issue("BEARER_NOTONORAFTER_NOT_UTC", "ERROR", sc_scope, "SubjectConfirmationData NotOnOrAfter must be expressed in UTC.", observed=data.get("NotOnOrAfter"), expected="UTC", standard="SAML Core 2.0 §1.3.3"))
-            elif instant_expired(now, _parse_time(data.get("NotOnOrAfter"))):
-                issues.append(_issue(
-                    "BEARER_CONFIRMATION_EXPIRED",
-                    "ERROR",
-                    sc_scope,
-                    "Bearer SubjectConfirmationData has expired at analyzer runtime.",
-                    observed=data.get("NotOnOrAfter"),
-                    expected=f"> {now.isoformat()} with clock skew {_skew_seconds()}s",
+            else:
+                issues.extend(_validity_window_issues(
+                    code="BEARER_CONFIRMATION_EXPIRED",
+                    replay_code="BEARER_CONFIRMATION_EXPIRED_IF_REPLAYED_NOW",
+                    unknown_code="BEARER_CONFIRMATION_VALIDITY_TIME_UNKNOWN",
+                    scope=sc_scope,
+                    bound_raw=data.get("NotOnOrAfter"),
+                    bound=_parse_time(data.get("NotOnOrAfter")),
+                    kind="upper",
+                    message_expired="Bearer SubjectConfirmationData has expired at {when}.",
+                    message_replay="Bearer SubjectConfirmationData was valid at the observed ACS time, but would be expired if replayed at analyzer runtime.",
+                    message_unknown="Bearer SubjectConfirmationData NotOnOrAfter cannot be evaluated as ERROR: this is an ACS trace without an observed event time.",
                     standard="SAML Profiles 2.0 §4.1.4.3",
-                    note=_skew_note(),
-                ))
+                timing_mode=timing_mode,
+                validation_time=validation_time,
+                analyzer_now=analyzer_now,
+                timing_ctx=timing_ctx,
+            ))
             if data.get("NotBefore"):
                 issues.append(_issue("BEARER_NOTBEFORE_FORBIDDEN", "ERROR", sc_scope, "Bearer SubjectConfirmationData must not contain NotBefore.", observed=data.get("NotBefore"), expected="omitted", standard="SAML Profiles 2.0 Approved Errata E52"))
             resp_irt = (resp or {}).get("in_response_to") if resp else None
@@ -927,27 +1276,41 @@ def validate_saml(
             issues.append(_issue("CONDITIONS_NOTONORAFTER_NOT_UTC", "ERROR", scope, "Conditions NotOnOrAfter must be expressed in UTC.", observed=noa_raw, expected="UTC", standard="SAML Core 2.0 §1.3.3"))
         if nb and noa and nb >= noa:
             issues.append(_issue("CONDITIONS_INTERVAL_INVALID", "ERROR", scope, "Conditions validity interval is empty or inverted (NotBefore >= NotOnOrAfter).", observed={"NotBefore": nb_raw, "NotOnOrAfter": noa_raw}, expected="NotBefore < NotOnOrAfter"))
-        if nb and instant_not_yet_valid(now, nb):
-            issues.append(_issue(
-                "ASSERTION_NOT_YET_VALID",
-                "ERROR",
-                scope,
-                "Assertion is not yet valid at analyzer runtime.",
-                observed=nb_raw,
-                expected=f"<= {now.isoformat()} with clock skew {_skew_seconds()}s",
+        if nb:
+            issues.extend(_validity_window_issues(
+                code="ASSERTION_NOT_YET_VALID",
+                replay_code="ASSERTION_NOT_YET_VALID_IF_REPLAYED_NOW",
+                unknown_code="",
+                scope=scope,
+                bound_raw=nb_raw,
+                bound=nb,
+                kind="lower",
+                message_expired="Assertion is not yet valid at {when}.",
+                message_replay="Assertion Conditions NotBefore was satisfied at the observed ACS time, but would be premature if evaluated only at analyzer runtime.",
+                message_unknown="",
                 standard="SAML Core 2.0 Conditions processing",
-                note=_skew_note(),
+                timing_mode=timing_mode,
+                validation_time=validation_time,
+                analyzer_now=analyzer_now,
+                timing_ctx=timing_ctx,
             ))
-        if noa and instant_expired(now, noa):
-            issues.append(_issue(
-                "ASSERTION_EXPIRED",
-                "ERROR",
-                scope,
-                "Assertion Conditions have expired at analyzer runtime.",
-                observed=noa_raw,
-                expected=f"> {now.isoformat()} with clock skew {_skew_seconds()}s",
+        if noa:
+            issues.extend(_validity_window_issues(
+                code="ASSERTION_EXPIRED",
+                replay_code="ASSERTION_EXPIRED_IF_REPLAYED_NOW",
+                unknown_code="ASSERTION_VALIDITY_TIME_UNKNOWN",
+                scope=scope,
+                bound_raw=noa_raw,
+                bound=noa,
+                kind="upper",
+                message_expired="Assertion Conditions have expired at {when}.",
+                message_replay="Assertion Conditions were valid at the observed ACS time, but would be expired if replayed at analyzer runtime.",
+                message_unknown="Assertion Conditions NotOnOrAfter cannot be evaluated as ERROR: this is an ACS trace without an observed event time.",
                 standard="SAML Core 2.0 Conditions processing",
-                note=_skew_note(),
+                timing_mode=timing_mode,
+                validation_time=validation_time,
+                analyzer_now=analyzer_now,
+                timing_ctx=timing_ctx,
             ))
         if resp and bearer and not (cond.get("audience_restrictions") or []):
             issues.append(_issue("AUDIENCE_RESTRICTION_MISSING", "ERROR", scope, "Bearer Web Browser SSO assertion must contain AudienceRestriction including the SP identifier.", expected="AudienceRestriction/Audience", standard="SAML Profiles 2.0 §4.1.4.2"))
@@ -983,16 +1346,45 @@ def validate_saml(
                 issues.append(_issue("SESSION_NOTONORAFTER_INVALID", "ERROR", st_scope, "SessionNotOnOrAfter is not a valid timezone-aware dateTime.", observed=session_raw))
             elif session_raw and not _is_utc_time(session_raw):
                 issues.append(_issue("SESSION_NOTONORAFTER_NOT_UTC", "ERROR", st_scope, "SessionNotOnOrAfter must be expressed in UTC.", observed=session_raw, expected="UTC", standard="SAML Core 2.0 §1.3.3"))
+            elif session_noa and timing_mode == "incident_trace" and validation_time is None:
+                issues.append(_issue(
+                    "SESSION_VALIDITY_TIME_UNKNOWN",
+                    "INFO",
+                    st_scope,
+                    "AuthnStatement SessionNotOnOrAfter cannot be evaluated as WARNING: this is an ACS trace without an observed event time.",
+                    observed=session_raw,
+                    expected="ACS response Date or request timestamp in the tracer/HAR",
+                    standard="SAML Core 2.0 §2.7.2 + Approved Errata E79; SAML Profiles 2.0 §4.1.4.3",
+                ))
             elif session_noa and instant_on_or_after(now, session_noa):
                 issues.append(_issue(
                     "SESSION_NOTONORAFTER_EXPIRED",
                     "WARNING",
                     st_scope,
-                    "AuthnStatement SessionNotOnOrAfter has passed at analyzer runtime. For Web Browser SSO this is an upper bound on the SP security context derived from the assertion, not a required ACS reject of the Response.",
+                    f"AuthnStatement SessionNotOnOrAfter has passed at {_timing_label(timing_ctx)}. For Web Browser SSO this is an upper bound on the SP security context derived from the assertion, not a required ACS reject of the Response.",
                     observed=session_raw,
                     expected=f"> {now.isoformat()} (strict; clock skew does not apply)",
                     standard="SAML Core 2.0 §2.7.2 + Approved Errata E79; SAML Profiles 2.0 §4.1.4.3",
                     note="IDDQD evaluates SessionNotOnOrAfter strictly (no clock skew). Web Browser SSO does not attach the bearer-style clock-skew clause to this field; general SAML clock-skew guidance exists, so strict session handling is an IDDQD policy choice rather than a SAML MUST. E79: upper bound on the SP security context (SHOULD discard). No required relationship to Conditions NotOnOrAfter.",
+                ))
+            elif (
+                session_noa
+                and timing_mode == "incident_trace"
+                and validation_time is not None
+                and not instant_on_or_after(validation_time, session_noa)
+                and instant_on_or_after(analyzer_now, session_noa)
+            ):
+                issues.append(_issue(
+                    "SESSION_NOTONORAFTER_EXPIRED_IF_REPLAYED_NOW",
+                    "INFO",
+                    st_scope,
+                    "AuthnStatement SessionNotOnOrAfter was still in the future at the observed ACS time, but has passed at analyzer runtime.",
+                    observed={
+                        "SessionNotOnOrAfter": session_raw,
+                        "validation_time": _iso_z(validation_time),
+                        "analyzer_runtime": _iso_z(analyzer_now),
+                    },
+                    standard="SAML Core 2.0 §2.7.2 + Approved Errata E79; SAML Profiles 2.0 §4.1.4.3",
                 ))
             if st.get("authn_context_class_ref") and not _valid_uri(st.get("authn_context_class_ref")):
                 issues.append(_issue("AUTHNCONTEXT_CLASSREF_INVALID", "ERROR", st_scope, "AuthnContextClassRef is not a valid URI.", observed=st.get("authn_context_class_ref"), standard="SAML Core 2.0 AuthnContext"))
@@ -1460,4 +1852,24 @@ def validate_saml(
     rank = {"ERROR": 0, "WARNING": 1, "INFO": 2}
     issues = sorted(enumerate(issues), key=lambda x: (rank.get(x[1]["severity"], 9), x[0]))
     issues = [x[1] for x in issues]
+    # Summarize incident-trace timing for the report header.
+    timing_summary = transport.get("timing") or {}
+    replay_codes = {
+        "ASSERTION_EXPIRED_IF_REPLAYED_NOW",
+        "BEARER_CONFIRMATION_EXPIRED_IF_REPLAYED_NOW",
+        "ASSERTION_NOT_YET_VALID_IF_REPLAYED_NOW",
+        "SESSION_NOTONORAFTER_EXPIRED_IF_REPLAYED_NOW",
+    }
+    hard_timing_errors = {
+        "ASSERTION_EXPIRED",
+        "BEARER_CONFIRMATION_EXPIRED",
+        "ASSERTION_NOT_YET_VALID",
+    }
+    timing_summary["valid_at_observed_time"] = (
+        timing_mode == "incident_trace"
+        and validation_time is not None
+        and not any(f.get("code") in hard_timing_errors for f in issues)
+    )
+    timing_summary["expired_at_analyzer_runtime"] = any(f.get("code") in replay_codes for f in issues)
+    transport["timing"] = timing_summary
     return issues, transport

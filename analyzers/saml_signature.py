@@ -528,7 +528,7 @@ def _crypto_findings(text: str, result: dict[str, Any]) -> list[dict[str, Any]]:
                     )
             elif selection in {"ambiguous", "not_selected"}:
                 _remove_crypto_warning(result, prefix, scope)
-                sig["crypto_verification"] = "VALID_EMBEDDED_CERT"
+                sig["crypto_verification"] = "XML_SIGNATURE_VALID_WITH_EMBEDDED_CERT"
                 sig["verified_signing_cert_fingerprint"] = verified_cert["fingerprint"]
                 findings.append(
                     _issue(
@@ -554,7 +554,7 @@ def _crypto_findings(text: str, result: dict[str, Any]) -> list[dict[str, Any]]:
                 )
             elif selection == "selected":
                 _remove_crypto_warning(result, prefix, scope)
-                sig["crypto_verification"] = "VALID_EMBEDDED_CERT"
+                sig["crypto_verification"] = "XML_SIGNATURE_VALID_WITH_EMBEDDED_CERT"
                 sig["verified_signing_cert_fingerprint"] = verified_cert["fingerprint"]
                 findings.append(
                     _issue(
@@ -585,7 +585,7 @@ def _crypto_findings(text: str, result: dict[str, Any]) -> list[dict[str, Any]]:
                 )
             else:
                 _remove_crypto_warning(result, prefix, scope)
-                sig["crypto_verification"] = "VALID_EMBEDDED_CERT"
+                sig["crypto_verification"] = "XML_SIGNATURE_VALID_WITH_EMBEDDED_CERT"
                 sig["verified_signing_cert_fingerprint"] = verified_cert["fingerprint"]
                 findings.append(
                     _issue(

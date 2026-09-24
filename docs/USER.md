@@ -27,7 +27,7 @@ Built to learn SAML and support-style log analysis by implementing the checks, i
 - trust comparison against matching SP / IdP metadata signing certificates
 - optional standalone X.509 signing certificate upload (`.pem`, `.crt`, `.cer`; PEM or DER)
 - certificate fingerprints from SAML messages, metadata and supplied certificates
-- protocol/profile validation with structured error codes, including assertion Conditions `NotBefore`/`NotOnOrAfter` and bearer `SubjectConfirmationData.NotOnOrAfter` with configurable clock skew (`SAML_CLOCK_SKEW_SECONDS`, IDDQD default 120); `SessionNotOnOrAfter` and metadata `validUntil` stay strict
+- protocol/profile validation with structured error codes, including assertion Conditions `NotBefore`/`NotOnOrAfter` and bearer `SubjectConfirmationData.NotOnOrAfter` with configurable clock skew (`SAML_CLOCK_SKEW_SECONDS`, IDDQD default 120). For SAML-tracer/HAR ACS rows the validation clock is the ACS response `Date` (else request timestamp); analyzer runtime is not used as the primary clock for those incident traces. Raw XML without ACS transport evidence still uses analyzer UTC (`replay_now`). `SessionNotOnOrAfter` follows the same mode; metadata `validUntil` uses the same validation time
 - copy the rendered Analyze report to the clipboard
 - **Clear** empties uploads, paste, optional signing certificate, report, decoded artifacts and JSON (Analyzer mode stays). If Assistant is on, the attached analysis is dropped; the chat is not reset
 - cross-document checks across Request ↔ Response ↔ Assertion ↔ SP metadata ↔ IdP metadata
@@ -50,8 +50,12 @@ NAMEIDPOLICY_RETURNED_FORMAT_MISMATCH
 SUBJECT_IDENTIFIER_CHOICE_INVALID
 SESSION_NOTONORAFTER_EXPIRED
 ASSERTION_EXPIRED
+ASSERTION_EXPIRED_IF_REPLAYED_NOW
+ASSERTION_VALIDITY_TIME_UNKNOWN
 ASSERTION_NOT_YET_VALID
 BEARER_CONFIRMATION_EXPIRED
+BEARER_CONFIRMATION_EXPIRED_IF_REPLAYED_NOW
+BEARER_CONFIRMATION_VALIDITY_TIME_UNKNOWN
 METADATA_EXPIRED
 RESPONSE_BEARER_INRESPONSETO_MISMATCH
 BEARER_INRESPONSETO_UNSOLICITED
@@ -74,9 +78,10 @@ RESPONSE_SIGNING_KEY_NOT_IN_IDP_METADATA
 RESPONSE_SIGNER_TRUST_NOT_EVALUATED
 ASSERTION_SIGNATURE_ALGORITHM_WEAK
 ASSERTION_DIGEST_ALGORITHM_WEAK
+RESPONSE_DIGEST_ALGORITHM_WEAK
 ```
 
-XML Signature verification does **not** require a private key. When matching SAML metadata is supplied, the analyzer verifies the signature using the public signing certificates published in that metadata (`use="signing"` or unspecified `KeyDescriptor`). A match means the signing key is in the supplied metadata file; it does not prove the file came from a trusted distribution channel, and it is not public WebPKI trust. If metadata is absent, a cryptographically valid embedded signature is `RESPONSE_XML_SIGNATURE_VALID` plus `RESPONSE_SIGNER_TRUST_NOT_EVALUATED` — not an “untrusted certificate” failure.
+XML Signature verification does **not** require a private key. When matching SAML metadata is supplied, the analyzer verifies the signature using the public signing certificates published in that metadata (`use="signing"` or unspecified `KeyDescriptor`). A match means the signing key is in the supplied metadata file; it does not prove the file came from a trusted distribution channel, and it is not public WebPKI trust. If metadata is absent, a cryptographically valid embedded signature is `RESPONSE_XML_SIGNATURE_VALID` plus `RESPONSE_SIGNER_TRUST_NOT_EVALUATED`, with `crypto_verification=XML_SIGNATURE_VALID_WITH_EMBEDDED_CERT` — cryptographic validity is not partner trust and not an “untrusted certificate” failure.
 
 The Analyze tab has independent optional **IdP metadata** and **SP metadata** uploads, plus an optional standalone X.509 signing certificate. Supply neither, either, or both. Missing metadata never fails the trace; dependent checks stay not evaluated. The report **SAML validation context** shows whether each side was supplied and which `entityID` was selected. An HTTP 401 on a tracer export is an observed transport result, not a SAML root-cause diagnosis.
 
@@ -330,6 +335,7 @@ source .venv/bin/activate
 PYTHONPATH=. python tests/test_analyzers.py
 PYTHONPATH=. python tests/test_saml_clock_skew.py
 PYTHONPATH=. python tests/test_saml_tracer_json.py
+PYTHONPATH=. python tests/test_saml_incident_timing.py
 PYTHONPATH=. python tests/test_saml_metadata.py
 PYTHONPATH=. python tests/test_log_incidents.py
 PYTHONPATH=. python tests/test_log_timestamps.py

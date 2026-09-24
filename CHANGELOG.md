@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here.
 
+## [0.19.0] - 2026-09-24
+
+### Fixed
+
+- SAML incident traces no longer treat Conditions / bearer expiry against analyzer runtime as ERROR when an ACS POST Date (or request timestamp) shows the assertion was still valid at the SP
+- SAML-tracer JSON ACS POST rows now populate Response HTTP method, HTTP-POST binding, and Response POST target in the transport report
+
+### Changed
+
+- Timing splits `incident_trace_mode` (validate at observed ACS event time) from `replay_now_mode` (raw XML / paste evaluated at analyzer UTC). Missing event time on a tracer downgrades timing to INFO, not ERROR
+- Embedded-certificate crypto result renamed to `XML_SIGNATURE_VALID_WITH_EMBEDDED_CERT` to avoid implying partner trust; `SIGNER_TRUST_NOT_EVALUATED` remains the trust gap signal
+- version bumped to `0.19.0`
+
 ## [0.18.0] - 2026-09-17
 
 ### Added

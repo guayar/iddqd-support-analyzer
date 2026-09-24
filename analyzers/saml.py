@@ -19,6 +19,7 @@ from .saml_validation import (
     clock_skew_assisted_note,
     instant_expired,
     instant_not_yet_valid,
+    resolve_saml_timing,
     select_role_metadata,
     validate_saml,
 )
@@ -957,12 +958,16 @@ def _observed_http_from_text(text: str) -> list[dict[str, Any]]:
         status = _http_status_from_tracer_row(req)
         if status is None:
             continue
-        out.append({
+        row = {
             "status": status,
             "method": req.get("method"),
             "url": req.get("url"),
             "has_saml_response": _row_has_saml_response(req),
-        })
+        }
+        response_date = saml_val._row_response_date(req, None)
+        if response_date is not None:
+            row["response_date"] = saml_val._iso_z(response_date)
+        out.append(row)
     return out
 
 
@@ -1018,61 +1023,76 @@ def _time_check_note(status: str, now: datetime, bound: datetime, *, lower: bool
     return mismatch_plain
 
 
-def _time_checks(assertion: dict[str, Any]) -> list[dict[str, Any]]:
+def _time_checks(assertion: dict[str, Any], timing: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     checks = []
-    now = saml_val._now_utc()
+    timing_ctx = timing or {"mode": "replay_now", "validation_time": saml_val._now_utc(), "analyzer_runtime": saml_val._now_utc()}
+    mode = timing_ctx.get("mode") or "replay_now"
+    validation_time = timing_ctx.get("validation_time")
+    analyzer_now = timing_ctx.get("analyzer_runtime") or saml_val._now_utc()
+    if mode == "incident_trace" and validation_time is None:
+        checks.append({
+            "check": "Assertion timing (incident trace)",
+            "status": "UNKNOWN",
+            "left": None,
+            "right": (assertion.get("conditions") or {}).get("NotOnOrAfter"),
+            "note": "ACS trace without observed event time; timing is not compared against analyzer runtime.",
+        })
+        return checks
+    now = validation_time if mode == "incident_trace" else analyzer_now
+    when = saml_val._timing_label(timing_ctx)
+    left = now.isoformat() if now is not None else None
     cond = assertion.get("conditions") or {}
     nb = saml_val._parse_time(cond.get("NotBefore"))
     noa = saml_val._parse_time(cond.get("NotOnOrAfter"))
-    if nb:
+    if nb and now is not None:
         status = "MATCH" if not instant_not_yet_valid(now, nb) else "MISMATCH"
         checks.append({
             "check": "Assertion Conditions NotBefore",
             "status": status,
-            "left": now.isoformat(),
+            "left": left,
             "right": cond.get("NotBefore"),
             "note": _time_check_note(
                 status,
                 now,
                 nb,
                 lower=True,
-                match_plain="MATCH means the assertion is not premature at analyzer runtime.",
-                mismatch_plain="MISMATCH means the assertion is not yet valid even after configured clock skew.",
+                match_plain=f"MATCH means the assertion is not premature at {when}.",
+                mismatch_plain=f"MISMATCH means the assertion is not yet valid at {when} even after configured clock skew.",
             ),
         })
-    if noa:
+    if noa and now is not None:
         status = "MATCH" if not instant_expired(now, noa) else "MISMATCH"
         checks.append({
             "check": "Assertion Conditions NotOnOrAfter",
             "status": status,
-            "left": now.isoformat(),
+            "left": left,
             "right": cond.get("NotOnOrAfter"),
             "note": _time_check_note(
                 status,
                 now,
                 noa,
                 lower=False,
-                match_plain="MATCH means the assertion has not expired at analyzer runtime.",
-                mismatch_plain="MISMATCH means the assertion has expired even after configured clock skew.",
+                match_plain=f"MATCH means the assertion has not expired at {when}.",
+                mismatch_plain=f"MISMATCH means the assertion has expired at {when} even after configured clock skew.",
             ),
         })
     for idx, sc in enumerate((assertion.get("subject") or {}).get("confirmations") or [], 1):
         s_noa_s = (sc.get("data") or {}).get("NotOnOrAfter")
         s_noa = saml_val._parse_time(s_noa_s)
-        if s_noa:
+        if s_noa and now is not None:
             status = "MATCH" if not instant_expired(now, s_noa) else "MISMATCH"
             checks.append({
                 "check": f"SubjectConfirmation #{idx} NotOnOrAfter",
                 "status": status,
-                "left": now.isoformat(),
+                "left": left,
                 "right": s_noa_s,
                 "note": _time_check_note(
                     status,
                     now,
                     s_noa,
                     lower=False,
-                    match_plain="MATCH means this subject confirmation has not expired at analyzer runtime.",
-                    mismatch_plain="MISMATCH means this subject confirmation has expired even after configured clock skew.",
+                    match_plain=f"MATCH means this subject confirmation has not expired at {when}.",
+                    mismatch_plain=f"MISMATCH means this subject confirmation has expired at {when} even after configured clock skew.",
                 ),
             })
     return checks
@@ -1245,6 +1265,7 @@ def analyze_saml_input(
     metadata = [d for d in docs if d["type"] == "Metadata"]
     checks: list[dict[str, Any]] = []
     observed_http = _observed_http_from_text(text)
+    timing = resolve_saml_timing(text)
 
     req = requests[-1] if requests else None
     resp = responses[-1] if responses else None
@@ -1257,7 +1278,7 @@ def analyze_saml_input(
         checks.append(_check("AuthnRequest ID vs Response InResponseTo", req.get("id"), resp.get("in_response_to"), "SP-initiated Response should correlate to the AuthnRequest when InResponseTo is present."))
 
     for ai, ass in enumerate(assertions, 1):
-        checks.extend(_time_checks(ass))
+        checks.extend(_time_checks(ass, timing))
         recipients = _subject_recipients(ass)
         irts = _subject_in_response_to(ass)
         audiences = (ass.get("conditions") or {}).get("audiences") or []
@@ -1374,6 +1395,7 @@ def analyze_saml_input(
         responses=responses,
         standalone_assertions=standalone_assertions,
         metadata=metadata,
+        timing=timing,
     )
     parse_findings = [
         {
@@ -1423,6 +1445,7 @@ def analyze_saml_input(
             "selection": (_sp_sel or ("selected" if sp_selected else "none")),
         },
         "observed_http": observed_http,
+        "timing": (transport.get("timing") or {}),
     }
 
     return {
@@ -1460,8 +1483,9 @@ def analyze_saml_input(
             "A standard SAML Response contains Assertion XML directly; the analyzer decodes whole Base64 SAMLRequest/SAMLResponse payloads and standalone Base64 Assertions, but intentionally does not recursively decode arbitrary Base64 text nodes such as X509 certificates.",
             "EncryptedAssertion is detected but cannot be decrypted without the SP private key.",
             "EncryptedAttribute and EncryptedID are detected; XML Encryption algorithms and KeyInfo presence are reported, but plaintext is not recovered without the corresponding private key.",
-            "Assertion Conditions NotBefore/NotOnOrAfter and bearer SubjectConfirmationData.NotOnOrAfter use analyzer UTC with configurable clock skew (SAML_CLOCK_SKEW_SECONDS; IDDQD default 120): NotBefore minus skew through NotOnOrAfter plus skew. Bearer SubjectConfirmationData.NotBefore is forbidden and is not a skew window. Set 0 for no extra tolerance. SessionNotOnOrAfter is evaluated strictly (IDDQD policy). Metadata validUntil is compared strictly. Traces that expired hours or years ago still expire.",
+            "Assertion Conditions NotBefore/NotOnOrAfter and bearer SubjectConfirmationData.NotOnOrAfter use a chosen validation_time with configurable clock skew (SAML_CLOCK_SKEW_SECONDS; IDDQD default 120): NotBefore minus skew through NotOnOrAfter plus skew (exclusive upper bound). For SAML-tracer/HAR ACS rows (incident_trace_mode) validation_time is the ACS response Date when present, else the request timestamp; analyzer runtime is not used as the primary clock. Missing event time downgrades timing to INFO, not ERROR. Raw XML without ACS transport evidence uses replay_now_mode (analyzer UTC). Bearer SubjectConfirmationData.NotBefore is forbidden and is not a skew window. Set 0 for no extra tolerance. SessionNotOnOrAfter follows the same mode. Metadata validUntil is compared against the same validation_time.",
             "Standards validation combines SAML 2.0 Core requirements with Web Browser SSO profile rules where the supplied documents indicate an SSO Response. Binding-dependent checks are only hard errors when the binding can be inferred; otherwise they are warnings.",
             "HTTP statuses copied from a tracer export are observed transport facts. They are not used to infer SAML configuration failures.",
+            "XML_SIGNATURE_VALID_WITH_EMBEDDED_CERT means the signature verifies against the certificate in ds:KeyInfo. SIGNER_TRUST_NOT_EVALUATED means partner-key authorization was not compared to IdP/SP metadata; cryptographic validity is not MX/SP trust.",
         ],
     }

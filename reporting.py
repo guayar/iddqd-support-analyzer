@@ -98,6 +98,14 @@ def _md_signature(sig: dict[str, Any] | None, indent: int = 0) -> list[str]:
         out.append(_bullet("X509 SHA-256 fingerprint(s)", sig.get("x509_sha256_fingerprints"), indent))
         if sig.get("crypto_verification"):
             out.append(_bullet("Cryptographic verification", sig.get("crypto_verification"), indent))
+            if sig.get("crypto_verification") == "XML_SIGNATURE_VALID_WITH_EMBEDDED_CERT":
+                out.append(
+                    _bullet(
+                        "Note",
+                        "Signature verifies against the embedded ds:KeyInfo certificate; this is not partner trust. See SIGNER_TRUST_NOT_EVALUATED when metadata was not compared.",
+                        indent,
+                    )
+                )
         if sig.get("verified_signing_cert_fingerprint"):
             out.append(_bullet("Verified signing certificate", sig.get("verified_signing_cert_fingerprint"), indent))
         if sig.get("metadata_signing_cert_fingerprints"):
@@ -305,13 +313,29 @@ def _metadata_context_line(side: dict[str, Any] | None) -> str:
 
 def render_saml_report(result: dict[str, Any]) -> str:
     summary = result.get("summary") or {}
+    timing = ((result.get("validation_context") or {}).get("timing") or (result.get("transport") or {}).get("timing") or {})
+    if (
+        timing.get("mode") == "incident_trace"
+        and timing.get("valid_at_observed_time")
+        and timing.get("expired_at_analyzer_runtime")
+    ):
+        standards_line = (
+            "**Standards/profile validation:** Timing valid at observed ACS POST time; "
+            "expired at analyzer runtime if replayed now.  \n"
+            f"❌ {summary.get('validation_errors', 0)} error(s) · ⚠️ {summary.get('validation_warnings', 0)} warning(s)"
+        )
+    else:
+        standards_line = (
+            f"**Standards/profile validation:** ❌ {summary.get('validation_errors', 0)} error(s) · "
+            f"⚠️ {summary.get('validation_warnings', 0)} warning(s)"
+        )
     out = [
         "# SAML / SSO analysis",
         f"**Documents detected:** {result.get('documents_found', 0)}  ",
         f"**AuthnRequest:** {summary.get('authn_requests', 0)} · **Response:** {summary.get('responses', 0)} · "
         f"**Assertions:** {summary.get('assertions_inside_responses', 0) + summary.get('standalone_assertions', 0)} · "
         f"**Metadata entities:** {summary.get('metadata_entities', 0)}  ",
-        f"**Standards/profile validation:** ❌ {summary.get('validation_errors', 0)} error(s) · ⚠️ {summary.get('validation_warnings', 0)} warning(s)  ",
+        standards_line + "  ",
         f"**Cross-checks:** ✅ {summary.get('matches', 0)} · ❌ {summary.get('mismatches', 0)} · ⚪ {summary.get('unknown_checks', 0)}",
     ]
 
@@ -334,6 +358,13 @@ def render_saml_report(result: dict[str, Any]) -> str:
             ))
             if any(row.get("status") == 401 for row in http_obs):
                 out.append("- **Root cause:** cannot be determined from this network trace alone. HTTP 401 is an observed SP/HTTP result, not a SAML-layer diagnosis.")
+        timing_ctx = ctx.get("timing") or {}
+        if timing_ctx.get("mode"):
+            vt = timing_ctx.get("validation_time") or "—"
+            src = timing_ctx.get("validation_time_source") or "—"
+            out.append(f"- **Timing mode:** `{timing_ctx.get('mode')}` · validation_time `{vt}` · source `{src}`")
+            if timing_ctx.get("valid_at_observed_time") and timing_ctx.get("expired_at_analyzer_runtime"):
+                out.append("- **Timing result:** valid at observed ACS POST time; expired at analyzer runtime if replayed now.")
 
     if result.get("supplied_signing_certificates"):
         out.append("\n## Supplied signing certificate")
@@ -361,7 +392,16 @@ def render_saml_report(result: dict[str, Any]) -> str:
         out.append("Download the raw decoded XML from **Decoded SAML artifacts** (not pretty-printed, not anonymized).")
 
     transport = result.get("transport") or {}
-    if any(transport.get(k) for k in ("request_binding", "response_binding", "inferred_response_binding", "redirect_signature_present", "evidence")):
+    if any(transport.get(k) for k in (
+        "request_binding",
+        "response_binding",
+        "inferred_response_binding",
+        "redirect_signature_present",
+        "evidence",
+        "request_http_method",
+        "response_http_method",
+        "response_post_target",
+    )):
         out.append("\n## Transport / binding detection")
         out += [
             _bullet("Request binding", transport.get("request_binding")),
@@ -369,6 +409,7 @@ def render_saml_report(result: dict[str, Any]) -> str:
             _bullet("Inferred response binding", transport.get("inferred_response_binding")),
             _bullet("Request HTTP method", transport.get("request_http_method")),
             _bullet("Response HTTP method", transport.get("response_http_method")),
+            _bullet("Response POST target", transport.get("response_post_target")),
             _bullet("HTTP-Redirect signature detected", transport.get("redirect_signature_present")),
             _bullet("SigAlg", transport.get("redirect_sigalg")),
             _bullet("RelayState value(s)", transport.get("relaystate_values")),
