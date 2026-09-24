@@ -8,6 +8,11 @@ import requests
 
 from llm import complete, llm_unavailable
 
+ASSISTANT_CONTEXT_MAX = 120_000
+# Leave room for the analyzer JSON after source files are packed.
+ASSISTANT_SOURCES_BUDGET = 60_000
+ASSISTANT_SOURCE_MIN_SHARE = 2_000
+
 ASSISTANT_SYSTEM = """You are a private local technical assistant running on the user's Ubuntu workstation.
 You have no web-search tool and must never claim to have checked the internet or current external documentation.
 Be concise, technically precise, and practical. If uncertain, say what is uncertain.
@@ -156,19 +161,87 @@ def _user_content(
     return "\n\n".join(parts).strip()
 
 
+def unwrap_assistant_context(assistant_context) -> tuple[Any, list[dict[str, Any]]]:
+    """Return (analysis, sources). Legacy bare analysis dicts have no sources list."""
+    if not assistant_context:
+        return None, []
+    if isinstance(assistant_context, dict) and "analysis" in assistant_context and "sources" in assistant_context:
+        sources = assistant_context.get("sources") or []
+        if not isinstance(sources, list):
+            sources = []
+        return assistant_context.get("analysis"), sources
+    return assistant_context, []
+
+
+def pack_assistant_context(analysis, sources: list[tuple[str, str]] | None = None) -> dict[str, Any]:
+    """Assistant-only envelope: analyzer JSON plus every Analyze tab source (files + paste).
+
+    General Chat must never receive this object. Large sources are truncated fairly so every
+    filename remains listed and each body gets a share of the budget.
+    """
+    rows = list(sources or [])
+    n = len(rows)
+    budget = ASSISTANT_SOURCES_BUDGET if n else 0
+    packed: list[dict[str, Any]] = []
+    used = 0
+    for index, (name, text) in enumerate(rows):
+        text = text or ""
+        remaining_files = n - index
+        share = max(ASSISTANT_SOURCE_MIN_SHARE, (budget - used) // max(remaining_files, 1))
+        truncated = len(text) > share
+        chunk = text[:share]
+        packed.append({
+            "name": name,
+            "chars": len(text),
+            "truncated": truncated,
+            "text": chunk,
+        })
+        used += len(chunk)
+    return {"analysis": analysis, "sources": packed}
+
+
 def assistant_system_prompt(assistant_context=None) -> str:
     if not assistant_context:
         return ASSISTANT_SYSTEM
-    compact = json.dumps(assistant_context, ensure_ascii=False)[:120_000]
-    return (
+    analysis, sources = unwrap_assistant_context(assistant_context)
+    if analysis is None and not sources:
+        return ASSISTANT_SYSTEM
+
+    index_lines: list[str] = []
+    bodies: list[str] = []
+    for item in sources:
+        name = item.get("name") or "source"
+        chars = int(item.get("chars") or 0)
+        truncated = bool(item.get("truncated"))
+        flag = ", truncated for context budget" if truncated else ""
+        index_lines.append(f"- `{name}` ({chars} chars{flag})")
+        bodies.append(f"===== FILE: {name} =====\n{item.get('text') or ''}")
+
+    sources_section = ""
+    if sources:
+        sources_section = (
+            "ANALYZE SOURCE INPUTS (every uploaded file and pasted text from the Analyze tab; "
+            "local only — never sent to General Chat or public web search):\n"
+            + "\n".join(index_lines)
+            + "\n\n"
+            + "\n\n".join(bodies)
+            + "\n\n"
+        )
+
+    head = (
         ASSISTANT_SYSTEM
-        + "\n\nAttached analyzer JSON from the latest Analyze run "
-        "(local only; you have no web-search tool). Use it when the user asks about this case. "
-        "Keep Analyzer JSON, screenshots and OCR extracts as separate evidence. "
+        + "\n\nAttached material from the latest Analyze run (local only; you have no web-search tool). "
+        "Use every listed source file and the analyzer JSON when the user asks about this case. "
+        "Keep Analyzer JSON, source files, screenshots and OCR extracts as separate evidence. "
         "Do not claim you searched the internet.\n\n"
-        "ANALYZER OUTPUT:\n"
-        + compact
+        + sources_section
+        + "ANALYZER OUTPUT:\n"
     )
+    analysis_json = json.dumps(analysis, ensure_ascii=False) if analysis is not None else "{}"
+    room = ASSISTANT_CONTEXT_MAX - len(head)
+    if room < 1_000:
+        room = 1_000
+    return head + analysis_json[:room]
 
 
 def empty_assistant_history():

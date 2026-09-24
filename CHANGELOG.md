@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## [0.19.2] - 2026-09-24
+
+### Fixed
+
+- Assistant Analyze context now includes every uploaded source file and the pasted text, not only a truncated single-file slice of the analyzer JSON. General Chat still receives none of that material
+
+### Changed
+
+- version bumped to `0.19.2`
+
 ## [0.19.1] - 2026-09-24
 
 ### Added

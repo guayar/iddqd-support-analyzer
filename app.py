@@ -452,7 +452,17 @@ def _model_hint(extra: str = "") -> str:
 def _context_badge(attached) -> str:
     on = bool(attached)
     state = "on" if on else "off"
-    label = "Analysis context attached" if on else "No analysis context attached"
+    label = "No analysis context attached"
+    if on:
+        from chats import unwrap_assistant_context
+
+        _analysis, sources = unwrap_assistant_context(attached)
+        n = len(sources)
+        label = "Analysis context attached"
+        if n == 1:
+            label += " · 1 source"
+        elif n > 1:
+            label += f" · {n} sources"
     return (
         f"<p class='psa-context'>"
         f"<span class='psa-context-status'>"
@@ -482,21 +492,27 @@ def analyze(files, pasted, mode, signing_cert_file=None, idp_metadata_file=None,
     return markdown, raw_json, result, write_decoded_artifact_download(result)
 
 
-def send_to_assistant(latest_analysis):
-    from chats import empty_assistant_history
+def send_to_assistant(latest_analysis, sources=None):
+    from chats import empty_assistant_history, pack_assistant_context
 
     if not latest_analysis:
         _ui_error("Analyze a log or SAML tracer first.")
-    return latest_analysis, _context_badge(latest_analysis), empty_assistant_history()
+    ctx = pack_assistant_context(latest_analysis, sources)
+    return ctx, _context_badge(ctx), empty_assistant_history()
 
 
 def analyze_with_assistant(files, pasted, mode, signing_cert_file=None, idp_metadata_file=None, sp_metadata_file=None):
+    from uploads import collect_analyze_artifacts
+
     markdown, raw_json, result, download = analyze(
         files, pasted, mode, signing_cert_file, idp_metadata_file, sp_metadata_file
     )
-    ctx, badge, history = send_to_assistant(result)
+    try:
+        source_artifacts = collect_analyze_artifacts(files, pasted)
+    except InputError:
+        source_artifacts = []
+    ctx, badge, history = send_to_assistant(result, sources=source_artifacts)
     return markdown, raw_json, result, download, ctx, badge, history
-
 
 def clear_analyze():
     return None, "", None, None, None, "", "", None, None
@@ -706,10 +722,10 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                             "### Local Assistant\n"
                             "Everything in this tab stays between the browser, this application, local OCR and the local Ollama model. "
                             "**No web search.** Attach PNG/JPEG/WEBP screenshots (terminals, stack traces, admin consoles). "
-                            "The latest Analyze result is available here automatically. "
+                            "The latest Analyze result is available here automatically, including **every uploaded file and the pasted text** from Analyze. "
                             "**Clear conversation** starts a new chat and keeps the attached analysis. "
                             "**Clear analysis context** removes the analysis and resets this chat. "
-                            "General Chat never receives that report, screenshots or OCR.",
+                            "General Chat never receives that report, source files, screenshots or OCR.",
                             elem_classes=["psa-note"],
                         )
                         with gr.Column(elem_classes=["psa-assistant-controls"]):

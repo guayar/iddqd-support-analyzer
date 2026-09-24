@@ -171,7 +171,7 @@ The anonymizer is not a certified DLP product; generated output should still be 
 
 Enable **Assistant** on the Config tab, then restart. Requires local Ollama. Independent of General Chat.
 
-The Assistant has no web-search path and no Mode switch. Ask it for technical help, a support-mail draft, or code in the same chat. Attach **local PNG/JPEG/WEBP screenshots** (terminal, stack traces, admin consoles; up to three per message). Original pixels go to Ollama when the model reports `vision`; a **local Tesseract OCR** extract is extra evidence and is labeled as imperfect. Follow-up turns without a new file re-send the last screenshot plus OCR. The latest Analyze result is available here automatically. A muted **Model:** line next to the analysis-context status shows the configured `OLLAMA_MODEL` tag (startup only; no in-app switcher). **Clear** on Analyze drops the attached analysis without resetting this chat. **Clear conversation** empties this transcript and the Assistant screenshot OCR cache, and keeps the attached analysis. **Clear analysis context** removes that report, screenshot OCR cache and resets the Assistant chat. General Chat never receives the report, images or OCR.
+The Assistant has no web-search path and no Mode switch. Ask it for technical help, a support-mail draft, or code in the same chat. Attach **local PNG/JPEG/WEBP screenshots** (terminal, stack traces, admin consoles; up to three per message). Original pixels go to Ollama when the model reports `vision`; a **local Tesseract OCR** extract is extra evidence and is labeled as imperfect. Follow-up turns without a new file re-send the last screenshot plus OCR. The latest Analyze result is available here automatically, including **every uploaded Analyze file and the pasted text** (large sources may be truncated for the context budget, but every filename stays listed). A muted **Model:** line next to the analysis-context status shows the configured `OLLAMA_MODEL` tag (startup only; no in-app switcher). **Clear** on Analyze drops the attached analysis without resetting this chat. **Clear conversation** empties this transcript and the Assistant screenshot OCR cache, and keeps the attached analysis. **Clear analysis context** removes that report, screenshot OCR cache and resets the Assistant chat. General Chat never receives the report, source files, images or OCR.
 
 Ubuntu OCR (Assistant and General Chat, optional): `sudo apt install tesseract-ocr tesseract-ocr-eng tesseract-ocr-pol`. Without Tesseract, images still go to a vision-capable Ollama model. Without vision, OCR text can still be sent.
 
@@ -197,7 +197,7 @@ A deliberately separate web-enabled chat. It receives **no** Analyzer or Assista
 |---|---:|---:|---|
 | Analyze | No | No | Logs, SAML traces, metadata, public signing certificates |
 | Anonymize (optional) | No | No | Sensitive logs and SAML traces |
-| Assistant (optional) | Yes | No | Technical/support material, screenshots, local OCR, plus the latest Analyze result |
+| Assistant (optional) | Yes | No | Technical/support material, screenshots, local OCR, latest Analyze result plus all Analyze source files/paste |
 | General Chat (optional) | Yes | Yes | Non-sensitive public questions; optional local photos (pixels stay local; text queries may go to search) |
 | Config | No | No | Which optional modules to load after restart |
 
