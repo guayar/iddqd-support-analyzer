@@ -2,7 +2,7 @@
 
 [![Tests](https://github.com/guayar/iddqd-support-analyzer/actions/workflows/tests.yml/badge.svg)](https://github.com/guayar/iddqd-support-analyzer/actions/workflows/tests.yml)
 
-**Current version:** `0.19.0`
+**Current version:** `0.19.1`
 
 Local workstation tool for SAML/SSO and `*.log` troubleshooting. The **Analyze** path is deterministic and does not use an LLM. Install **full** (optional Anonymize / Assistant / General Chat) or **Light** (`IDDQD Support Analyzer Light` — Analyze + Anonymize only). Early-stage; built for my Ubuntu workstation, not a packaged product.
 

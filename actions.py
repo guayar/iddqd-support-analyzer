@@ -10,11 +10,10 @@ from analyzers import analyze_log_text, analyze_saml_input
 from analyzers.logs import LogScanTimeout
 from analyzers.saml import decoded_artifacts_for_named_inputs, looks_like_saml_input, saml_root_types
 from analyzers.saml_supplied_cert import extract_pem_certificates_from_text
-from reporting import render_log_report, render_mixed_report, render_saml_output
+from reporting import render_log_output, render_mixed_report, render_saml_output
 from uploads import (
     InputError,
     collect_analyze_artifacts,
-    join_analyze_artifacts,
     join_saml_artifacts,
     read_optional_metadata_xml,
     read_signing_certificate,
@@ -80,12 +79,32 @@ def _run_saml(
 
 
 def _run_log(artifacts: list[tuple[str, str]]):
-    names = [name for name, _text in artifacts if name != "pasted text"]
     try:
-        return analyze_log_text(join_analyze_artifacts(artifacts), filename=", ".join(names) if names else None)
+        analyses: list[dict[str, Any]] = []
+        for name, text in artifacts:
+            filename = None if name == "pasted text" else name
+            result = analyze_log_text(text, filename=filename)
+            analyses.append({"name": name, "result": result})
     except LogScanTimeout as e:
         raise InputError(str(e)) from e
 
+    log_files = [
+        {
+            "name": item["name"],
+            "time_range": (item["result"].get("time_range") or {}),
+            "line_count": item["result"].get("line_count"),
+        }
+        for item in analyses
+    ]
+    if len(analyses) == 1:
+        out = analyses[0]["result"]
+        out["log_files"] = log_files
+        return out
+    return {
+        "kind": "log_multi",
+        "log_files": log_files,
+        "analyses": analyses,
+    }
 
 def analyze(files, pasted, mode, signing_cert_file=None, idp_metadata_file=None, sp_metadata_file=None) -> tuple[str, str, dict[str, Any]]:
     artifacts = collect_analyze_artifacts(files, pasted)
@@ -103,7 +122,7 @@ def analyze(files, pasted, mode, signing_cert_file=None, idp_metadata_file=None,
         md = render_saml_output(result)
     elif mode == "Log":
         result = _run_log(artifacts)
-        md = render_log_report(result)
+        md = render_log_output(result)
     else:
         classified = [
             (name, text, "SAML" if looks_like_saml_input(text) else "Log")
@@ -138,7 +157,7 @@ def analyze(files, pasted, mode, signing_cert_file=None, idp_metadata_file=None,
             md = render_saml_output(result)
         else:
             result = _run_log(log_arts)
-            md = render_log_report(result)
+            md = render_log_output(result)
 
     return md, json.dumps(result, indent=2, ensure_ascii=False), result
 

@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## [0.19.1] - 2026-09-24
+
+### Added
+
+- SAML report shows observed time range and assertion Conditions validity window in UTC, so ACS traces can be compared with log windows
+- Log `time_range` keeps timezone when ISO stamps include `Z` or an offset (`UTC`, `+02:00`, or `mixed`); naive stamps note that timezone was not in the source
+- Analyze report opens with **Time ranges at a glance**: every log file (and SAML) listed with its date range before the detailed sections
+
+### Changed
+
+- version bumped to `0.19.1`
+
 ## [0.19.0] - 2026-09-24
 
 ### Fixed

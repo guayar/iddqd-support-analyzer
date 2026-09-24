@@ -35,7 +35,7 @@ assert "# SAML / SSO analysis" in md
 log_report = render_log_report({
     "filename": "app.log",
     "line_count": 2,
-    "time_range": {"from": None, "to": None},
+    "time_range": {"from": None, "to": None, "timezone": None, "timezone_note": None},
     "levels": {"ERROR": 1},
     "error_codes": {},
     "error_groups": [],

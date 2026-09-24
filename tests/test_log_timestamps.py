@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from analyzers.logs import (
     _parse_ts,
@@ -14,7 +14,12 @@ from analyzers.logs import (
 
 def test_unambiguous_formats_parse():
     assert _parse_ts("2026-09-01 14:04:46") == datetime(2026, 9, 1, 14, 4, 46)
-    assert _parse_ts("2026-09-01T14:04:46.123Z") == datetime(2026, 9, 1, 14, 4, 46, 123000)
+    assert _parse_ts("2026-09-01T14:04:46.123Z") == datetime(
+        2026, 9, 1, 14, 4, 46, 123000, tzinfo=timezone.utc
+    )
+    assert _parse_ts("2026-09-01T14:04:46+02:00") == datetime(
+        2026, 9, 1, 14, 4, 46, tzinfo=timezone(timedelta(hours=2))
+    )
     assert _parse_ts("2026/09/01 14:04:46") == datetime(2026, 9, 1, 14, 4, 46)
     assert _parse_ts("01-Sep-2026 14:04:46") == datetime(2026, 9, 1, 14, 4, 46)
     assert _parse_ts("Wed Jul 01 15:00:00 2026") == datetime(2026, 7, 1, 15, 0, 0)
@@ -91,9 +96,38 @@ def test_file_with_day_over_12_disambiguates_as_dmy():
 def test_only_ambiguous_slash_does_not_fill_time_range():
     text = "[09/01/26 14:04:46 healthCheck] ERROR failed\n"
     r = analyze_log_text(text)
-    assert r["time_range"] == {"from": None, "to": None}
+    assert r["time_range"]["from"] is None
+    assert r["time_range"]["to"] is None
     assert r["error_event_count"] == 1
     assert r["timestamped_lines"] == 0
+
+
+def test_iso_z_time_range_keeps_utc_label():
+    text = (
+        "2026-09-24T04:59:21.000Z INFO start\n"
+        "2026-09-24T05:11:21.000Z ERROR failed\n"
+    )
+    r = analyze_log_text(text)
+    assert r["time_range"]["from"].endswith("Z")
+    assert r["time_range"]["to"].endswith("Z")
+    assert r["time_range"]["timezone"] == "UTC"
+
+
+def test_offset_time_range_keeps_offset_label():
+    text = (
+        "2026-09-24T07:01:22+02:00 INFO start\n"
+        "2026-09-24T07:05:00+02:00 ERROR failed\n"
+    )
+    r = analyze_log_text(text)
+    assert "+02:00" in r["time_range"]["from"]
+    assert r["time_range"]["timezone"] == "+02:00"
+
+
+def test_naive_time_range_notes_missing_timezone():
+    text = "2026-09-24 05:01:22 INFO start\n2026-09-24 05:05:00 ERROR failed\n"
+    r = analyze_log_text(text)
+    assert r["time_range"]["timezone"] is None
+    assert "timezone not present" in (r["time_range"].get("timezone_note") or "")
 
 
 def test_timestamped_info_still_closes_an_error_block():
@@ -120,5 +154,8 @@ if __name__ == "__main__":
     test_file_with_iso_disambiguates_slash_mdy()
     test_file_with_day_over_12_disambiguates_as_dmy()
     test_only_ambiguous_slash_does_not_fill_time_range()
+    test_iso_z_time_range_keeps_utc_label()
+    test_offset_time_range_keeps_offset_label()
+    test_naive_time_range_notes_missing_timezone()
     test_timestamped_info_still_closes_an_error_block()
     print("LOG TIMESTAMP TESTS OK")

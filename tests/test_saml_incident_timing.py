@@ -84,10 +84,20 @@ def test_incident_trace_uses_acs_date_not_analyzer_runtime():
 
     report = render_saml_report(result)
     assert "Timing valid at observed ACS POST time" in report
+    assert "Time range:" in report
+    assert "2026-09-24T04:59:21" in report
+    assert "2026-09-24T05:11:21" in report
+    assert "timezone `UTC`" in report
+    assert "Assertion validity" in report
     assert "Response HTTP method: `POST`" in report or "Response HTTP method:** `POST`" in report or "**Response HTTP method:** `POST`" in report
     assert ACS_URL in report
     assert "Standards/profile validation:** ❌ 2 error" not in report
 
+    tr = result.get("time_range") or {}
+    assert tr.get("from") == "2026-09-24T04:59:21Z"
+    assert tr.get("to") == "2026-09-24T05:11:21Z"
+    assert tr.get("timezone") == "UTC"
+    assert tr.get("assertion_validity")
 
 def test_incident_trace_without_event_time_is_info_not_error():
     raw = json.dumps(

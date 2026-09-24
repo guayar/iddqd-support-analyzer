@@ -64,8 +64,13 @@ assert result["saml"]["summary"]["responses"] == 1
 assert result["log"]["filename"] == "error.log"
 assert {a["name"]: a["kind"] for a in result["artifacts"]} == {"error.log": "Log", "trace.xml": "SAML"}
 assert "# Analysis" in md
+assert "## Time ranges at a glance" in md
+assert "**Log `error.log`**" in md
+assert "**SAML**" in md
 assert "## SAML analysis" in md
 assert "## Log analysis" in md
+assert result["log"].get("log_files")
+assert result["log"]["log_files"][0]["name"] == "error.log"
 assert '"kind": "mixed"' in raw
 assert "HTTP 500" in result["log"]["incidents"][0]["signature"] or result["log"]["error_event_count"] == 1
 
@@ -87,8 +92,25 @@ assert "# SAML / SSO analysis" in md
 md, _raw, result = analyze([log_f], "", "Log")
 assert result["kind"] == "log"
 assert result["error_event_count"] == 1
+assert "## Time ranges at a glance" in md
+assert "**Log `error.log`**" in md
 md, _raw, result = analyze([trace_f], "", "Log")
 assert result["kind"] == "log"
+
+# 7b. multiple log files: overview lists each range, then per-file reports
+log2 = """2026-09-24T07:01:22+02:00 INFO other
+2026-09-24T07:05:00+02:00 ERROR later
+"""
+log2_f = _file("other.log", log2)
+md, _raw, result = analyze([log_f, log2_f], "", "Log")
+assert result["kind"] == "log_multi"
+assert len(result["log_files"]) == 2
+assert "## Time ranges at a glance" in md
+assert "**Log `error.log`**" in md
+assert "**Log `other.log`**" in md
+assert "## Log analysis — `error.log`" in md
+assert "## Log analysis — `other.log`" in md
+assert "+02:00" in md
 
 # 8. pasted input remains compatible
 md, _raw, result = analyze(None, LOG, "Auto-detect")

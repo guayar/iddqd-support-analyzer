@@ -1098,6 +1098,102 @@ def _time_checks(assertion: dict[str, Any], timing: dict[str, Any] | None = None
     return checks
 
 
+def _format_ts_z(dt: datetime) -> str:
+    """UTC display with trailing Z (SAML-friendly)."""
+    text = dt.astimezone(timezone.utc).isoformat()
+    if text.endswith("+00:00"):
+        return text[:-6] + "Z"
+    return text
+
+
+def _collect_saml_time_range(
+    *,
+    requests: list[dict[str, Any]],
+    responses: list[dict[str, Any]],
+    standalone_assertions: list[dict[str, Any]],
+    timing: dict[str, Any],
+) -> dict[str, Any]:
+    """Min/max observed SAML protocol times + ACS validation time for overlap with logs."""
+    points: list[tuple[datetime, str]] = []
+
+    def add(raw: str | None, source: str) -> None:
+        dt = saml_val._parse_time(raw) if raw else None
+        if dt is not None:
+            points.append((dt, source))
+
+    for req in requests:
+        add(req.get("issue_instant"), "AuthnRequest IssueInstant")
+    for resp in responses:
+        add(resp.get("issue_instant"), "Response IssueInstant")
+        for ass in resp.get("assertions") or []:
+            add(ass.get("issue_instant"), "Assertion IssueInstant")
+            cond = ass.get("conditions") or {}
+            add(cond.get("NotBefore"), "Assertion Conditions NotBefore")
+            add(cond.get("NotOnOrAfter"), "Assertion Conditions NotOnOrAfter")
+            for st in ass.get("authn_statements") or []:
+                add(st.get("AuthnInstant"), "AuthnInstant")
+                add(st.get("SessionNotOnOrAfter"), "SessionNotOnOrAfter")
+            for sc in (ass.get("subject") or {}).get("confirmations") or []:
+                data = sc.get("data") or {}
+                add(data.get("NotOnOrAfter"), "bearer SubjectConfirmationData NotOnOrAfter")
+    for ass in standalone_assertions:
+        add(ass.get("issue_instant"), "Assertion IssueInstant")
+        cond = ass.get("conditions") or {}
+        add(cond.get("NotBefore"), "Assertion Conditions NotBefore")
+        add(cond.get("NotOnOrAfter"), "Assertion Conditions NotOnOrAfter")
+
+    for key, label in (
+        ("acs_response_date", "ACS response Date"),
+        ("request_timestamp", "ACS request timestamp"),
+    ):
+        add(timing.get(key), label)
+
+    assertion_windows: list[dict[str, str]] = []
+    for resp in responses:
+        for i, ass in enumerate(resp.get("assertions") or [], 1):
+            cond = ass.get("conditions") or {}
+            nb, noa = cond.get("NotBefore"), cond.get("NotOnOrAfter")
+            if nb or noa:
+                assertion_windows.append({
+                    "assertion": f"Response assertion #{i}",
+                    "not_before": nb,
+                    "not_on_or_after": noa,
+                })
+    for i, ass in enumerate(standalone_assertions, 1):
+        cond = ass.get("conditions") or {}
+        nb, noa = cond.get("NotBefore"), cond.get("NotOnOrAfter")
+        if nb or noa:
+            assertion_windows.append({
+                "assertion": f"Standalone assertion #{i}",
+                "not_before": nb,
+                "not_on_or_after": noa,
+            })
+
+    if not points:
+        return {
+            "from": None,
+            "to": None,
+            "timezone": "UTC",
+            "timezone_note": "SAML xs:dateTime values are UTC when present; no protocol timestamps were found",
+            "assertion_validity": assertion_windows,
+            "sources": [],
+        }
+
+    earliest = min(points, key=lambda p: p[0])
+    latest = max(points, key=lambda p: p[0])
+    sources = list(dict.fromkeys(src for _dt, src in points))
+    return {
+        "from": _format_ts_z(earliest[0]),
+        "to": _format_ts_z(latest[0]),
+        "timezone": "UTC",
+        "timezone_note": "SAML protocol times and ACS Date headers are UTC (Z)",
+        "assertion_validity": assertion_windows,
+        "sources": sources,
+        "from_source": earliest[1],
+        "to_source": latest[1],
+    }
+
+
 def looks_like_saml_input(text: str) -> bool:
     low = text.lower()
     if any(x in low for x in ("samlresponse", "samlrequest", "authnrequest", "urn:oasis:names:tc:saml", "<samlp:", "<saml:", "entitydescriptor")):
@@ -1447,6 +1543,12 @@ def analyze_saml_input(
         "observed_http": observed_http,
         "timing": (transport.get("timing") or {}),
     }
+    time_range = _collect_saml_time_range(
+        requests=requests,
+        responses=responses,
+        standalone_assertions=standalone_assertions,
+        timing=transport.get("timing") or {},
+    )
 
     return {
         "kind": "saml",
@@ -1456,6 +1558,7 @@ def analyze_saml_input(
         "parse_failures": parse_failures,
         "slot_metadata_xml": slot_metadata_xml,
         "validation_context": validation_context,
+        "time_range": time_range,
         "decoded_artifacts": assign_decoded_export_names(
             collect_decoded_artifacts(text, "pasted text")
         ),
@@ -1476,6 +1579,8 @@ def analyze_saml_input(
             "validation_errors": sum(1 for f in findings if f.get("severity") == "ERROR"),
             "validation_warnings": sum(1 for f in findings if f.get("severity") == "WARNING"),
             "validation_info": sum(1 for f in findings if f.get("severity") == "INFO"),
+            "time_from": time_range.get("from"),
+            "time_to": time_range.get("to"),
         },
         "limitations": [
             "XML Signature cryptographic validity is evaluated when a certificate is available. Partner-key authorization is evaluated only against supplied IdP/SP metadata or an operator-supplied signing certificate; missing metadata is NOT_EVALUATED, not failure.",

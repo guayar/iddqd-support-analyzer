@@ -10,7 +10,7 @@ import os
 import re
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, NamedTuple, Protocol
 
 from .log_ssh import SshCorrelator, ssh_pid as _ssh_pid
@@ -277,12 +277,58 @@ def _parse_ts(line: str, policy: _TsPolicy | None = None) -> datetime | None:
     pol = policy or _TsPolicy(None, frozenset())
     for m in TS_TOKEN_RE.finditer(line):
         dt = _datetime_from_match(m, pol)
-        if dt is None:
-            continue
-        if dt.tzinfo is not None:
-            dt = dt.replace(tzinfo=None)
-        return dt
+        if dt is not None:
+            return dt
     return None
+
+
+def _ts_cmp_key(dt: datetime) -> datetime:
+    """Wall-clock ordering key. Aware stamps compare in UTC; naive stay as written."""
+    if dt.tzinfo is not None:
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
+
+
+def _tz_offset_label(dt: datetime) -> str | None:
+    if dt.tzinfo is None:
+        return None
+    offset = dt.utcoffset()
+    if offset is None:
+        return None
+    if offset.total_seconds() == 0:
+        return "UTC"
+    total = int(offset.total_seconds())
+    sign = "+" if total >= 0 else "-"
+    total = abs(total)
+    hours, rem = divmod(total, 3600)
+    minutes = rem // 60
+    return f"{sign}{hours:02d}:{minutes:02d}"
+
+
+def format_timestamp_display(dt: datetime) -> str:
+    """ISO-ish display that keeps timezone when the source had one (UTC as Z)."""
+    if dt.tzinfo is None:
+        return dt.isoformat()
+    text = dt.isoformat()
+    if text.endswith("+00:00"):
+        return text[:-6] + "Z"
+    return text
+
+
+def _summarize_timezones(labels: set[str | None]) -> tuple[str | None, str | None]:
+    present = {x for x in labels if x is not None}
+    missing = None in labels
+    if not labels:
+        return None, None
+    if not present:
+        return None, "timezone not present in source stamps"
+    if len(present) == 1 and not missing:
+        only = next(iter(present))
+        return only, None
+    if len(present) == 1 and missing:
+        only = next(iter(present))
+        return "mixed", f"some stamps use {only}; others have no timezone in the source"
+    return "mixed", "source stamps use more than one timezone offset"
 
 
 def syslog_stamp(line: str) -> str | None:
@@ -787,6 +833,7 @@ def analyze_log_text(
     n_cal = 0
     ts_min: datetime | None = None
     ts_max: datetime | None = None
+    tz_labels: set[str | None] = set()
     n_syslog = 0
     syslog_min: tuple[tuple[int, int, int, int, int], str] | None = None
     syslog_max: tuple[tuple[int, int, int, int, int], str] | None = None
@@ -816,9 +863,10 @@ def analyze_log_text(
         ts = _parse_ts(line, policy)
         if ts:
             n_cal += 1
-            if ts_min is None or ts < ts_min:
+            tz_labels.add(_tz_offset_label(ts))
+            if ts_min is None or _ts_cmp_key(ts) < _ts_cmp_key(ts_min):
                 ts_min = ts
-            if ts_max is None or ts > ts_max:
+            if ts_max is None or _ts_cmp_key(ts) > _ts_cmp_key(ts_max):
                 ts_max = ts
         raw = syslog_stamp(line)
         if raw:
@@ -908,19 +956,29 @@ def analyze_log_text(
     t2 = _profile_log(t1, "scan")
 
     if ts_min is not None and ts_max is not None:
+        tz_name, tz_note = _summarize_timezones(tz_labels)
         time_range = {
-            "from": ts_min.isoformat(),
-            "to": ts_max.isoformat(),
+            "from": format_timestamp_display(ts_min),
+            "to": format_timestamp_display(ts_max),
             "year_present": True,
+            "timezone": tz_name,
+            "timezone_note": tz_note,
         }
     elif syslog_min is not None and syslog_max is not None:
         time_range = {
             "from": syslog_min[1],
             "to": syslog_max[1],
             "year_present": False,
+            "timezone": None,
+            "timezone_note": "RFC3164 stamps have no year or timezone in the source",
         }
     else:
-        time_range = {"from": None, "to": None}
+        time_range = {
+            "from": None,
+            "to": None,
+            "timezone": None,
+            "timezone_note": None,
+        }
 
     groups = []
     for v in grouped.values():
@@ -980,7 +1038,8 @@ def analyze_log_text(
         "incidents": shown,
         "limitations": [
             "A timestamp may be followed by a bracketed level (`[ts] [error] message`). Apache `notice` is counted as INFO and is not an incident. `crit` / `alert` / `emerg` are not mapped. Repeated messages are grouped on the text after the level; `[client …]` and `child <digits>` are treated as context, not identity. Trailing status numbers such as `error state 6` are kept distinct.",
-            "RFC3164/syslog stamps (`MMM d HH:mm:ss`) are used as written for time_range; a year is not invented when the source has none. Oracle-style stamps with a weekday and a year (`Wed Jul 01 15:00:00 2026`) are calendar times.",
+            "RFC3164/syslog stamps (`MMM d HH:mm:ss`) are used as written for time_range; a year and timezone are not invented when the source has none. Oracle-style stamps with a weekday and a year (`Wed Jul 01 15:00:00 2026`) are calendar times without a timezone unless the stamp carries one.",
+            "ISO stamps that include `Z` or an offset keep that timezone in time_range so SAML and log windows can be compared for overlap. Naive stamps (no offset) are labeled as timezone not present in the source.",
             "Vendor codes (ORA-01555, RMAN-03015, TNS-12500, and similar PREFIX-NUMBER) are taken from the start of a record after an optional timestamp, or from the message after an explicit log level. Tokens embedded later in the same line are ignored. Occurrence count is not importance. Codes are identifiers, not correlated incidents; Oracle messages are not classified from an error-number dictionary. The report lists a bounded subset when many distinct codes are present; family totals and unique/occurrence counts include all vendor codes.",
             "OpenSSH/auth lines are correlated by sshd PID into authentication attempts; repeated attempts from one IP can raise a brute-force incident when the gap between attempts is at most 15 minutes. Five or more attempts in a 60-second window, or ten or more in a slower cluster, are ERROR; five to nine slower attempts are suspected (WARN). Connection closed by itself is not an error. Reverse-DNS mismatch is not treated as a proven break-in. Stored SSH sessions are capped; authentication-event counts still include overflow PIDs.",
             "Line severity counts mix explicit source markers with deterministic per-line classification; they are not the same as incident severity. English `error:` inside an Oracle vendor-code message is not counted as a source ERROR.",

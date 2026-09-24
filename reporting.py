@@ -311,6 +311,109 @@ def _metadata_context_line(side: dict[str, Any] | None) -> str:
     return line
 
 
+def _fmt_time_range_line(tr: dict[str, Any] | None, *, label: str = "Timestamp range") -> list[str]:
+    tr = tr or {}
+    start = tr.get("from") or "not detected"
+    end = tr.get("to") or "not detected"
+    tz = tr.get("timezone")
+    line = f"**{label}:** `{start}` → `{end}`"
+    if tz:
+        line += f" · timezone `{tz}`"
+    out = [line]
+    note = tr.get("timezone_note")
+    if note:
+        out.append(f"Timezone note: {note}")
+    if tr.get("year_present") is False:
+        out.append("Year not present in source")
+    from_src = tr.get("from_source")
+    to_src = tr.get("to_source")
+    if from_src or to_src:
+        bits = []
+        if from_src:
+            bits.append(f"from ← {from_src}")
+        if to_src:
+            bits.append(f"to ← {to_src}")
+        out.append("Range ends: " + "; ".join(bits))
+    for window in tr.get("assertion_validity") or []:
+        nb = window.get("not_before") or "—"
+        noa = window.get("not_on_or_after") or "—"
+        out.append(
+            f"**Assertion validity ({window.get('assertion')}):** `{nb}` → `{noa}` · timezone `UTC`"
+        )
+    return out
+
+
+def _compact_range(tr: dict[str, Any] | None) -> str:
+    tr = tr or {}
+    start = tr.get("from") or "not detected"
+    end = tr.get("to") or "not detected"
+    bit = f"`{start}` → `{end}`"
+    tz = tr.get("timezone")
+    if tz:
+        bit += f" · timezone `{tz}`"
+    elif tr.get("year_present") is False:
+        bit += " · no year/timezone in source"
+    elif tr.get("timezone_note"):
+        bit += f" · {tr['timezone_note']}"
+    return bit
+
+
+def _saml_range_entries(saml: dict[str, Any] | None) -> list[tuple[str, dict[str, Any]]]:
+    if not saml:
+        return []
+    if saml.get("kind") == "saml_multi":
+        out: list[tuple[str, dict[str, Any]]] = []
+        for item in saml.get("analyses") or []:
+            name = item.get("name") or "SAML"
+            tr = (item.get("result") or {}).get("time_range") or {}
+            out.append((f"SAML `{name}`", tr))
+        return out
+    return [("SAML", saml.get("time_range") or {})]
+
+
+def _log_range_entries(log: dict[str, Any] | None) -> list[tuple[str, dict[str, Any]]]:
+    if not log:
+        return []
+    files = log.get("log_files")
+    if files:
+        return [
+            (f"Log `{item.get('name') or 'pasted text'}`", item.get("time_range") or {})
+            for item in files
+        ]
+    if log.get("kind") == "log_multi":
+        return [
+            (f"Log `{item.get('name') or 'pasted text'}`", (item.get("result") or {}).get("time_range") or {})
+            for item in (log.get("analyses") or [])
+        ]
+    name = log.get("filename") or "pasted text"
+    return [(f"Log `{name}`", log.get("time_range") or {})]
+
+
+def render_time_ranges_overview(
+    *,
+    log: dict[str, Any] | None = None,
+    saml: dict[str, Any] | None = None,
+    log_files: list[dict[str, Any]] | None = None,
+) -> list[str]:
+    """Top-of-report index: every log (and SAML) with its date range for overlap checks."""
+    entries: list[tuple[str, dict[str, Any]]] = []
+    if log_files is not None:
+        entries.extend(
+            (f"Log `{item.get('name') or 'pasted text'}`", item.get("time_range") or {})
+            for item in log_files
+        )
+    else:
+        entries.extend(_log_range_entries(log))
+    entries.extend(_saml_range_entries(saml))
+    if not entries:
+        return []
+    lines = ["## Time ranges at a glance", ""]
+    for label, tr in entries:
+        lines.append(f"- **{label}** — {_compact_range(tr)}")
+    lines.append("")
+    return lines
+
+
 def render_saml_report(result: dict[str, Any]) -> str:
     summary = result.get("summary") or {}
     timing = ((result.get("validation_context") or {}).get("timing") or (result.get("transport") or {}).get("timing") or {})
@@ -335,6 +438,10 @@ def render_saml_report(result: dict[str, Any]) -> str:
         f"**AuthnRequest:** {summary.get('authn_requests', 0)} · **Response:** {summary.get('responses', 0)} · "
         f"**Assertions:** {summary.get('assertions_inside_responses', 0) + summary.get('standalone_assertions', 0)} · "
         f"**Metadata entities:** {summary.get('metadata_entities', 0)}  ",
+    ]
+    for line in _fmt_time_range_line(result.get("time_range"), label="Time range"):
+        out.append(line + ("  " if line.startswith("**") else ""))
+    out += [
         standards_line + "  ",
         f"**Cross-checks:** ✅ {summary.get('matches', 0)} · ❌ {summary.get('mismatches', 0)} · ⚪ {summary.get('unknown_checks', 0)}",
     ]
@@ -521,10 +628,9 @@ def render_log_report(result: dict[str, Any]) -> str:
         "# Log analysis",
         f"**File:** `{result.get('filename') or 'pasted text'}`  ",
         f"**Lines:** {result['line_count']:,}  ",
-        f"**Timestamp range:** `{tr.get('from') or 'not detected'}` → `{tr.get('to') or 'not detected'}`",
     ]
-    if tr.get("year_present") is False:
-        out.append("Year not present in source")
+    for line in _fmt_time_range_line(tr, label="Timestamp range"):
+        out.append(line)
     out.extend([
         "\n## Detected line severities",
         "Includes explicit source markers plus deterministic semantic classification of the line (for example `Failed password` → WARN). These counts are not incident severities.",
@@ -647,9 +753,40 @@ def render_saml_multi_sections(result: dict[str, Any]) -> str:
     return "\n\n".join(parts)
 
 
+def render_log_multi_sections(result: dict[str, Any]) -> str:
+    parts: list[str] = []
+    for item in result.get("analyses") or []:
+        name = item.get("name") or "log"
+        body = render_log_report(item.get("result") or {}).replace(
+            "# Log analysis", f"## Log analysis — `{name}`", 1
+        )
+        parts.append(body)
+    return "\n\n".join(parts)
+
+
+def render_log_output(result: dict[str, Any]) -> str:
+    if result.get("kind") == "log_multi":
+        lines = ["# Analysis", ""]
+        lines.extend(render_time_ranges_overview(log=result))
+        lines.append(render_log_multi_sections(result))
+        return "\n".join(lines)
+    lines: list[str] = []
+    overview = render_time_ranges_overview(log=result)
+    if overview:
+        # Keep a single # Log analysis heading; put the glance list under it.
+        body = render_log_report(result)
+        lines = body.split("\n", 1)
+        head = lines[0]
+        rest = lines[1] if len(lines) > 1 else ""
+        return "\n".join([head, ""] + overview + ([rest.lstrip("\n")] if rest else []))
+    return render_log_report(result)
+
+
 def render_saml_output(result: dict[str, Any]) -> str:
     if result.get("kind") == "saml_multi":
-        lines = ["# Analysis", "", "SAML artifacts:"]
+        lines = ["# Analysis", ""]
+        lines.extend(render_time_ranges_overview(saml=result))
+        lines.append("SAML artifacts:")
         for item in result.get("analyses") or []:
             lines.append(f"- `{item.get('name')}`")
         if result.get("decoded_artifacts"):
@@ -664,11 +801,20 @@ def render_saml_output(result: dict[str, Any]) -> str:
         lines.append("")
         lines.append(render_saml_multi_sections(result))
         return "\n".join(lines)
+    overview = render_time_ranges_overview(saml=result)
+    if overview:
+        body = render_saml_report(result)
+        lines = body.split("\n", 1)
+        head = lines[0]
+        rest = lines[1] if len(lines) > 1 else ""
+        return "\n".join([head, ""] + overview + ([rest.lstrip("\n")] if rest else []))
     return render_saml_report(result)
 
 
 def render_mixed_report(result: dict[str, Any]) -> str:
-    lines = ["# Analysis", "", "Files/artifacts detected:"]
+    lines = ["# Analysis", ""]
+    lines.extend(render_time_ranges_overview(log=result.get("log"), saml=result.get("saml")))
+    lines.append("Files/artifacts detected:")
     for item in result.get("artifacts") or []:
         lines.append(f"- {item.get('name')} — {item.get('kind')}")
     saml = result.get("saml")
@@ -690,9 +836,11 @@ def render_mixed_report(result: dict[str, Any]) -> str:
     log = result.get("log")
     if log:
         lines.append("")
-        lines.append(render_log_report(log).replace("# Log analysis", "## Log analysis", 1))
+        if log.get("kind") == "log_multi":
+            lines.append(render_log_multi_sections(log))
+        else:
+            lines.append(render_log_report(log).replace("# Log analysis", "## Log analysis", 1))
     return "\n".join(lines)
-
 
 def render_anonymize_summary(result: dict[str, Any]) -> str:
     counts = result["counts"]
