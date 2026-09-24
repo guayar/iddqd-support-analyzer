@@ -54,7 +54,7 @@ Input
 - **Light edition** (`IDDQD Support Analyzer Light`; `IDDQD_EDITION=light`, alias `core`; `./run-light.sh`; or a `LIGHT_EDITION` marker in the Light zip): Analyze + Anonymize only. Chat modules are not loaded and are omitted from the exported zip. Analyzer and anonymizer code is shared; LLM files stay on the full tree.
 - `OLLAMA_MODEL` is the process env tag (default `qwen3.6:27b` if unset). Chats display that string; they do not parse model-file metadata or `ollama list`. Light edition does not use it.
 - Model endpoints must be loopback or RFC1918 unless `ALLOW_REMOTE_LLM=true`.
-- Screenshot/photo uploads are local files only (type/size/pixel limits, no URLs). Original pixels are sent to Ollama; OCR runs on a derived copy via local Tesseract. Assistant and General Chat use separate OCR caches and never copy attachments between tabs.
+- Screenshot/photo uploads are local files only (type/size/pixel limits, no URLs). Pixels sent to Ollama are downscaled; OCR runs on a derived copy via local Tesseract. If a vision request returns HTTP 400, `llm.complete` retries without images (OCR text remains). Assistant and General Chat use separate OCR caches and never copy attachments between tabs.
 - Gradio Screen Studio (browser-tab recording) is disabled. Run history is off so Analyze/Anonymize payloads are not stored in the Gradio runs UI.
 - `.env`, local logs, generated mappings and credential material are excluded from version control.
 - Local certificate/key formats (`*.pem`, `*.crt`, `*.cer`, `*.der`, `*.key`, `*.p12`, `*.pfx`, keystores) are excluded from version control.

@@ -171,7 +171,7 @@ The anonymizer is not a certified DLP product; generated output should still be 
 
 Enable **Assistant** on the Config tab, then restart. Requires local Ollama. Independent of General Chat.
 
-The Assistant has no web-search path and no Mode switch. Ask it for technical help, a support-mail draft, or code in the same chat. Attach **local PNG/JPEG/WEBP screenshots** (terminal, stack traces, admin consoles; up to three per message). Original pixels go to Ollama when the model reports `vision`; a **local Tesseract OCR** extract is extra evidence and is labeled as imperfect. Follow-up turns without a new file re-send the last screenshot plus OCR. The latest Analyze result is available here automatically, including **every uploaded Analyze file and the pasted text** (large sources may be truncated for the context budget, but every filename stays listed). A muted **Model:** line next to the analysis-context status shows the configured `OLLAMA_MODEL` tag (startup only; no in-app switcher). **Clear** on Analyze drops the attached analysis without resetting this chat. **Clear conversation** empties this transcript and the Assistant screenshot OCR cache, and keeps the attached analysis. **Clear analysis context** removes that report, screenshot OCR cache and resets the Assistant chat. General Chat never receives the report, source files, images or OCR.
+The Assistant has no web-search path and no Mode switch. Ask it for technical help, a support-mail draft, or code in the same chat. Attach **local PNG/JPEG/WEBP screenshots** (terminal, stack traces, admin consoles; up to three per message). Pixels go to Ollama when the model reports `vision` (downscaled for the model); if Ollama rejects the image payload, the turn continues with the **local Tesseract OCR** extract already in the prompt. Follow-up turns without a new file re-send the last screenshot plus OCR. The latest Analyze result is available here automatically, including **every uploaded Analyze file and the pasted text** (large sources may be truncated for the context budget, and more tightly when a screenshot is attached, but every filename stays listed). A muted **Model:** line next to the analysis-context status shows the configured `OLLAMA_MODEL` tag (startup only; no in-app switcher). **Clear** on Analyze drops the attached analysis without resetting this chat. **Clear conversation** empties this transcript and the Assistant screenshot OCR cache, and keeps the attached analysis. **Clear analysis context** removes that report, screenshot OCR cache and resets the Assistant chat. General Chat never receives the report, source files, images or OCR.
 
 Ubuntu OCR (Assistant and General Chat, optional): `sudo apt install tesseract-ocr tesseract-ocr-eng tesseract-ocr-pol`. Without Tesseract, images still go to a vision-capable Ollama model. Without vision, OCR text can still be sent.
 
@@ -314,6 +314,7 @@ Assistant and General Chat screenshots/photos (never shared across those tabs):
 ASSISTANT_IMAGE_MAX_MB=8
 ASSISTANT_IMAGE_MAX_PIXELS=12000000
 ASSISTANT_IMAGES_PER_MESSAGE=3
+ASSISTANT_VISION_MAX_EDGE=1536
 OCR_TIMEOUT_SECONDS=5
 ```
 
@@ -355,6 +356,7 @@ PYTHONPATH=. python tests/test_edition.py
 PYTHONPATH=. python tests/test_assistant_handoff.py
 PYTHONPATH=. python tests/test_chat_history.py
 PYTHONPATH=. python tests/test_vision.py
+PYTHONPATH=. python tests/test_llm.py
 ```
 
 The tests use synthetic SAML and log data only. Signature and anonymization tests generate ephemeral synthetic keys/certificates at runtime; no private key material is stored in the repository.

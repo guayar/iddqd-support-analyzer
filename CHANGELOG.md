@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## [0.19.3] - 2026-09-24
+
+### Fixed
+
+- Assistant screenshot + Analyze context no longer hard-fails with `LLM unavailable: 400`: Ollama vision requests fall back to OCR text when the image payload is rejected, screenshots are downscaled for the model, and Analyze source text is kept smaller on image turns
+
+### Changed
+
+- version bumped to `0.19.3`
+
 ## [0.19.2] - 2026-09-24
 
 ### Fixed

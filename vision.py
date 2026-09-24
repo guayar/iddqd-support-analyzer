@@ -11,6 +11,7 @@ from config import (
     ASSISTANT_IMAGE_MAX_BYTES,
     ASSISTANT_IMAGE_MAX_PIXELS,
     ASSISTANT_IMAGES_PER_MESSAGE,
+    ASSISTANT_VISION_MAX_EDGE,
     OCR_TIMEOUT_SECONDS,
 )
 
@@ -98,11 +99,20 @@ def inspect_image(raw_path: str) -> dict[str, Any]:
 
 
 def encode_image_png_base64(path: str) -> str:
-    """Pixels for Ollama, without EXIF. Original file is not modified."""
+    """Pixels for Ollama, without EXIF. Downscales large screenshots so chat+context fits."""
     with _open_validated(Path(path)) as image:
         rgb = ImageOps.exif_transpose(image)
         if rgb.mode not in {"RGB", "RGBA", "L"}:
             rgb = rgb.convert("RGB")
+        max_edge = max(1, ASSISTANT_VISION_MAX_EDGE)
+        width, height = rgb.size
+        longest = max(width, height)
+        if longest > max_edge:
+            scale = max_edge / longest
+            rgb = rgb.resize(
+                (max(1, int(width * scale)), max(1, int(height * scale))),
+                Image.Resampling.LANCZOS,
+            )
         buf = io.BytesIO()
         rgb.save(buf, format="PNG", optimize=True)
     return base64.b64encode(buf.getvalue()).decode("ascii")

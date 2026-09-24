@@ -187,6 +187,32 @@ def test_follow_up_resends_previous_screenshot(tmp_path):
     assert "ORA-12514" in user["content"]
 
 
+def test_encode_downscales_for_ollama(tmp_path):
+    import base64
+    import io
+
+    from vision import encode_image_png_base64
+
+    path = _png(tmp_path / "big.png", size=(3200, 1800), color=(40, 40, 40))
+    raw = encode_image_png_base64(str(path))
+    out = Image.open(io.BytesIO(base64.b64decode(raw)))
+    assert max(out.size) <= 1536
+
+
+def test_assistant_image_turn_keeps_source_index_but_shrinks_bodies():
+    from chats import assistant_system_prompt, pack_assistant_context
+
+    ctx = pack_assistant_context(
+        {"kind": "saml", "case": "Z"},
+        [("a.log", "A" * 40_000), ("b.txt", "B" * 40_000)],
+    )
+    plain = assistant_system_prompt(ctx, image_turn=False)
+    vision = assistant_system_prompt(ctx, image_turn=True)
+    assert "`a.log`" in vision and "`b.txt`" in vision
+    assert len(vision) < len(plain)
+    assert vision.count("A") < plain.count("A")
+
+
 if __name__ == "__main__":
     from pathlib import Path as P
     import tempfile
@@ -202,4 +228,6 @@ if __name__ == "__main__":
         test_general_chat_skips_search_for_what_is_this_photo(td)
         test_follow_up_resends_previous_screenshot(td)
         test_attach_scopes_are_separate(td)
+        test_encode_downscales_for_ollama(td)
+    test_assistant_image_turn_keeps_source_index_but_shrinks_bodies()
     print("VISION TESTS OK")

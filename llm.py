@@ -59,6 +59,15 @@ def _payload_messages(messages: list[dict[str, Any]], *, include_images: bool) -
     return out
 
 
+def _ollama_error_detail(response: requests.Response) -> str:
+    body = (response.text or "").strip().replace("\n", " ")
+    if len(body) > 280:
+        body = body[:277] + "..."
+    if body:
+        return f"{response.status_code} {body}"
+    return f"{response.status_code} {response.reason}"
+
+
 def complete(messages: list[dict[str, Any]], temperature: float = 0.2) -> str:
     if not ALLOW_REMOTE_LLM and not endpoint_is_local(OLLAMA_URL):
         raise RuntimeError("Remote LLM endpoint blocked. Set ALLOW_REMOTE_LLM=true only if you intentionally want it.")
@@ -72,15 +81,22 @@ def complete(messages: list[dict[str, Any]], temperature: float = 0.2) -> str:
         "options": {"temperature": temperature},
     }
     r = requests.post(f"{OLLAMA_URL}/api/chat", json=body, timeout=600)
-    if r.status_code >= 400 and include_images and vision is not True:
+    # Vision models still 400 on oversized image+context payloads. OCR text is already in
+    # message content, so retry without pixels whenever the image request fails.
+    if r.status_code >= 400 and include_images:
         fallback = {
             "model": OLLAMA_MODEL,
             "messages": _payload_messages(messages, include_images=False),
             "stream": False,
             "options": {"temperature": temperature},
         }
-        r = requests.post(f"{OLLAMA_URL}/api/chat", json=fallback, timeout=600)
-    r.raise_for_status()
+        r2 = requests.post(f"{OLLAMA_URL}/api/chat", json=fallback, timeout=600)
+        if r2.status_code < 400:
+            return r2.json()["message"]["content"]
+        # Prefer the text-only failure detail; it is usually more actionable.
+        raise requests.HTTPError(_ollama_error_detail(r2), response=r2)
+    if r.status_code >= 400:
+        raise requests.HTTPError(_ollama_error_detail(r), response=r)
     return r.json()["message"]["content"]
 
 

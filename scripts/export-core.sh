@@ -17,7 +17,7 @@ should_skip() {
     __pycache__|*/__pycache__|*.pyc) return 0 ;;
     .iddqd-modules.json|docs/assets|docs/assets/*) return 0 ;;
     chats.py|llm.py|vision.py|websearch.py) return 0 ;;
-    tests/test_assistant_handoff.py|tests/test_chat_history.py|tests/test_vision.py|tests/test_layers.py) return 0 ;;
+    tests/test_assistant_handoff.py|tests/test_chat_history.py|tests/test_vision.py|tests/test_llm.py|tests/test_layers.py) return 0 ;;
     scripts/record_readme_gifs.py) return 0 ;;
   esac
   return 1

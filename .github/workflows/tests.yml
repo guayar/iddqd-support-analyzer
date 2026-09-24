@@ -56,6 +56,7 @@ jobs:
           PYTHONPATH=. python tests/test_assistant_handoff.py
           PYTHONPATH=. python tests/test_chat_history.py
           PYTHONPATH=. python tests/test_vision.py
+          PYTHONPATH=. python tests/test_llm.py
 
   light-edition:
     runs-on: ubuntu-latest

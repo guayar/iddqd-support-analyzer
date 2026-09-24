@@ -12,6 +12,10 @@ ASSISTANT_CONTEXT_MAX = 120_000
 # Leave room for the analyzer JSON after source files are packed.
 ASSISTANT_SOURCES_BUDGET = 60_000
 ASSISTANT_SOURCE_MIN_SHARE = 2_000
+# Vision turns spend tokens on pixels; keep Analyze text smaller so Ollama accepts the request.
+ASSISTANT_CONTEXT_MAX_WITH_IMAGE = 48_000
+ASSISTANT_SOURCES_BUDGET_WITH_IMAGE = 24_000
+ASSISTANT_SOURCE_MIN_SHARE_WITH_IMAGE = 1_200
 
 ASSISTANT_SYSTEM = """You are a private local technical assistant running on the user's Ubuntu workstation.
 You have no web-search tool and must never claim to have checked the internet or current external documentation.
@@ -200,22 +204,33 @@ def pack_assistant_context(analysis, sources: list[tuple[str, str]] | None = Non
     return {"analysis": analysis, "sources": packed}
 
 
-def assistant_system_prompt(assistant_context=None) -> str:
+def assistant_system_prompt(assistant_context=None, *, image_turn: bool = False) -> str:
     if not assistant_context:
         return ASSISTANT_SYSTEM
     analysis, sources = unwrap_assistant_context(assistant_context)
     if analysis is None and not sources:
         return ASSISTANT_SYSTEM
 
+    context_max = ASSISTANT_CONTEXT_MAX_WITH_IMAGE if image_turn else ASSISTANT_CONTEXT_MAX
+    sources_budget = ASSISTANT_SOURCES_BUDGET_WITH_IMAGE if image_turn else ASSISTANT_SOURCES_BUDGET
+    min_share = ASSISTANT_SOURCE_MIN_SHARE_WITH_IMAGE if image_turn else ASSISTANT_SOURCE_MIN_SHARE
+
     index_lines: list[str] = []
     bodies: list[str] = []
-    for item in sources:
+    n = len(sources)
+    used = 0
+    for index, item in enumerate(sources):
         name = item.get("name") or "source"
-        chars = int(item.get("chars") or 0)
-        truncated = bool(item.get("truncated"))
+        full_chars = int(item.get("chars") or len(item.get("text") or ""))
+        text = item.get("text") or ""
+        remaining = n - index
+        share = max(min_share, (sources_budget - used) // max(remaining, 1))
+        truncated = bool(item.get("truncated")) or len(text) > share or full_chars > len(text[:share])
+        chunk = text[:share]
+        used += len(chunk)
         flag = ", truncated for context budget" if truncated else ""
-        index_lines.append(f"- `{name}` ({chars} chars{flag})")
-        bodies.append(f"===== FILE: {name} =====\n{item.get('text') or ''}")
+        index_lines.append(f"- `{name}` ({full_chars} chars{flag})")
+        bodies.append(f"===== FILE: {name} =====\n{chunk}")
 
     sources_section = ""
     if sources:
@@ -238,7 +253,7 @@ def assistant_system_prompt(assistant_context=None) -> str:
         + "ANALYZER OUTPUT:\n"
     )
     analysis_json = json.dumps(analysis, ensure_ascii=False) if analysis is not None else "{}"
-    room = ASSISTANT_CONTEXT_MAX - len(head)
+    room = context_max - len(head)
     if room < 1_000:
         room = 1_000
     return head + analysis_json[:room]
@@ -285,7 +300,10 @@ def assistant_chat(message, history, assistant_context=None) -> str:
     if not user_text:
         return "Enter a question or attach a local screenshot."
 
-    msgs: list[dict[str, Any]] = [{"role": "system", "content": assistant_system_prompt(assistant_context)}]
+    image_turn = bool(attachments) or bool(_history_image_paths(history))
+    msgs: list[dict[str, Any]] = [
+        {"role": "system", "content": assistant_system_prompt(assistant_context, image_turn=image_turn)}
+    ]
     msgs.extend(_history_messages(history, 20, 20000))
     user_msg: dict[str, Any] = {"role": "user", "content": user_text}
     current_images = _encode_attachments(attachments)
