@@ -24,7 +24,7 @@ def test_multiple_related_findings_deduplicated():
         make_test_finding(kind="timeout", count=100, level="ERROR", first_line=0),
         make_test_finding(kind="timeout", count=50, level="ERROR", first_line=10),
     ]
-    result = deduplicate_findings(findings, window_seconds=300)
+    result = deduplicate_findings(findings, sequence_distance=300)
 
     # Should be merged into one
     assert len(result) == 1
