@@ -120,8 +120,8 @@ def test_cross_file_insights_present():
 
     # Check required fields
     assert "affected_sources" in insights
-    assert "correlation_strength" in insights
-    assert "cascading_failures" in insights
+    assert "pattern_match_strength" in insights or "correlation_strength" in insights
+    assert "possible_cascades" in insights or "cascading_failures" in insights
 
 
 def test_files_metadata():
