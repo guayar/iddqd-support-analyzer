@@ -1,6 +1,5 @@
 """Tests for v0.22 multi-file analysis."""
 
-import pytest
 from analyzers.multi_file_analyzer import MultiFileAnalyzer, merge_log_files
 
 
