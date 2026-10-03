@@ -23,6 +23,8 @@ from .log_ssh_keys import SSHKeyCorrelator
 from .log_html import HTMLCorrelator
 from .log_jwt import JWTCorrelator
 from .log_api_performance import APIPerformanceCorrelator
+from .log_test_lifecycle import TestLifecycleCorrelator
+from .log_mfa import MFACorrelator
 
 
 class LogFamily(Protocol):
@@ -49,6 +51,8 @@ LINE_FAMILY_TYPES: tuple[type[LogFamily], ...] = (
     HTMLCorrelator,
     JWTCorrelator,
     APIPerformanceCorrelator,
+    TestLifecycleCorrelator,
+    MFACorrelator,
 )
 
 
@@ -1011,7 +1015,7 @@ def analyze_log_text(
         key=lambda x: (
             0 if x.get("kind") == "brute_force" else 1,
             _LEVEL_RANK.get(x.get("level") or "", 50),
-            x["first_line"],
+            x.get("first_line", 0),
         )
     )
     incident_unique_count = (
