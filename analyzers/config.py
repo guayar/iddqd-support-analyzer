@@ -45,18 +45,6 @@ class AnalyzerConfig:
 
 
 @dataclass
-class ExportConfig:
-    """Export destination configuration."""
-
-    format: str  # splunk|elk|slack|pagerduty|datadog|cloudwatch|json|csv
-    endpoint: Optional[str] = None  # For API-based exporters
-    webhook_url: Optional[str] = None  # For Slack/PagerDuty
-    api_key: Optional[str] = None  # For Datadog/CloudWatch
-    batch_size: int = 100
-    timeout_seconds: int = 30
-
-
-@dataclass
 class Config:
     """Master configuration object."""
 
@@ -92,9 +80,6 @@ class Config:
     # Deduplication settings
     deduplicate_findings: bool = True
     dedup_window_seconds: int = 300  # 5 minutes
-
-    # Export settings
-    exports: list[ExportConfig] = field(default_factory=list)
 
     # Streaming settings
     stream_output_buffer_seconds: int = 10
@@ -141,10 +126,6 @@ class Config:
             config.deduplicate_findings = data["deduplicate_findings"]
         if "dedup_window_seconds" in data:
             config.dedup_window_seconds = data["dedup_window_seconds"]
-
-        # Set export settings
-        if "exports" in data:
-            config.exports = [ExportConfig(**exp) for exp in data["exports"]]
 
         # Set streaming settings
         if "stream_output_buffer_seconds" in data:
@@ -197,14 +178,6 @@ def example_config_with_custom_patterns() -> Config:
     config.analyzers["ssh"].correlation_window_seconds = 15 * 60  # 15 min for fast attacks
     config.analyzers["postgresql"].correlation_window_seconds = 60 * 60  # 1 hour for slow degradation
     config.analyzers["permissions"].correlation_window_seconds = 24 * 60 * 60  # 24 hours for audits
-
-    # Enable Slack export
-    config.exports = [
-        ExportConfig(
-            format="slack",
-            webhook_url="https://hooks.slack.com/services/YOUR/WEBHOOK/URL",
-        )
-    ]
 
     return config
 
