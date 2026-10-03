@@ -1168,3 +1168,49 @@ def export_findings(
         return exporter.export(findings)
     else:
         return exporter.send(findings)
+
+
+# ─── v0.22.0 FEATURES: Root Cause Analysis + Multi-File ──────────────────
+
+
+def analyze_with_root_cause(text: str) -> dict[str, Any]:
+    """Analyze with root cause detection.
+
+    Args:
+        text: Log text
+
+    Returns:
+        Analysis result with causality chains
+    """
+    from .root_cause import RootCauseAnalyzer, incident_to_dict
+
+    result = analyze_log_text(text)
+    findings = result.get("incidents", [])
+
+    # Perform root cause analysis
+    analyzer = RootCauseAnalyzer()
+    root_cause_incidents = analyzer.analyze(findings)
+
+    result["root_cause_incidents"] = [
+        incident_to_dict(incident) for incident in root_cause_incidents
+    ]
+    result["root_cause_count"] = len(root_cause_incidents)
+
+    return result
+
+
+def analyze_multiple_files(
+    file_contents: dict[str, str],
+) -> dict[str, Any]:
+    """Analyze multiple log files together with cross-file correlation.
+
+    Args:
+        file_contents: Dict mapping filename → file content
+
+    Returns:
+        Cross-file analysis with root causes and correlation
+    """
+    from .multi_file_analyzer import MultiFileAnalyzer
+
+    analyzer = MultiFileAnalyzer()
+    return analyzer.analyze_files(file_contents)
