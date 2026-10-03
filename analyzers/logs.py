@@ -1094,7 +1094,7 @@ def analyze_with_config(
     # Apply deduplication if enabled
     if config.deduplicate_findings:
         findings = result.get("incidents", [])
-        findings = deduplicate_findings(findings, window_seconds=config.dedup_window_seconds)
+        findings = deduplicate_findings(findings, sequence_distance=config.dedup_window_seconds)
         result["incidents"] = findings
         result["incident_unique_count"] = len(findings)
 

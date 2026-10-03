@@ -56,7 +56,7 @@ class MultiFileAnalyzer:
             all_findings.extend(findings)
 
         # Deduplicate findings
-        deduped_findings = deduplicate_findings(all_findings, window_seconds=300)
+        deduped_findings = deduplicate_findings(all_findings, sequence_distance=300)
 
         # Perform root cause analysis
         root_cause_incidents = self.root_cause_analyzer.analyze(deduped_findings)
