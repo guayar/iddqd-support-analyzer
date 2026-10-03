@@ -196,10 +196,15 @@ def build_kb_tab() -> Tuple:
                 with gr.Tab("Case Editor"):
                     gr.Markdown("### Edit Case")
 
-                    case_id_edit = gr.Textbox(
-                        label="Case ID",
-                        interactive=False,
-                    )
+                    with gr.Row():
+                        case_id_edit = gr.Textbox(
+                            label="Case ID",
+                            interactive=False,
+                        )
+                        case_status = gr.Textbox(
+                            label="Status",
+                            interactive=False,
+                        )
 
                     case_title_edit = gr.Textbox(
                         label="Title",
@@ -433,6 +438,153 @@ Conflicts detected: {len(result['conflicts'])}"""
         except Exception as e:
             return f"❌ Error: {str(e)}"
 
+    def load_article_for_edit(evt: gr.SelectData):
+        """Load selected article into editor."""
+        if evt is None or evt.index is None:
+            return None, "", "", "", "", ""
+
+        # Get article ID from row
+        articles = kb.list_articles()
+        if evt.index[0] >= len(articles):
+            return None, "", "", "", "", ""
+
+        article = articles[evt.index[0]]
+        if not article:
+            return None, "", "", "", "", ""
+
+        # Format revision history
+        revisions = kb.get_revisions(article.id)
+        rev_text = "Version history:\n"
+        for rev in revisions:
+            date_str = rev.get('created_at', 'N/A')
+            author = rev.get('created_by', 'unknown')
+            note = rev.get('change_note', '')
+            rev_text += f"- v{rev.get('version')}: {date_str} by {author}\n"
+            if note:
+                rev_text += f"  Note: {note}\n"
+
+        finding_codes = ", ".join(article.finding_codes) if article.finding_codes else ""
+        tags_str = ", ".join(article.tags) if article.tags else ""
+
+        return (
+            article.id,
+            article.title,
+            article.summary or "",
+            article.content,
+            tags_str,
+            finding_codes,
+            rev_text if len(revisions) > 0 else "No revisions yet",
+        )
+
+    def save_article_handler(article_id, title, summary, content, tags_str, findings_str):
+        """Save article changes."""
+        if not article_id:
+            return "⚠️ No article selected"
+        if not title or not content:
+            return "⚠️ Title and Content are required"
+
+        try:
+            tags = [t.strip() for t in tags_str.split(",") if t.strip()] if tags_str else []
+            findings = [f.strip() for f in findings_str.split(",") if f.strip()] if findings_str else []
+
+            success = kb.update_article(
+                article_id=article_id,
+                title=title,
+                summary=summary,
+                content=content,
+                change_note="UI update"
+            )
+
+            if success:
+                return "✅ Article saved successfully"
+            else:
+                return "❌ Failed to save article"
+        except Exception as e:
+            return f"❌ Error: {str(e)}"
+
+    def delete_article_handler(article_id):
+        """Delete article."""
+        if not article_id:
+            return "⚠️ No article selected"
+
+        try:
+            success = kb.delete_article(article_id)
+            if success:
+                return "✅ Article deleted"
+            else:
+                return "❌ Failed to delete article"
+        except Exception as e:
+            return f"❌ Error: {str(e)}"
+
+    def load_case_for_edit(evt: gr.SelectData):
+        """Load selected case into editor."""
+        if evt is None or evt.index is None:
+            return None, "", "", "", ""
+
+        cases = kb.list_cases()
+        if evt.index[0] >= len(cases):
+            return None, "", "", "", ""
+
+        case = cases[evt.index[0]]
+        if not case:
+            return None, "", "", "", ""
+
+        # Get related articles
+        related_data = []
+        for article_id in case.related_article_ids:
+            article = kb.get_article(article_id)
+            if article:
+                related_data.append([article.id, article.title])
+
+        tags_str = ", ".join(case.tags) if case.tags else ""
+
+        return (
+            case.id,
+            case.title,
+            case.summary or "",
+            case.content,
+            tags_str,
+            related_data if related_data else [],
+        )
+
+    def save_case_handler(case_id, title, summary, content, tags_str):
+        """Save case changes."""
+        if not case_id:
+            return "⚠️ No case selected"
+        if not title or not content:
+            return "⚠️ Title and Content are required"
+
+        try:
+            tags = [t.strip() for t in tags_str.split(",") if t.strip()] if tags_str else []
+
+            success = kb.update_case(
+                case_id=case_id,
+                title=title,
+                summary=summary,
+                content=content
+            )
+
+            if success:
+                return "✅ Case saved successfully"
+            else:
+                return "❌ Failed to save case"
+        except Exception as e:
+            return f"❌ Error: {str(e)}"
+
+    def delete_case_handler(case_id):
+        """Delete case."""
+        if not case_id:
+            return "⚠️ No case selected"
+
+        try:
+            success = kb.delete_case(case_id)
+            if success:
+                return "✅ Case deleted"
+            else:
+                return "❌ Failed to delete case"
+        except Exception as e:
+            return f"❌ Error: {str(e)}"
+
     # Wire handlers
     search_btn.click(
         fn=perform_search,
@@ -440,10 +592,64 @@ Conflicts detected: {len(result['conflicts'])}"""
         outputs=[search_results_articles, search_results_cases],
     )
 
+    # Article list selection - load into editor
+    articles_list.select(
+        fn=load_article_for_edit,
+        outputs=[article_id_edit, article_title_edit, article_summary_edit,
+                 article_content_edit, article_tags_edit, article_findings_edit, article_history],
+    )
+
+    # Save and delete article
+    save_article_btn.click(
+        fn=save_article_handler,
+        inputs=[article_id_edit, article_title_edit, article_summary_edit,
+                article_content_edit, article_tags_edit, article_findings_edit],
+        outputs=[article_status],
+    ).then(
+        fn=refresh_all_knowledge,
+        outputs=[articles_count, cases_count, articles_list, cases_list],
+    )
+
+    delete_article_btn.click(
+        fn=delete_article_handler,
+        inputs=[article_id_edit],
+        outputs=[article_status],
+    ).then(
+        fn=refresh_all_knowledge,
+        outputs=[articles_count, cases_count, articles_list, cases_list],
+    )
+
     create_article_btn.click(
         fn=create_new_article,
         inputs=[new_article_title, new_article_tags, new_article_content],
         outputs=[gr.Textbox(visible=False)],  # Just for success message
+    ).then(
+        fn=refresh_all_knowledge,
+        outputs=[articles_count, cases_count, articles_list, cases_list],
+    )
+
+    # Case list selection - load into editor
+    cases_list.select(
+        fn=load_case_for_edit,
+        outputs=[case_id_edit, case_title_edit, case_summary_edit,
+                 case_content_edit, case_tags_edit, case_related_articles],
+    )
+
+    # Save and delete case
+    save_case_btn.click(
+        fn=save_case_handler,
+        inputs=[case_id_edit, case_title_edit, case_summary_edit,
+                case_content_edit, case_tags_edit],
+        outputs=[case_status],
+    ).then(
+        fn=refresh_all_knowledge,
+        outputs=[articles_count, cases_count, articles_list, cases_list],
+    )
+
+    delete_case_btn.click(
+        fn=delete_case_handler,
+        inputs=[case_id_edit],
+        outputs=[case_status],
     ).then(
         fn=refresh_all_knowledge,
         outputs=[articles_count, cases_count, articles_list, cases_list],
