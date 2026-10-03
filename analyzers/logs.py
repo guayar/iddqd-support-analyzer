@@ -1005,7 +1005,7 @@ def analyze_log_text(
         key=lambda x: (
             0 if x.get("kind") == "brute_force" else 1,
             _LEVEL_RANK.get(x.get("level") or "", 50),
-            x["first_line"],
+            x.get("first_line", 0),
         )
     )
     incident_unique_count = (
