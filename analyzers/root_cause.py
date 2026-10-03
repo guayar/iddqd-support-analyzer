@@ -312,7 +312,7 @@ class RootCauseAnalyzer:
         time_delta = (effect.timestamp - cause.timestamp).total_seconds()
 
         pattern_key = (cause.kind, effect.kind)
-        if pattern_key in self.KNOWN_CHAINS:
+        if pattern_key in self.KNOWN_PATTERNS:
             return f"{cause.kind} → {effect.kind} (known pattern)"
 
         if cause.analyzer == effect.analyzer:
