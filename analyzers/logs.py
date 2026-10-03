@@ -25,6 +25,14 @@ from .log_jwt import JWTCorrelator
 from .log_api_performance import APIPerformanceCorrelator
 from .log_test_lifecycle import TestLifecycleCorrelator
 from .log_mfa import MFACorrelator
+from .log_permissions import PermissionsCorrelator
+from .log_service_comms import ServiceCommsCorrelator
+from .log_database import DatabaseCorrelator
+from .log_message_queue import MessageQueueCorrelator
+from .log_browser import BrowserCorrelator
+from .log_visual import VisualCorrelator
+from .log_user_journey import UserJourneyCorrelator
+from .log_error_impact import ErrorImpactCorrelator
 
 
 class LogFamily(Protocol):
@@ -53,6 +61,14 @@ LINE_FAMILY_TYPES: tuple[type[LogFamily], ...] = (
     APIPerformanceCorrelator,
     TestLifecycleCorrelator,
     MFACorrelator,
+    PermissionsCorrelator,
+    ServiceCommsCorrelator,
+    DatabaseCorrelator,
+    MessageQueueCorrelator,
+    BrowserCorrelator,
+    VisualCorrelator,
+    UserJourneyCorrelator,
+    ErrorImpactCorrelator,
 )
 
 
