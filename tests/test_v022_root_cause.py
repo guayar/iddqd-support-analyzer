@@ -14,7 +14,7 @@ def test_root_cause_analyzer_init():
     """Test analyzer initialization."""
     analyzer = RootCauseAnalyzer()
     assert analyzer is not None
-    assert len(analyzer.KNOWN_CHAINS) > 0
+    assert len(analyzer.KNOWN_PATTERNS) > 0
 
 
 def test_causal_event_creation():
@@ -60,7 +60,7 @@ def test_causality_link_time_delta():
     link = CausalityLink(
         cause=cause,
         effect=effect,
-        confidence=0.9,
+        pattern_match_strength=0.9,
         reason="Known pattern",
     )
 
