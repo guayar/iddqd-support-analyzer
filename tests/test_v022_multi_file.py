@@ -1,5 +1,6 @@
 """Tests for v0.22 multi-file analysis."""
 
+import pytest
 from analyzers.multi_file_analyzer import MultiFileAnalyzer, merge_log_files
 
 
@@ -42,10 +43,9 @@ def test_analyze_multiple_unrelated_files():
     assert "cross_file_insights" in result or True  # Optional field
 
 
+@pytest.mark.skip(reason="timeline sorting needs fixing in implementation")
 def test_analyze_correlation_message():
     """Test that correlation messages are present."""
-    import pytest
-    pytest.skip("timeline sorting needs fixing in implementation")
     file_contents = {
         "pg.log": "ERROR: deadlock detected\n",
         "nginx.log": "ERROR: 500 Internal Server Error\n",
@@ -75,10 +75,9 @@ def test_timeline_reconstruction():
     assert isinstance(timeline, list)
 
 
+@pytest.mark.skip(reason="timeline sorting needs fixing in implementation")
 def test_analyzer_by_analyzer_breakdown():
     """Test breakdown of findings by analyzer."""
-    import pytest
-    pytest.skip("timeline sorting needs fixing in implementation")
     file_contents = {
         "mixed.log": (
             "ERROR: postgresql connection failed\n"
@@ -108,10 +107,9 @@ def test_merge_log_files_convenience():
     assert result["summary"]["total_files"] == 2
 
 
+@pytest.mark.skip(reason="timeline sorting needs fixing in implementation")
 def test_cross_file_insights_present():
     """Test that cross-file insights are extracted."""
-    import pytest
-    pytest.skip("timeline sorting needs fixing in implementation")
     file_contents = {
         "app.log": "ERROR: database timeout\n",
         "db.log": "ERROR: connection pool exhausted\n",
@@ -146,10 +144,9 @@ def test_files_metadata():
     assert "app.log" in files or "file_0" in files
 
 
+@pytest.mark.skip(reason="timeline sorting needs fixing in implementation")
 def test_root_cause_incidents_populated():
     """Test that root cause incidents are included."""
-    import pytest
-    pytest.skip("timeline sorting needs fixing in implementation")
     file_contents = {
         "app.log": "CRITICAL: database deadlock\nERROR: connection timeout\n",
     }
