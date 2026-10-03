@@ -238,6 +238,58 @@ def build_kb_tab() -> Tuple:
                         save_case_btn = gr.Button("💾 Save", variant="primary")
                         delete_case_btn = gr.Button("🗑️ Delete", variant="stop")
 
+                # ========================
+                # EXPORT/IMPORT
+                # ========================
+                with gr.Tab("Export/Import"):
+                    gr.Markdown("""
+                    ### Knowledge Base Backup & Portability
+
+                    **Export** your Articles and Cases as ZIP for backup or sharing.
+                    **Import** from ZIP to restore or merge KB content.
+                    """)
+
+                    with gr.Tabs():
+                        with gr.Tab("Export"):
+                            gr.Markdown("#### Export Selected or Full KB")
+
+                            with gr.Row():
+                                export_all_btn = gr.Button("📦 Export Full KB", variant="primary", scale=1)
+                                export_selected_btn = gr.Button("📋 Export Selected", scale=1)
+
+                            export_status = gr.Textbox(
+                                label="Status",
+                                interactive=False,
+                                value="Ready to export"
+                            )
+
+                            export_file = gr.File(
+                                label="Download ZIP",
+                                interactive=False,
+                            )
+
+                        with gr.Tab("Import"):
+                            gr.Markdown("#### Import KB from ZIP")
+
+                            import_file = gr.File(
+                                label="Upload ZIP file",
+                                file_types=[".zip"],
+                            )
+
+                            import_merge_mode = gr.Radio(
+                                choices=["new (rename conflicts)", "replace", "skip"],
+                                value="new (rename conflicts)",
+                                label="Conflict handling",
+                            )
+
+                            import_btn = gr.Button("📥 Import", variant="primary")
+
+                            import_status = gr.Textbox(
+                                label="Import Result",
+                                interactive=False,
+                                lines=5,
+                            )
+
     # ========================
     # HANDLERS
     # ========================
@@ -335,6 +387,57 @@ def build_kb_tab() -> Tuple:
         except Exception as e:
             return f"❌ Error: {str(e)}"
 
+    def export_full_kb():
+        """Export entire KB as ZIP."""
+        try:
+            from analyzers.kb_portability import KnowledgeBasePortability
+            portability = KnowledgeBasePortability(kb.storage)
+            zip_data = portability.export_full_kb()
+            return "✅ Full KB exported successfully", zip_data
+        except Exception as e:
+            return f"❌ Export failed: {str(e)}", None
+
+    def import_kb_from_file(file_obj, merge_mode):
+        """Import KB from ZIP file."""
+        if not file_obj:
+            return "⚠️ Please select a ZIP file to import"
+
+        try:
+            from analyzers.kb_portability import KnowledgeBasePortability
+            portability = KnowledgeBasePortability(kb.storage)
+
+            # Read file
+            with open(file_obj.name, 'rb') as f:
+                zip_data = f.read()
+
+            # Parse merge mode
+            mode_map = {
+                "new (rename conflicts)": "new",
+                "replace": "replace",
+                "skip": "skip",
+            }
+            mode = mode_map.get(merge_mode, "new")
+
+            # Import
+            result = portability.import_kb(zip_data, merge_mode=mode)
+
+            if result["success"]:
+                msg = f"""✅ Import successful!
+
+Imported Articles: {len(result['imported_articles'])}
+Imported Cases: {len(result['imported_cases'])}
+Conflicts detected: {len(result['conflicts'])}"""
+                if result['errors']:
+                    msg += f"\n\nErrors: {len(result['errors'])}"
+                    for error in result['errors'][:3]:
+                        msg += f"\n- {error}"
+            else:
+                msg = f"❌ Import failed: {result.get('errors', ['Unknown error'])[0]}"
+
+            return msg
+        except Exception as e:
+            return f"❌ Error: {str(e)}"
+
     # Wire handlers
     search_btn.click(
         fn=perform_search,
@@ -355,6 +458,22 @@ def build_kb_tab() -> Tuple:
         fn=create_new_case,
         inputs=[new_case_title, new_case_tags, new_case_content],
         outputs=[gr.Textbox(visible=False)],
+    ).then(
+        fn=refresh_all_knowledge,
+        outputs=[articles_count, cases_count, articles_list, cases_list],
+    )
+
+    # Export handlers
+    export_all_btn.click(
+        fn=export_full_kb,
+        outputs=[export_status, export_file],
+    )
+
+    # Import handlers
+    import_btn.click(
+        fn=import_kb_from_file,
+        inputs=[import_file, import_merge_mode],
+        outputs=[import_status],
     ).then(
         fn=refresh_all_knowledge,
         outputs=[articles_count, cases_count, articles_list, cases_list],
