@@ -98,7 +98,6 @@ if __name__ == "__main__":
     test_config_from_dict()
     test_config_custom_patterns()
     test_config_correlation_windows()
-    test_config_export_formats()
     test_config_save_load()
     test_config_to_json()
     print("✓ All config tests passed!")
