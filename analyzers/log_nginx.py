@@ -170,6 +170,26 @@ class NginxCorrelator:
         """Emit findings for escalation."""
         findings = []
 
+        # Get first line for sorting
+        first_line = 0
+        if self.status_incidents:
+            for incidents in self.status_incidents.values():
+                if incidents:
+                    first_line = min(first_line or incidents[0]['line_idx'], incidents[0]['line_idx'])
+                    break
+        if not first_line and self.attack_ips:
+            for events in self.attack_ips.values():
+                if events:
+                    first_line = events[0]['line_idx']
+                    break
+        if not first_line and self.auth_cascades:
+            for events in self.auth_cascades.values():
+                if events:
+                    first_line = events[0]['line_idx']
+                    break
+        if not first_line and self.slow_requests:
+            first_line = self.slow_requests[0]['line_idx']
+
         # ERROR status codes (5xx)
         for status in [500, 502, 503, 504]:
             if self.status_counts[status] > 0:
@@ -181,6 +201,9 @@ class NginxCorrelator:
                     'status': status,
                     'count': self.status_counts[status],
                     'ips': list({item['ip'] for item in self.status_incidents[status]}),
+                    'first_line': first_line or 0,
+                    'signature': f"HTTP {status} errors ({self.status_counts[status]} occurrences)",
+                    'sample': '',
                 })
 
         # 401/403 cascades (potential auth attacks)
@@ -194,6 +217,9 @@ class NginxCorrelator:
                         'ip': ip,
                         'count': len(events),
                         'status_distribution': {e['status'] for e in events},
+                        'first_line': events[0]['line_idx'],
+                        'signature': f"Auth cascade from {ip} ({len(events)} attempts)",
+                        'sample': '',
                     })
 
         # Attack detection
@@ -207,6 +233,9 @@ class NginxCorrelator:
                         'ip': ip,
                         'attack_types': list(set(e['type'] for e in events)),
                         'count': len(events),
+                        'first_line': events[0]['line_idx'],
+                        'signature': f"Attack probe from {ip} ({len(events)} attempts)",
+                        'sample': '',
                     })
 
         # Slow requests / performance degradation
@@ -218,6 +247,9 @@ class NginxCorrelator:
                 'count': len(self.slow_requests),
                 'avg_response_time_ms': sum(r['response_time_ms'] for r in self.slow_requests) / len(self.slow_requests),
                 'p95_response_time_ms': sorted([r['response_time_ms'] for r in self.slow_requests])[int(0.95 * len(self.slow_requests))],
+                'first_line': self.slow_requests[0]['line_idx'],
+                'signature': f"Slow requests detected ({len(self.slow_requests)} slow)",
+                'sample': '',
             })
 
         return findings, self.total_lines

@@ -20,6 +20,7 @@ from .log_docker import DockerCorrelator
 from .log_postgresql import PostgreSQLCorrelator
 from .log_ldap import LDAPCorrelator
 from .log_ssh_keys import SSHKeyCorrelator
+from .log_html import HTMLCorrelator
 
 
 class LogFamily(Protocol):
@@ -43,6 +44,7 @@ LINE_FAMILY_TYPES: tuple[type[LogFamily], ...] = (
     PostgreSQLCorrelator,
     LDAPCorrelator,
     SSHKeyCorrelator,
+    HTMLCorrelator,
 )
 
 

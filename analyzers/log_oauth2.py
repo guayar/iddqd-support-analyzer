@@ -273,6 +273,13 @@ class OAuth2Correlator:
         """Emit security findings."""
         findings = []
 
+        # Get first line for sorting
+        first_line = 0
+        for details in self.finding_details.values():
+            if details:
+                first_line = min(first_line or details[0]['line_idx'], details[0]['line_idx'])
+                break
+
         for issue_type, count in self.findings.items():
             if count == 0:
                 continue
@@ -282,13 +289,19 @@ class OAuth2Correlator:
                 ('WARN', 'OAuth2 security concern')
             )
 
+            details = self.finding_details[issue_type][:5]  # First 5 occurrences
+            first_detail_line = details[0]['line_idx'] if details else first_line
+
             findings.append({
                 'level': severity,
                 'category': 'oauth2',
                 'kind': issue_type,
                 'count': count,
                 'description': description,
-                'details': self.finding_details[issue_type][:5],  # First 5 occurrences
+                'details': details,
+                'first_line': first_detail_line or 0,
+                'signature': f"OAuth2 {issue_type} ({count} occurrences)",
+                'sample': '',
             })
 
         return findings, self.total_lines
