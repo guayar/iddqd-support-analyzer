@@ -16,6 +16,10 @@ from typing import Any, NamedTuple, Protocol
 from .log_ssh import SshCorrelator, ssh_pid as _ssh_pid
 from .log_nginx import NginxCorrelator
 from .log_oauth2 import OAuth2Correlator
+from .log_docker import DockerCorrelator
+from .log_postgresql import PostgreSQLCorrelator
+from .log_ldap import LDAPCorrelator
+from .log_ssh_keys import SSHKeyCorrelator
 
 
 class LogFamily(Protocol):
@@ -31,7 +35,15 @@ class LogFamily(Protocol):
 
 
 # New SSH-style families: implement LogFamily, append here. Do not add a full-file pass.
-LINE_FAMILY_TYPES: tuple[type[LogFamily], ...] = (SshCorrelator, NginxCorrelator, OAuth2Correlator)
+LINE_FAMILY_TYPES: tuple[type[LogFamily], ...] = (
+    SshCorrelator,
+    NginxCorrelator,
+    OAuth2Correlator,
+    DockerCorrelator,
+    PostgreSQLCorrelator,
+    LDAPCorrelator,
+    SSHKeyCorrelator,
+)
 
 
 class LogScanTimeout(Exception):
