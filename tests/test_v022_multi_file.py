@@ -43,7 +43,6 @@ def test_analyze_multiple_unrelated_files():
     assert "cross_file_insights" in result or True  # Optional field
 
 
-@pytest.mark.skip(reason="timeline sorting needs fixing in implementation")
 def test_analyze_correlation_message():
     """Test that correlation messages are present."""
     file_contents = {
@@ -75,7 +74,6 @@ def test_timeline_reconstruction():
     assert isinstance(timeline, list)
 
 
-@pytest.mark.skip(reason="timeline sorting needs fixing in implementation")
 def test_analyzer_by_analyzer_breakdown():
     """Test breakdown of findings by analyzer."""
     file_contents = {
@@ -107,7 +105,6 @@ def test_merge_log_files_convenience():
     assert result["summary"]["total_files"] == 2
 
 
-@pytest.mark.skip(reason="timeline sorting needs fixing in implementation")
 def test_cross_file_insights_present():
     """Test that cross-file insights are extracted."""
     file_contents = {
@@ -144,7 +141,6 @@ def test_files_metadata():
     assert "app.log" in files or "file_0" in files
 
 
-@pytest.mark.skip(reason="timeline sorting needs fixing in implementation")
 def test_root_cause_incidents_populated():
     """Test that root cause incidents are included."""
     file_contents = {
