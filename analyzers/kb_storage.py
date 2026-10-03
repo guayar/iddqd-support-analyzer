@@ -46,9 +46,9 @@ class KnowledgeBaseStorage:
         with self._get_connection() as conn:
             cursor = conn.cursor()
 
-            # Check if schema exists
+            # Check if schema exists by checking if metadata table exists
             cursor.execute(
-                "SELECT value FROM kb_metadata WHERE key = 'schema_version'"
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='kb_metadata'"
             )
             if cursor.fetchone():
                 return  # Already initialized
@@ -208,15 +208,6 @@ class KnowledgeBaseStorage:
                 (article_id, title, summary, content, now, now),
             )
 
-            # Insert into FTS
-            cursor.execute(
-                """
-                INSERT INTO kb_articles_fts (rowid, title, summary, content)
-                VALUES (?, ?, ?, ?)
-                """,
-                (article_id, title, summary or "", content),
-            )
-
             # Add tags
             if tags:
                 for tag_name in tags:
@@ -362,21 +353,6 @@ class KnowledgeBaseStorage:
                 ),
             )
 
-            # Update FTS
-            cursor.execute(
-                """
-                UPDATE kb_articles_fts
-                SET title = ?, summary = ?, content = ?
-                WHERE rowid = ?
-                """,
-                (
-                    title or article.title,
-                    summary if summary is not None else article.summary or "",
-                    content or article.content,
-                    article_id,
-                ),
-            )
-
             conn.commit()
 
         return True
@@ -386,9 +362,6 @@ class KnowledgeBaseStorage:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM kb_articles WHERE id = ?", (article_id,))
-            cursor.execute(
-                "DELETE FROM kb_articles_fts WHERE rowid = ?", (article_id,)
-            )
             conn.commit()
 
         return True
@@ -446,15 +419,6 @@ class KnowledgeBaseStorage:
                 VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (case_id, title, summary, content, snapshot_json, now, now),
-            )
-
-            # Insert into FTS
-            cursor.execute(
-                """
-                INSERT INTO kb_cases_fts (rowid, title, summary, content)
-                VALUES (?, ?, ?, ?)
-                """,
-                (case_id, title, summary or "", content),
             )
 
             # Add tags
@@ -546,21 +510,6 @@ class KnowledgeBaseStorage:
                 ),
             )
 
-            # Update FTS
-            cursor.execute(
-                """
-                UPDATE kb_cases_fts
-                SET title = ?, summary = ?, content = ?
-                WHERE rowid = ?
-                """,
-                (
-                    title or case.title,
-                    summary if summary is not None else case.summary or "",
-                    content or case.content,
-                    case_id,
-                ),
-            )
-
             conn.commit()
 
         return True
@@ -570,7 +519,6 @@ class KnowledgeBaseStorage:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM kb_cases WHERE id = ?", (case_id,))
-            cursor.execute("DELETE FROM kb_cases_fts WHERE rowid = ?", (case_id,))
             conn.commit()
 
         return True

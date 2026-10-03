@@ -21,7 +21,7 @@ class KnowledgeBaseActions:
             db_path: Path to SQLite database
         """
         self.storage = KnowledgeBaseStorage(db_path)
-        self.search = KnowledgeBaseSearch(self.storage)
+        self._search_engine = KnowledgeBaseSearch(self.storage)
 
     # ========================
     # ARTICLES
@@ -151,7 +151,7 @@ class KnowledgeBaseActions:
         Returns:
             Dict with 'articles' and 'cases' keys
         """
-        articles, cases = self.search.search(query, limit)
+        articles, cases = self._search_engine.search(query, limit)
         return {
             "articles": articles,
             "cases": cases,
@@ -166,7 +166,7 @@ class KnowledgeBaseActions:
         Returns:
             Dict with 'articles' and 'cases'
         """
-        articles, cases = self.search.search_by_tag(tag_name)
+        articles, cases = self._search_engine.search_by_tag(tag_name)
         return {
             "articles": articles,
             "cases": cases,
@@ -181,7 +181,7 @@ class KnowledgeBaseActions:
         Returns:
             List of Articles
         """
-        return self.search.search_by_finding(finding_code)
+        return self._search_engine.search_by_finding(finding_code)
 
     # ========================
     # RELATIONSHIPS
