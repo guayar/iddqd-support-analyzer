@@ -1,17 +1,21 @@
-"""Finding deduplication - groups same incident manifested in multiple ways.
+"""Finding clustering - groups same incident manifested in multiple ways.
+
+⚠️  NOTE: This clusters findings by LINE NUMBER PROXIMITY, not time.
+It reduces alert fatigue by grouping similar findings near each other in the log.
 
 Example:
   Input: 1000 findings
-    - Connection timeout (234)
-    - Query timeout (567)
-    - Connection pool exhausted (1)
-    - Circuit breaker open (1)
+    - Connection timeout (234) at lines 100-110
+    - Query timeout (567) at lines 105-115
+    - Connection pool exhausted (1) at line 108
+    - Circuit breaker open (1) at line 112
 
-  Output: 1 grouped finding
-    - Signature: "Database unavailable (4 variations)"
+  Output: 1 clustered finding
+    - Signature: "Database incident (4 variations)"
     - Variations: [Connection timeout, Query timeout, ...]
     - Total: 803 events
 
+This is NOT deduplication (no time-based grouping).
 Reduces alert fatigue by ~70%.
 """
 
@@ -21,30 +25,30 @@ from typing import Any
 from collections import defaultdict
 
 
-def deduplicate_findings(
+def cluster_findings_by_sequence(
     findings: list[dict[str, Any]],
-    window_seconds: int = 300,
+    sequence_distance: int = 300,
 ) -> list[dict[str, Any]]:
-    """Group related findings by root cause and timestamp.
+    """Group related findings by line-number proximity.
 
     Args:
         findings: List of finding dicts from analyzers
-        window_seconds: Time window for grouping (default 5 min)
+        sequence_distance: Line-number distance for clustering (default 300 lines)
 
     Returns:
-        Deduplicated findings list with variations marked
+        Clustered findings list with variations marked
     """
     if not findings:
         return []
 
-    # Group by analyzer + first_line (temporal + source proximity)
+    # Group by analyzer + line-number bucket (NOT time-based)
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
 
     for finding in findings:
         analyzer = finding.get("category", "unknown")
         first_line = finding.get("first_line", 0)
-        # Group key: category + time proximity (bucket by line number)
-        bucket = first_line // max(1, window_seconds)
+        # Cluster key: category + line-number proximity
+        bucket = first_line // max(1, sequence_distance)
         key = f"{analyzer}_{bucket}"
         grouped[key].append(finding)
 
@@ -61,6 +65,10 @@ def deduplicate_findings(
             deduped.append(merged)
 
     return deduped
+
+
+# Backward compatibility alias
+deduplicate_findings = cluster_findings_by_sequence
 
 
 def _merge_findings(findings: list[dict[str, Any]]) -> dict[str, Any]:
