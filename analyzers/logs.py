@@ -21,6 +21,8 @@ from .log_postgresql import PostgreSQLCorrelator
 from .log_ldap import LDAPCorrelator
 from .log_ssh_keys import SSHKeyCorrelator
 from .log_html import HTMLCorrelator
+from .log_jwt import JWTCorrelator
+from .log_api_performance import APIPerformanceCorrelator
 
 
 class LogFamily(Protocol):
@@ -45,6 +47,8 @@ LINE_FAMILY_TYPES: tuple[type[LogFamily], ...] = (
     LDAPCorrelator,
     SSHKeyCorrelator,
     HTMLCorrelator,
+    JWTCorrelator,
+    APIPerformanceCorrelator,
 )
 
 

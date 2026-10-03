@@ -85,6 +85,10 @@ OAUTH2_PATTERNS = {
         r'implicit.*flow.*deprecated',
         re.I
     ),
+    'token_exposure': re.compile(
+        r'(?:access_token|Bearer|token).*(?:exposed|leaked|logged|plaintext)',
+        re.I
+    ),
 }
 
 # Severity levels
