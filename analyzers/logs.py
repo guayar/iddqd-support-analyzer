@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 from typing import Any, NamedTuple, Protocol
 
 from .log_ssh import SshCorrelator, ssh_pid as _ssh_pid
+from .log_nginx import NginxCorrelator
+from .log_oauth2 import OAuth2Correlator
 
 
 class LogFamily(Protocol):
@@ -29,7 +31,7 @@ class LogFamily(Protocol):
 
 
 # New SSH-style families: implement LogFamily, append here. Do not add a full-file pass.
-LINE_FAMILY_TYPES: tuple[type[LogFamily], ...] = (SshCorrelator,)
+LINE_FAMILY_TYPES: tuple[type[LogFamily], ...] = (SshCorrelator, NginxCorrelator, OAuth2Correlator)
 
 
 class LogScanTimeout(Exception):
