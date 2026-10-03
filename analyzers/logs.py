@@ -1063,3 +1063,82 @@ def analyze_log_text(
             "A new stateful log family implements LogFamily (cheap hint, on_line, flush) and is appended to LINE_FAMILY_TYPES. Do not add a separate full-file pass or a named branch in the shared scan. PREFIX-NUMBER vendors stay a single generic detector. Product-specific message IDs can be added as profiles when samples exist.",
         ],
     }
+
+
+# ─── v0.21.0 FEATURES: Configuration + Deduplication + Export ────────────────
+
+
+def analyze_with_config(
+    text: str, config: Any = None
+) -> dict[str, Any]:
+    """Analyze with v0.21 configuration support.
+
+    Args:
+        text: Log text
+        config: Config object with custom patterns, time windows, exports
+
+    Returns:
+        Analysis result with deduplicated findings
+    """
+    from .config import Config
+    from .deduplication import deduplicate_findings
+
+    if config is None:
+        config = Config()
+    elif isinstance(config, dict):
+        config = Config.from_dict(config)
+
+    # Run base analysis
+    result = analyze_log_text(text)
+
+    # Apply deduplication if enabled
+    if config.deduplicate_findings:
+        findings = result.get("incidents", [])
+        findings = deduplicate_findings(findings, window_seconds=config.dedup_window_seconds)
+        result["incidents"] = findings
+        result["incident_unique_count"] = len(findings)
+
+    return result
+
+
+def export_findings(
+    findings: list[dict[str, Any]], format: str = "json", endpoint: str | None = None
+) -> str | bytes | bool:
+    """Export findings to various formats.
+
+    Args:
+        findings: List of finding dicts
+        format: json|jsonl|csv|splunk|elk|graylog|slack
+        endpoint: Destination URL (required for remote formats)
+
+    Returns:
+        Formatted output or True if sent successfully
+    """
+    from .exporters import (
+        JsonExporter,
+        CsvExporter,
+        SplunkExporter,
+        ElkExporter,
+        GraylogExporter,
+        SlackExporter,
+    )
+
+    exporters: dict[str, type] = {
+        "json": JsonExporter,
+        "csv": CsvExporter,
+        "splunk": SplunkExporter,
+        "elk": ElkExporter,
+        "graylog": GraylogExporter,
+        "slack": SlackExporter,
+    }
+
+    if format not in exporters:
+        raise ValueError(f"Unknown export format: {format}")
+
+    exporter_class = exporters[format]
+    exporter = exporter_class(endpoint) if endpoint else exporter_class(endpoint="")
+
+    if format in ("json", "csv"):
+        return exporter.export(findings)
+    else:
+        return exporter.send(findings)
