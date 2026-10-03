@@ -20,6 +20,7 @@ from modules import (
     write_saved_plugins,
 )
 from uploads import InputError, should_clear_file_for_paste, should_clear_paste_for_file
+from kb_ui import build_kb_tab
 
 DROP_HEIGHT = 220
 CONTROL_HEIGHT = 128
@@ -653,6 +654,9 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
 
                     with gr.Accordion("Structured analyzer output (JSON)", open=False):
                         raw = gr.Code(label="JSON", language="json")
+
+            # Knowledge Base Tab (always available - even in Light Edition)
+            build_kb_tab()
 
             if ANONYMIZE_ON:
                 with gr.Tab("Anonymize log"):
