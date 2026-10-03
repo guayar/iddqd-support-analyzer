@@ -161,8 +161,8 @@ class MultiFileAnalyzer:
             }
             timeline.append((sort_key, event))
 
-        # Sort by key, then extract event
-        timeline.sort(key=lambda x: (isinstance(x[0][1], str), x[0]))
+        # Sort by key, converting to strings for consistent comparison
+        timeline.sort(key=lambda x: (str(x[0][0]), str(x[0][1]) if len(x[0]) > 1 else ""))
         return [event for _, event in timeline]
 
     def _top_kinds(self, findings: list[dict[str, Any]]) -> list[str]:
