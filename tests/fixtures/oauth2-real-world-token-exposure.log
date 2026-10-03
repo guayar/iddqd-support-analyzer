@@ -1,0 +1,9 @@
+2026-10-15 10:23:45 DEBUG AuthzEndpoint: client_id=spotify_web_app redirect_uri=https://spotify.example.com/callback scope=user-library-read+user-read-email
+2026-10-15 10:23:46 DEBUG User authenticated, issuing authorization code
+2026-10-15 10:23:47 DEBUG TokenEndpoint: Exchanging code=auth_code_xyz_123_abc for token
+2026-10-15 10:23:48 INFO ERROR: Token request failed - full response: {access_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyMTIzIiwic2NvcGUiOiJ1c2VyLWxpYnJhcnktcmVhZCJ9.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c, expires_in: 3600}
+2026-10-15 10:23:49 INFO Refresh token issued: refresh_token=refresh_abc_def_ghi_jkl_mno
+2026-10-15 10:24:00 WARN TokenEndpoint: Refresh token request from 192.168.1.100
+2026-10-15 10:24:01 INFO Refresh token rotation: issuing new token
+2026-10-15 10:24:02 INFO New access_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyMTIzIn0.TJVA95OrM7E2cBab30RMHrHDcEfxjoYZgeFONFh7HgQ
+2026-10-15 10:24:03 DEBUG Old refresh token revoked

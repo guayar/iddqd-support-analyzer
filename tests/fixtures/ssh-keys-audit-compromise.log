@@ -1,0 +1,9 @@
+2026-10-15 10:23:45 INFO ssh-keygen: new key generated for user=admin ed25519 fingerprint=SHA256:abc123def456ghi789jkl
+2026-10-15 10:23:50 INFO key added to authorized_keys for user=admin
+2026-10-15 10:24:00 CRITICAL unauthorized key detected: fingerprint=SHA256:evil123evil456evil789 found in authorized_keys for user=root
+2026-10-15 10:24:01 CRITICAL weak key: RSA 1024 bits for user=deploy insufficient key size
+2026-10-15 10:24:05 CRITICAL deprecated key type DSA for user=legacy_app DSA is insecure
+2026-10-15 10:24:10 WARN stale key: RSA key for user=devops not rotated in 3+ years
+2026-10-15 10:24:15 INFO key rotation: user=alice replacing old key with ED25519
+2026-10-15 10:24:20 WARN key deleted for user=bob fingerprint=SHA256:old123 removed from authorized_keys
+2026-10-15 10:24:25 INFO key audit trail: user=charlie key lifecycle complete (gen→add→rotate→audit)

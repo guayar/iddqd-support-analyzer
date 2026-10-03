@@ -1,0 +1,10 @@
+2026-10-15 10:23:45 ERROR deadlock detected
+2026-10-15 10:23:45 DETAIL  Process 1234 waits for ShareLock on transaction 2345; blocked by process 5678.
+	Process 5678 waits for ExclusiveLock on transaction 1234; blocked by process 1234.
+2026-10-15 10:23:50 ERROR statement timeout
+2026-10-15 10:23:50 STATEMENT  SELECT * FROM huge_table WHERE complex_condition AND duration: 5432.123 ms
+2026-10-15 10:23:55 FATAL too many connections for role "app_user"
+2026-10-15 10:23:56 ERROR authentication failed: user=readonly_user password authentication failed
+2026-10-15 10:24:00 ERROR permission denied for schema public user=readonly_user
+2026-10-15 10:24:05 PANIC could not write to file "base/16384/12345": No space left on device
+2026-10-15 10:24:10 LOG statement: SELECT COUNT(*) FROM orders WHERE status='pending' rows=45000 duration: 1234.567 ms

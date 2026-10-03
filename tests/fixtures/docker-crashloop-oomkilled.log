@@ -1,0 +1,12 @@
+2026-10-15 10:23:45 ERROR pod/api-server-xyz-123 CrashLoopBackOff: Exit code 1
+2026-10-15 10:23:45 FATAL Application failed to start: Database connection timeout
+2026-10-15 10:23:50 WARN pod/api-server-xyz-123 restarted (attempt 1 of 5)
+2026-10-15 10:23:55 FATAL Application failed to start: Database connection timeout
+2026-10-15 10:24:00 WARN pod/api-server-xyz-123 restarted (attempt 2 of 5)
+2026-10-15 10:24:05 FATAL Application failed to start: Database connection timeout
+2026-10-15 10:24:10 WARN pod/api-server-xyz-123 restarted (attempt 3 of 5)
+2026-10-15 10:24:15 ERROR pod/api-server-xyz-123 CrashLoopBackOff: Too many restarts
+2026-10-15 10:24:20 CRITICAL pod/cache-service OOMKilled: Memory limit 512Mi exceeded
+2026-10-15 10:24:21 WARN node/worker-1 MemoryPressure: Available memory < 5%
+2026-10-15 10:24:22 INFO evicting pod cache-service from node worker-1
+2026-10-15 10:24:23 ERROR ImagePullBackOff: Failed to pull image registry.internal/api:latest - pull rate exceeded
