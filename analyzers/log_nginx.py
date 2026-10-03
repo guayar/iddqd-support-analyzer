@@ -252,7 +252,7 @@ class NginxCorrelator:
                 'sample': '',
             })
 
-        return findings, self.total_lines
+        return findings, len(findings)
 
     def overflow_unique(self) -> int:
         """Track unique IPs for correlator cap."""

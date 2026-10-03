@@ -211,7 +211,7 @@ class HTMLCorrelator:
                 'sample': '',
             })
 
-        return findings, self.total_lines
+        return findings, len(findings)
 
     def overflow_unique(self) -> int:
         return len(self.files_with_errors) + len(self.exceptions_found)

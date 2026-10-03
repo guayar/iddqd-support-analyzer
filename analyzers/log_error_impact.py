@@ -39,7 +39,7 @@ class ErrorImpactCorrelator:
         
         if self.findings['error'] > 0:
             findings.append({'signature': f"Error events ({self.errors}, {self.users_affected} users, {self.max_duration}s)", 'count': self.errors, 'level': 'CRITICAL' if self.users_affected > 100 else 'ERROR', 'category': 'incident', 'kind': 'error_impact', 'first_line': first_line, 'codes': {}})
-        return findings, self.total_lines
+        return findings, len(findings)
 
     def overflow_unique(self) -> int:
         return self.findings['error']

@@ -277,7 +277,7 @@ class PostgreSQLCorrelator:
                 'remediation': 'Run EXPLAIN; add indexes; review query plans',
             })
 
-        return findings, self.total_lines
+        return findings, len(findings)
 
     def overflow_unique(self) -> int:
         return len(self.database_issues)

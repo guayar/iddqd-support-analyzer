@@ -38,7 +38,7 @@ class VisualCorrelator:
             findings.append({'signature': f"Visual diffs (avg {avg_diff:.1f}%)", 'count': len(self.visual_diffs), 'level': 'WARN', 'category': 'visual', 'kind': 'visual_diff', 'first_line': first_line, 'codes': {}})
         if self.findings['regression'] > 0:
             findings.append({'signature': f"Visual regressions ({self.regressions})", 'count': self.regressions, 'level': 'ERROR', 'category': 'visual', 'kind': 'regression', 'first_line': first_line, 'codes': {}})
-        return findings, self.total_lines
+        return findings, len(findings)
 
     def overflow_unique(self) -> int:
         return len(self.visual_diffs)

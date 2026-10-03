@@ -270,7 +270,7 @@ class LDAPCorrelator:
                 'count': self.findings['group_change'],
             })
 
-        return findings, self.total_lines
+        return findings, len(findings)
 
     def overflow_unique(self) -> int:
         return len(self.users) + len(self.failed_binds)

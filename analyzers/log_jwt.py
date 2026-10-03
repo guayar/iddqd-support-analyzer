@@ -317,7 +317,7 @@ class JWTCorrelator:
                 'missing_claims': top_missing,
             })
 
-        return findings, self.total_lines
+        return findings, len(findings)
 
     def overflow_unique(self) -> int:
         return len(self.tokens_seen) + len(self.key_ids)

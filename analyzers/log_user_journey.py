@@ -38,7 +38,7 @@ class UserJourneyCorrelator:
             findings.append({'signature': f"User dropouts ({self.dropouts})", 'count': self.dropouts, 'level': 'WARN', 'category': 'analytics', 'kind': 'dropout', 'first_line': 0, 'codes': {}})
         if self.findings['action'] > 0:
             findings.append({'signature': f"User actions ({self.actions})", 'count': self.actions, 'level': 'INFO', 'category': 'analytics', 'kind': 'action', 'first_line': 0, 'codes': {}})
-        return findings, self.total_lines
+        return findings, len(findings)
 
     def overflow_unique(self) -> int:
         return len(self.sessions)

@@ -308,7 +308,7 @@ class OAuth2Correlator:
                 'sample': '',
             })
 
-        return findings, self.total_lines
+        return findings, len(findings)
 
     def overflow_unique(self) -> int:
         """Track unique OAuth2 issues."""

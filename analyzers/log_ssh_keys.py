@@ -285,7 +285,7 @@ class SSHKeyCorrelator:
                 'note': 'Good security practice detected',
             })
 
-        return findings, self.total_lines
+        return findings, len(findings)
 
     def overflow_unique(self) -> int:
         return len(self.users_with_key_events)

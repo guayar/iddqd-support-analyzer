@@ -37,7 +37,7 @@ class BrowserCorrelator:
             findings.append({'signature': f"Element not found ({self.element_failures})", 'count': self.element_failures, 'level': 'ERROR', 'category': 'browser', 'kind': 'element_failure', 'first_line': first_line, 'codes': {}})
         if self.findings['js_error'] > 0:
             findings.append({'signature': f"JS errors ({self.js_errors})", 'count': self.js_errors, 'level': 'ERROR', 'category': 'browser', 'kind': 'js_error', 'first_line': first_line, 'codes': {}})
-        return findings, self.total_lines
+        return findings, len(findings)
 
     def overflow_unique(self) -> int:
         return self.findings['element_failure'] + self.findings['js_error']

@@ -99,7 +99,7 @@ class ServiceCommsCorrelator:
                 'codes': {},
             })
 
-        return findings, self.total_lines
+        return findings, len(findings)
 
     def overflow_unique(self) -> int:
         return self.findings['circuit_breaker'] + self.findings['timeout_cascade']

@@ -179,7 +179,7 @@ class PermissionsCorrelator:
                 'affected_groups': affected_groups[:5],
             })
 
-        return findings, self.total_lines
+        return findings, len(findings)
 
     def overflow_unique(self) -> int:
         return len(self.users_affected)

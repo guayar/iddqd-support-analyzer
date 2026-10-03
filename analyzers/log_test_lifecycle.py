@@ -337,7 +337,7 @@ class TestLifecycleCorrelator:
                 'unavailable_services': services[:5],
             })
 
-        return findings, self.total_lines
+        return findings, len(findings)
 
     def overflow_unique(self) -> int:
         return len(self.tests_completed) + len(self.data_created)

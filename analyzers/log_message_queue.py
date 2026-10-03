@@ -42,7 +42,7 @@ class MessageQueueCorrelator:
             findings.append({'signature': f"DLQ messages ({self.dlq_messages})", 'count': self.dlq_messages, 'level': 'ERROR', 'category': 'messaging', 'kind': 'dlq', 'first_line': first_line, 'codes': {}})
         if self.max_lag > 0:
             findings.append({'signature': f"Consumer lag: {self.max_lag}s", 'count': 1, 'level': 'WARN', 'category': 'messaging', 'kind': 'consumer_lag', 'first_line': first_line, 'codes': {}})
-        return findings, self.total_lines
+        return findings, len(findings)
 
     def overflow_unique(self) -> int:
         return self.findings['delivery_failure'] + self.findings['dlq']

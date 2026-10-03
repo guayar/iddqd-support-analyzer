@@ -245,7 +245,7 @@ class DockerCorrelator:
                 'remediation': 'Check node resources (CPU, memory, disk)',
             })
 
-        return findings, self.total_lines
+        return findings, len(findings)
 
     def overflow_unique(self) -> int:
         return len(self.pods) + len(self.containers)
