@@ -4,7 +4,7 @@ import json
 import tempfile
 from pathlib import Path
 
-from analyzers.config import Config, CustomPattern, AnalyzerConfig, ExportConfig
+from analyzers.config import Config, CustomPattern, AnalyzerConfig
 
 
 def test_default_config():
@@ -59,19 +59,6 @@ def test_config_correlation_windows():
     assert config.analyzers["ssh"].correlation_window_seconds == 900
     assert config.analyzers["postgresql"].correlation_window_seconds == 3600
     assert config.analyzers["permissions"].correlation_window_seconds == 86400
-
-
-def test_config_export_formats():
-    """Test export format configuration."""
-    config = Config()
-    config.exports = [
-        ExportConfig(format="slack", webhook_url="https://hooks.slack.com/..."),
-        ExportConfig(format="splunk", endpoint="https://splunk.example.com", api_key="token123"),
-    ]
-
-    assert len(config.exports) == 2
-    assert config.exports[0].format == "slack"
-    assert config.exports[1].format == "splunk"
 
 
 def test_config_save_load():
