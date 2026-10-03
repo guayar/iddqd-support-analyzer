@@ -59,3 +59,4 @@ dist/
 # Fetched third-party regression corpora (not authored by IDDQD)
 testdata/external/*
 !testdata/external/.gitkeep
+data/iddqd_kb.db
