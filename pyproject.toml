@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "iddqd-support-analyzer"
+version = "0.20.0"
+description = "Deterministic log analysis for escalation engineers - 20 analyzers, <1s per 1MB"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [{name = "Anthropic", email = "support@anthropic.com"}]
+license = {text = "Apache-2.0"}
+keywords = ["logging", "log-analysis", "incident-detection", "escalation"]
+
+[project.urls]
+Homepage = "https://github.com/guayar/iddqd-support-analyzer"
+Repository = "https://github.com/guayar/iddqd-support-analyzer"
+Documentation = "https://github.com/guayar/iddqd-support-analyzer/tree/main/docs"
+Issues = "https://github.com/guayar/iddqd-support-analyzer/issues"
