@@ -1,11 +1,11 @@
 # IDDQD Support Analyzer v0.21.0 - Power User Features
 
 **Release Date**: 2026-10-03  
-**Status**: ✅ PRODUCTION READY
+**Status**: ⚠️ EARLY STAGE
 
 ## Overview
 
-v0.21.0 adds **5 major power user features** that make IDDQD production-ready for enterprise deployment:
+v0.21.0 adds **5 experimental power-user features** for advanced use cases:
 
 1. **Base Class Refactor** - 30% less code duplication
 2. **Configuration System** - Custom patterns + time windows without coding
@@ -366,4 +366,4 @@ For issues/questions:
 
 ---
 
-**v0.21.0 is production-ready and recommended for all deployments.** ✅
+**v0.21.0 is EARLY STAGE. Test thoroughly before production use.**

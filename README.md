@@ -2,9 +2,18 @@
 
 [![Tests](https://github.com/guayar/iddqd-support-analyzer/actions/workflows/tests.yml/badge.svg)](https://github.com/guayar/iddqd-support-analyzer/actions/workflows/tests.yml)
 
-**Current version:** `0.19.3`
+**Current version:** `0.22.0` (Early-stage, with experimental correlation features)
 
 Local workstation tool for SAML/SSO and `*.log` troubleshooting. The **Analyze** path is deterministic and does not use an LLM. Install **full** (optional Anonymize / Assistant / General Chat) or **Light** (`IDDQD Support Analyzer Light` — Analyze + Anonymize only). Early-stage; built for my Ubuntu workstation, not a packaged product.
+
+## Experimental Features
+
+Starting with v0.21, IDDQD includes EXPERIMENTAL correlation and root-cause hints:
+- These do NOT override deterministic Analyze findings
+- These are heuristic suggestions, not proven causality
+- Correlation strength / confidence scores are pattern-match indicators, NOT statistical probabilities
+- Use for investigation hints only; maintain skeptical review
+- See [Experimental Features](EXPERIMENTAL_FEATURES.md) for details
 
 I own the requirements, validation rules, tests and spec interpretation; implementation is AI-assisted.
 

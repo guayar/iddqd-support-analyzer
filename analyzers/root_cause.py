@@ -1,12 +1,14 @@
-"""Root cause analysis engine for v0.22.
+"""Root cause analysis engine for v0.22 (EXPERIMENTAL).
 
-Detects causality chains across incidents:
-  - Temporal proximity (event A → event B within N seconds?)
-  - State correlation (error A + error B = root cause C?)
-  - Resource correlation (CPU spike → memory spike → timeout?)
-  - Service correlation (Service A down → Service B fails?)
+⚠️  EXPERIMENTAL FEATURE - NOT PROVEN DIAGNOSTICS
 
-Builds incident chains with confidence scores and exception tracking.
+This module provides HEURISTIC suggestions about possible causality chains.
+It is NOT root-cause analysis, NOT deterministic validation, NOT probabilistic.
+
+Confidence scores are pattern-match weights, NOT statistical probabilities.
+Correlation ≠ causation. Temporal proximity ≠ causality.
+
+Use for investigation hints only. Manual review required.
 """
 
 from __future__ import annotations
@@ -37,11 +39,15 @@ class CausalEvent:
 
 @dataclass
 class CausalityLink:
-    """Link between two events (cause → effect)."""
+    """Link between two events (possible cause → effect relationship).
+
+    ⚠️  IMPORTANT: pattern_match_strength is NOT a probability.
+    It indicates how familiar this pattern is, not how likely causation is.
+    """
 
     cause: CausalEvent
     effect: CausalEvent
-    confidence: float  # 0.0-1.0
+    pattern_match_strength: float  # 0.0-1.0 heuristic weight, NOT probability
     reason: str  # Why we think they're connected
     time_delta_seconds: float = 0.0
 
@@ -52,20 +58,20 @@ class CausalityLink:
 
 @dataclass
 class RootCauseIncident:
-    """Complete incident with root cause chain."""
+    """Possible incident chain (EXPERIMENTAL - not proven causality)."""
 
     incident_id: str
     root_cause: CausalEvent
-    root_cause_confidence: float
+    pattern_match_strength: float  # NOT a probability, heuristic weight
     events: list[CausalEvent] = field(default_factory=list)
     causal_links: list[CausalityLink] = field(default_factory=list)
-    start_time: datetime = field(default_factory=datetime.now)
-    end_time: datetime = field(default_factory=datetime.now)
+    start_time: datetime | None = None  # No synthetic timestamps
+    end_time: datetime | None = None  # No synthetic timestamps
     duration_seconds: float = 0.0
     affected_analyzers: set[str] = field(default_factory=set)
-    total_impact: int = 0  # Total events/errors
-    confidence_chain: list[float] = field(default_factory=list)
-    exception_chain: list[str] = field(default_factory=list)
+    total_impact: int = 0
+    pattern_strength_chain: list[float] = field(default_factory=list)
+    causality_status: str = "NOT_ESTABLISHED"  # NOT_ESTABLISHED, POSSIBLE, CORRELATED
 
     def add_event(self, event: CausalEvent) -> None:
         """Add event to chain."""
@@ -78,9 +84,9 @@ class RootCauseIncident:
             self.end_time = event.timestamp
 
     def add_causal_link(self, link: CausalityLink) -> None:
-        """Add causal relationship."""
+        """Add possible causal relationship."""
         self.causal_links.append(link)
-        self.confidence_chain.append(link.confidence)
+        self.pattern_strength_chain.append(link.pattern_match_strength)
 
     def calculate_duration(self) -> None:
         """Calculate incident duration."""
@@ -88,10 +94,10 @@ class RootCauseIncident:
             self.duration_seconds = (self.end_time - self.start_time).total_seconds()
 
     def chain_confidence(self) -> float:
-        """Average confidence across all links."""
-        if not self.confidence_chain:
+        """Average pattern-match strength across chain (NOT probability)."""
+        if not self.pattern_strength_chain:
             return 0.0
-        return sum(self.confidence_chain) / len(self.confidence_chain)
+        return sum(self.pattern_strength_chain) / len(self.pattern_strength_chain)
 
 
 class RootCauseAnalyzer:
@@ -102,9 +108,9 @@ class RootCauseAnalyzer:
     SHORT_TERM_THRESHOLD_SECONDS = 30  # Events within 30s might be connected
     MEDIUM_TERM_THRESHOLD_SECONDS = 300  # Events within 5min could be connected
 
-    # Causality patterns
-    KNOWN_CHAINS = {
-        # (cause_kind, effect_kind) → base_confidence
+    # Known patterns: (cause_kind, effect_kind) → pattern_match_strength
+    # ⚠️  These are NOT probabilities. They indicate pattern familiarity only.
+    KNOWN_PATTERNS = {
         ("deadlock", "connection_exhausted"): 0.95,
         ("connection_exhausted", "timeout"): 0.90,
         ("timeout", "service_restart"): 0.85,
@@ -145,17 +151,21 @@ class RootCauseAnalyzer:
         return incidents
 
     def _extract_events(self, findings: list[dict[str, Any]]) -> list[CausalEvent]:
-        """Convert findings to events."""
+        """Convert findings to events (skip findings without valid timestamps)."""
         events = []
 
         for finding in findings:
-            # Parse timestamp if available
-            timestamp = datetime.now()
+            # Only include findings with valid timestamps
+            timestamp = None
             if "timestamp" in finding:
                 try:
                     timestamp = datetime.fromisoformat(finding["timestamp"])
                 except (ValueError, TypeError):
                     pass
+
+            # Skip events without timestamps - no synthetic timestamps
+            if not timestamp:
+                continue
 
             event = CausalEvent(
                 timestamp=timestamp,
@@ -203,7 +213,7 @@ class RootCauseAnalyzer:
         return root_causes if root_causes else [events[0]]  # Fallback to first
 
     def _is_causal(self, cause: CausalEvent, effect: CausalEvent) -> bool:
-        """Check if cause event likely caused effect event."""
+        """Check if events might be related (NOT proven causality)."""
         time_delta = (effect.timestamp - cause.timestamp).total_seconds()
 
         # Must be within reasonable time window
@@ -212,7 +222,7 @@ class RootCauseAnalyzer:
 
         # Check known patterns
         pattern_key = (cause.kind, effect.kind)
-        if pattern_key in self.KNOWN_CHAINS:
+        if pattern_key in self.KNOWN_PATTERNS:
             return True
 
         # Check analyzer sequence (db → api → nginx is common)
@@ -229,41 +239,41 @@ class RootCauseAnalyzer:
 
         return False
 
-    def _calculate_confidence(self, cause: CausalEvent, effect: CausalEvent) -> float:
-        """Calculate confidence that cause → effect."""
+    def _calculate_pattern_strength(self, cause: CausalEvent, effect: CausalEvent) -> float:
+        """Calculate pattern-match strength (NOT causal probability)."""
         pattern_key = (cause.kind, effect.kind)
-        base_confidence = self.KNOWN_CHAINS.get(pattern_key, 0.5)
+        base_strength = self.KNOWN_PATTERNS.get(pattern_key, 0.5)
 
         time_delta = (effect.timestamp - cause.timestamp).total_seconds()
 
-        # Boost confidence if events are very close
+        # Adjust for temporal proximity (closer = stronger pattern match)
         if time_delta <= self.IMMEDIATE_THRESHOLD_SECONDS:
-            base_confidence *= 1.1
-        # Reduce confidence if far apart
+            base_strength *= 1.1
         elif time_delta > self.SHORT_TERM_THRESHOLD_SECONDS:
-            base_confidence *= 0.8
+            base_strength *= 0.8
 
-        # Boost if same analyzer or related analyzers
+        # Adjust if same analyzer
         if cause.analyzer == effect.analyzer:
-            base_confidence *= 1.05
+            base_strength *= 1.05
 
-        return min(1.0, base_confidence)
+        return min(1.0, base_strength)
 
     def _build_incident_chains(
         self,
         events: list[CausalEvent],
         root_causes: list[CausalEvent],
     ) -> list[RootCauseIncident]:
-        """Build complete incident chains from root causes."""
+        """Build possible incident chains (EXPERIMENTAL - not proven)."""
         incidents = []
 
         for root_cause in root_causes:
             incident = RootCauseIncident(
                 incident_id=f"incident_{root_cause.analyzer}_{int(root_cause.timestamp.timestamp())}",
                 root_cause=root_cause,
-                root_cause_confidence=0.90,  # Root causes are high confidence
+                pattern_match_strength=0.90,
                 start_time=root_cause.timestamp,
                 end_time=root_cause.timestamp,
+                causality_status="POSSIBLE",
             )
 
             incident.add_event(root_cause)
@@ -278,15 +288,15 @@ class RootCauseAnalyzer:
                 if time_delta > self.MEDIUM_TERM_THRESHOLD_SECONDS:
                     continue
 
-                # Try to build causal chain
+                # Try to build possible causal chain
                 previous_event = incident.events[-1] if incident.events else root_cause
 
                 if self._is_causal(previous_event, event):
-                    confidence = self._calculate_confidence(previous_event, event)
+                    strength = self._calculate_pattern_strength(previous_event, event)
                     link = CausalityLink(
                         cause=previous_event,
                         effect=event,
-                        confidence=confidence,
+                        pattern_match_strength=strength,
                         reason=self._explain_causality(previous_event, event),
                     )
                     incident.add_causal_link(link)
@@ -315,22 +325,29 @@ class RootCauseAnalyzer:
 
 
 def incident_to_dict(incident: RootCauseIncident) -> dict[str, Any]:
-    """Convert incident to dict for JSON serialization."""
+    """Convert possible incident chain to dict (EXPERIMENTAL - not proven).
+
+    ⚠️  pattern_match_strength is NOT a probability of causation.
+    causality_status indicates level of evidence, not proof.
+    """
     return {
         "incident_id": incident.incident_id,
+        "causality_status": incident.causality_status,
+        "warning": "This is EXPERIMENTAL - temporal proximity does NOT prove causation",
         "root_cause": {
             "analyzer": incident.root_cause.analyzer,
             "kind": incident.root_cause.kind,
             "level": incident.root_cause.level,
             "message": incident.root_cause.message,
             "timestamp": incident.root_cause.timestamp.isoformat(),
-            "confidence": incident.root_cause_confidence,
+            "pattern_match_strength": incident.pattern_match_strength,
         },
         "chain": [
             {
                 "cause": link.cause.kind,
                 "effect": link.effect.kind,
-                "confidence": link.confidence,
+                "pattern_match_strength": link.pattern_match_strength,
+                "note": "pattern_match_strength is NOT a causal probability",
                 "reason": link.reason,
                 "time_delta_seconds": link.time_delta_seconds,
                 "cause_analyzer": link.cause.analyzer,
@@ -351,7 +368,7 @@ def incident_to_dict(incident: RootCauseIncident) -> dict[str, Any]:
         "duration_seconds": incident.duration_seconds,
         "affected_analyzers": list(incident.affected_analyzers),
         "total_impact": incident.total_impact,
-        "chain_confidence": incident.chain_confidence(),
-        "start_time": incident.start_time.isoformat(),
-        "end_time": incident.end_time.isoformat(),
+        "chain_pattern_strength": incident.chain_confidence(),
+        "start_time": incident.start_time.isoformat() if incident.start_time else None,
+        "end_time": incident.end_time.isoformat() if incident.end_time else None,
     }

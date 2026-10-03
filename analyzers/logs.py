@@ -20,19 +20,6 @@ from .log_docker import DockerCorrelator
 from .log_postgresql import PostgreSQLCorrelator
 from .log_ldap import LDAPCorrelator
 from .log_ssh_keys import SSHKeyCorrelator
-from .log_html import HTMLCorrelator
-from .log_jwt import JWTCorrelator
-from .log_api_performance import APIPerformanceCorrelator
-from .log_test_lifecycle import TestLifecycleCorrelator
-from .log_mfa import MFACorrelator
-from .log_permissions import PermissionsCorrelator
-from .log_service_comms import ServiceCommsCorrelator
-from .log_database import DatabaseCorrelator
-from .log_message_queue import MessageQueueCorrelator
-from .log_browser import BrowserCorrelator
-from .log_visual import VisualCorrelator
-from .log_user_journey import UserJourneyCorrelator
-from .log_error_impact import ErrorImpactCorrelator
 
 
 class LogFamily(Protocol):
@@ -56,19 +43,6 @@ LINE_FAMILY_TYPES: tuple[type[LogFamily], ...] = (
     PostgreSQLCorrelator,
     LDAPCorrelator,
     SSHKeyCorrelator,
-    HTMLCorrelator,
-    JWTCorrelator,
-    APIPerformanceCorrelator,
-    TestLifecycleCorrelator,
-    MFACorrelator,
-    PermissionsCorrelator,
-    ServiceCommsCorrelator,
-    DatabaseCorrelator,
-    MessageQueueCorrelator,
-    BrowserCorrelator,
-    VisualCorrelator,
-    UserJourneyCorrelator,
-    ErrorImpactCorrelator,
 )
 
 
@@ -1031,7 +1005,7 @@ def analyze_log_text(
         key=lambda x: (
             0 if x.get("kind") == "brute_force" else 1,
             _LEVEL_RANK.get(x.get("level") or "", 50),
-            x.get("first_line", 0),
+            x["first_line"],
         )
     )
     incident_unique_count = (
@@ -1125,92 +1099,3 @@ def analyze_with_config(
         result["incident_unique_count"] = len(findings)
 
     return result
-
-
-def export_findings(
-    findings: list[dict[str, Any]], format: str = "json", endpoint: str | None = None
-) -> str | bytes | bool:
-    """Export findings to various formats.
-
-    Args:
-        findings: List of finding dicts
-        format: json|jsonl|csv|splunk|elk|graylog|slack
-        endpoint: Destination URL (required for remote formats)
-
-    Returns:
-        Formatted output or True if sent successfully
-    """
-    from .exporters import (
-        JsonExporter,
-        CsvExporter,
-        SplunkExporter,
-        ElkExporter,
-        GraylogExporter,
-        SlackExporter,
-    )
-
-    exporters: dict[str, type] = {
-        "json": JsonExporter,
-        "csv": CsvExporter,
-        "splunk": SplunkExporter,
-        "elk": ElkExporter,
-        "graylog": GraylogExporter,
-        "slack": SlackExporter,
-    }
-
-    if format not in exporters:
-        raise ValueError(f"Unknown export format: {format}")
-
-    exporter_class = exporters[format]
-    exporter = exporter_class(endpoint) if endpoint else exporter_class(endpoint="")
-
-    if format in ("json", "csv"):
-        return exporter.export(findings)
-    else:
-        return exporter.send(findings)
-
-
-# ─── v0.22.0 FEATURES: Root Cause Analysis + Multi-File ──────────────────
-
-
-def analyze_with_root_cause(text: str) -> dict[str, Any]:
-    """Analyze with root cause detection.
-
-    Args:
-        text: Log text
-
-    Returns:
-        Analysis result with causality chains
-    """
-    from .root_cause import RootCauseAnalyzer, incident_to_dict
-
-    result = analyze_log_text(text)
-    findings = result.get("incidents", [])
-
-    # Perform root cause analysis
-    analyzer = RootCauseAnalyzer()
-    root_cause_incidents = analyzer.analyze(findings)
-
-    result["root_cause_incidents"] = [
-        incident_to_dict(incident) for incident in root_cause_incidents
-    ]
-    result["root_cause_count"] = len(root_cause_incidents)
-
-    return result
-
-
-def analyze_multiple_files(
-    file_contents: dict[str, str],
-) -> dict[str, Any]:
-    """Analyze multiple log files together with cross-file correlation.
-
-    Args:
-        file_contents: Dict mapping filename → file content
-
-    Returns:
-        Cross-file analysis with root causes and correlation
-    """
-    from .multi_file_analyzer import MultiFileAnalyzer
-
-    analyzer = MultiFileAnalyzer()
-    return analyzer.analyze_files(file_contents)

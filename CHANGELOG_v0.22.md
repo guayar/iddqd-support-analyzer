@@ -1,11 +1,11 @@
 # IDDQD Support Analyzer v0.22.0 - Root Cause Analysis
 
 **Release Date**: 2026-10-03  
-**Status**: ✅ PRODUCTION READY
+**Status**: ⚠️ EARLY STAGE (EXPERIMENTAL)
 
 ## Overview
 
-v0.22.0 adds **ROOT CAUSE ANALYSIS** - the ability to understand WHY incidents happen by building causality chains across log events.
+v0.22.0 adds **EXPERIMENTAL ROOT CAUSE HINTS** - heuristic suggestions about possible causality chains. These are NOT proven diagnoses, only investigation hints.
 
 **Key Achievement**: From "Something went wrong" → "Here's the exact chain of cause-and-effect"
 
@@ -383,12 +383,21 @@ result = analyze_multiple_files(files)  # ← Cross-file
 
 ---
 
-## Known Limitations
+## ⚠️ Important: Experimental Limitations
 
+**These are NOT proven root causes:**
+- Confidence scores are pattern-match heuristics, NOT probabilities
+- Correlation ≠ causation — temporal proximity ≠ causality
+- No synthetic timestamps — missing timestamps marked UNKNOWN
+- Manual human review required for any findings
+
+**Technical limitations:**
 - Timestamps must be parseable (ISO, RFC, Oracle, Syslog)
 - Correlation confidence is heuristic (not ML)
 - Known patterns cover ~10 common chains
 - Extensible for custom patterns (future v0.23)
+
+See [EXPERIMENTAL_FEATURES.md](../EXPERIMENTAL_FEATURES.md) for full details.
 
 ---
 
@@ -429,8 +438,8 @@ result = analyze_multiple_files(files)  # ← Cross-file
 Duration: 5 min, Impact: 3 services affected
 ```
 
-**Status**: ✅ PRODUCTION READY - Deploy with confidence
+**Status**: ⚠️ EARLY STAGE - For experimental use only
 
 ---
 
-**v0.22.0 is ready for production use.** All features tested, documented, and backward compatible.
+**v0.22.0 is EARLY STAGE.** Root-cause hints are experimental; human judgment required. See EXPERIMENTAL_FEATURES.md.

@@ -1,10 +1,12 @@
-"""Multi-file log analysis for v0.22.
+"""Multi-file log analysis for v0.22 (EXPERIMENTAL).
 
-Merges findings from multiple log files (PostgreSQL + Nginx + Docker):
-  - Correlates incidents across files
-  - Deduplicates by root cause
-  - Reconstructs complete timeline
-  - Calculates impact metrics
+⚠️  EXPERIMENTAL FEATURE - NOT PROVEN MULTI-FILE ANALYSIS
+
+Cross-file correlation requires REAL TIMESTAMPS to establish chronological order.
+Line numbers from different files have NO temporal relationship.
+Cross-file causality requires matching timestamps - otherwise marked UNKNOWN.
+
+Temporal proximity within a file is valid; across files requires timestamps.
 """
 
 from __future__ import annotations
@@ -124,27 +126,44 @@ class MultiFileAnalyzer:
         }
 
     def _build_timeline(self, findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Reconstruct chronological timeline of incidents."""
+        """Build timeline - only cross-file ordering if timestamps exist.
+
+        ⚠️  WARNING: Without real timestamps, cross-file order is UNKNOWN.
+        Line numbers from different files have no temporal relationship.
+        """
         timeline = []
+        has_timestamps = any("timestamp" in f for f in findings)
 
         for finding in findings:
-            first_line = finding.get("first_line", 0)
-            # Approximate timestamp from line number (rough estimation)
-            # In real usage, findings would have actual timestamps
+            source_file = finding.get("_source_file", "unknown")
+            timestamp = finding.get("timestamp", "UNKNOWN")
+
+            # For cross-file ordering, only use real timestamps
+            if not has_timestamps and finding.get("_source_file"):
+                # Multiple files without timestamps - order within files only
+                sequence = finding.get("first_line", 0)
+                sort_key = (source_file, sequence)
+            elif timestamp != "UNKNOWN":
+                sort_key = (0, timestamp)  # Timestamp available
+            else:
+                sort_key = (1, 0)  # No timestamp
+
             event = {
-                "sequence": first_line,
+                "sequence": finding.get("first_line", 0),
                 "analyzer": finding.get("category", "unknown"),
                 "kind": finding.get("kind", "unknown"),
                 "level": finding.get("level", "INFO"),
                 "signature": finding.get("signature", "Unknown"),
                 "count": finding.get("count", 0),
-                "source": finding.get("_source_file", "unknown"),
+                "source": source_file,
+                "timestamp": timestamp,
+                "cross_file_order": "UNKNOWN" if not has_timestamps and len(set(f.get("_source_file") for f in findings)) > 1 else "WITHIN_FILE",
             }
-            timeline.append(event)
+            timeline.append((sort_key, event))
 
-        # Sort by sequence
-        timeline.sort(key=lambda x: x["sequence"])
-        return timeline
+        # Sort by key, then extract event
+        timeline.sort(key=lambda x: (isinstance(x[0][1], str), x[0]))
+        return [event for _, event in timeline]
 
     def _top_kinds(self, findings: list[dict[str, Any]]) -> list[str]:
         """Get top incident kinds by frequency."""
@@ -170,14 +189,18 @@ class MultiFileAnalyzer:
         findings: list[dict[str, Any]],
         root_cause_incidents: list,
     ) -> dict[str, Any]:
-        """Extract high-level insights from cross-file analysis."""
+        """Extract insights from cross-file analysis (EXPERIMENTAL).
+
+        ⚠️  WARNING: Correlation strength is based on pattern-match heuristics,
+        NOT statistical probabilities. Causality is NOT proven by correlation.
+        """
         # Collect affected sources
         sources = set()
         for finding in findings:
             if "_source_file" in finding:
                 sources.add(finding["_source_file"])
 
-        # Identify cascading failures
+        # Identify possible cascading failures
         cascades = []
         if len(root_cause_incidents) > 0:
             for incident in root_cause_incidents:
@@ -186,25 +209,28 @@ class MultiFileAnalyzer:
                         {
                             "root": incident.root_cause.kind,
                             "depth": len(incident.causal_links),
+                            "pattern_match_level": "EXPERIMENTAL",
                             "analyzers_involved": list(incident.affected_analyzers),
+                            "note": "Possible pattern - not proven causality",
                         }
                     )
 
-        # Calculate correlation strength
-        correlation_strength = "WEAK"
+        # Calculate pattern-match strength (NOT correlation probability)
+        pattern_strength = "WEAK"
         if len(sources) > 1 and len(root_cause_incidents) > 0:
-            avg_confidence = sum(
+            avg_strength = sum(
                 incident.chain_confidence() for incident in root_cause_incidents
             ) / len(root_cause_incidents)
-            if avg_confidence > 0.85:
-                correlation_strength = "STRONG"
-            elif avg_confidence > 0.70:
-                correlation_strength = "MODERATE"
+            if avg_strength > 0.85:
+                pattern_strength = "STRONG_PATTERN_MATCH"
+            elif avg_strength > 0.70:
+                pattern_strength = "MODERATE_PATTERN_MATCH"
 
         return {
             "affected_sources": list(sources),
-            "cascading_failures": cascades,
-            "correlation_strength": correlation_strength,
+            "possible_cascades": cascades,
+            "pattern_match_strength": pattern_strength,
+            "warning": "Pattern matches are NOT proof of causation",
             "cross_analyzer_incidents": len(
                 [i for i in root_cause_incidents if len(i.affected_analyzers) > 1]
             ),
@@ -212,19 +238,22 @@ class MultiFileAnalyzer:
         }
 
     def _summarize_key_finding(self, incidents: list) -> str:
-        """Generate summary of most critical finding."""
-        if not incidents:
-            return "No critical incidents detected"
+        """Generate summary of strongest pattern match (EXPERIMENTAL).
 
-        # Find incident with highest confidence
+        ⚠️  NOTE: This is pattern-match strength, not proof of causation.
+        """
+        if not incidents:
+            return "No patterns detected"
+
+        # Find incident with strongest pattern match
         best = max(incidents, key=lambda i: i.chain_confidence())
 
         if best.chain_confidence() > 0.85:
-            return f"High-confidence root cause chain: {best.root_cause.kind} → {best.duration_seconds:.1f}s impact across {len(best.affected_analyzers)} services"
+            return f"STRONG pattern match: {best.root_cause.kind} followed by events across {len(best.affected_analyzers)} components (not proven causal)"
         elif best.chain_confidence() > 0.70:
-            return f"Moderate-confidence incident: {best.root_cause.kind} affected {len(best.affected_analyzers)} services"
+            return f"MODERATE pattern match: {best.root_cause.kind} correlated with {len(best.affected_analyzers)} components (investigate further)"
         else:
-            return f"Low-confidence correlation: {best.root_cause.kind} may be related to cascading failures"
+            return f"WEAK pattern match: {best.root_cause.kind} may be related (requires manual verification)"
 
 
 def merge_log_files(
