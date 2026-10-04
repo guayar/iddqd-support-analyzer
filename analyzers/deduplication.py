@@ -93,6 +93,7 @@ def _merge_findings(findings: list[dict[str, Any]]) -> dict[str, Any]:
     total_count = 0
     highest_level = base.get("level", "INFO")
     earliest_line = base.get("first_line", float("inf"))
+    earliest_timestamp = base.get("timestamp")  # Preserve earliest timestamp
 
     for finding in findings:
         variations.append(
@@ -105,6 +106,13 @@ def _merge_findings(findings: list[dict[str, Any]]) -> dict[str, Any]:
         )
         total_count += finding.get("count", 0)
         earliest_line = min(earliest_line, finding.get("first_line", float("inf")))
+
+        # Track earliest timestamp for temporal correlation
+        ts = finding.get("timestamp")
+        if ts and not earliest_timestamp:
+            earliest_timestamp = ts
+        elif ts and earliest_timestamp and ts < earliest_timestamp:
+            earliest_timestamp = ts
 
         # Keep highest severity
         level_priority = {"CRITICAL": 4, "ERROR": 3, "WARN": 2, "INFO": 1}
@@ -130,6 +138,10 @@ def _merge_findings(findings: list[dict[str, Any]]) -> dict[str, Any]:
         "deduped": True,
         "original_findings": len(findings),
     }
+
+    # PHASE 5: Preserve timestamp for RCA correlation
+    if earliest_timestamp:
+        merged["timestamp"] = earliest_timestamp
 
     # Include sample from highest-severity variation
     for finding in findings:

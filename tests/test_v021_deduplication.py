@@ -148,3 +148,26 @@ def test_cross_file_same_line_not_clustered():
     assert len(result) == 2, f"Expected 2 findings, got {len(result)} - bug: cross-file clustering!"
     assert all(f.get("_source_file") for f in result), "Source file should be preserved"
     assert result[0]["_source_file"] != result[1]["_source_file"], "Different files should not merge"
+
+
+def test_timestamp_preserved_in_merge():
+    """PHASE 5: Timestamps should be preserved in merged findings.
+    
+    When multiple findings are merged (deduped), earliest timestamp
+    is preserved for RCA temporal correlation.
+    """
+    findings = [
+        make_test_finding(kind="timeout", count=5, level="ERROR"),
+        make_test_finding(kind="timeout", count=5, level="ERROR"),
+    ]
+    findings[0]["timestamp"] = "2026-01-01T10:00:00Z"
+    findings[1]["timestamp"] = "2026-01-01T10:00:10Z"
+    findings[0]["_source_file"] = "test.log"
+    findings[1]["_source_file"] = "test.log"
+    
+    result = deduplicate_findings(findings)
+    
+    # Merged finding should preserve earliest timestamp
+    assert len(result) == 1
+    assert result[0].get("timestamp") == "2026-01-01T10:00:00Z", \
+        "Timestamp not preserved in merge!"
