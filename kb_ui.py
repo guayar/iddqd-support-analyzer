@@ -31,7 +31,6 @@ def build_kb_tab() -> Tuple:
     Returns:
         Tuple of state components for integration with main app
     """
-    print("[DEBUG] build_kb_tab() called")
 
     with gr.Tab("Knowledge Base"):
         # ========================
@@ -541,12 +540,12 @@ def build_kb_tab() -> Tuple:
 
     return (
         dummy_refresh,  # kb_refresh_fn
-        gr.Textbox("0", interactive=False, visible=False),  # kb_articles_count
-        gr.Textbox("0", interactive=False, visible=False),  # kb_cases_count
-        gr.Dataframe(interactive=False, visible=False),  # kb_articles_list
-        gr.Dataframe(interactive=False, visible=False),  # kb_cases_list
-        gr.Dataframe(interactive=False, visible=False),  # search_results_articles
-        gr.Dataframe(interactive=False, visible=False),  # search_results_cases
+        None,  # kb_articles_count - not needed in v2
+        None,  # kb_cases_count - not needed in v2
+        None,  # kb_articles_list - not needed in v2
+        None,  # kb_cases_list - not needed in v2
+        None,  # search_results_articles - not needed in v2
+        None,  # search_results_cases - not needed in v2
         selected_article_id,
         selected_case_id,
         article_search_results,
