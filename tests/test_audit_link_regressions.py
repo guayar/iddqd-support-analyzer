@@ -141,3 +141,41 @@ def test_main_search_returns_session_state_and_clears_old_parent(ui):
     assert state[search.outputs[-4]._id] == []
     assert state[search.outputs[-3]._id] == []
     assert state[search.outputs[-2]._id] is None
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+@pytest.mark.parametrize("edit_table", [False, True])
+@pytest.mark.parametrize("column", [0, 1])
+def test_linked_record_click_opens_opposite_view(ui, reverse, edit_table, column):
+    kb, blocks = ui
+    article_id = kb.create_article("Linked article", "Article content")
+    case_id = kb.create_case("Linked case", "Case content")
+    kb.link_case_to_article(case_id, article_id)
+    record = kb.get_case(case_id) if reverse else kb.get_article(article_id)
+    name = "open_linked_case" if reverse else "open_linked_article"
+    callbacks = [fn for fn in blocks.fns.values() if fn.fn and fn.fn.__name__ == name]
+    assert len(callbacks) == 2  # Both read and edit tables are wired.
+    fn = callbacks[int(edit_table)]
+    state = SessionState(blocks)
+    row = [record.display_id, record.title] + (["✕"] if edit_table else [])
+    result = invoke(blocks, fn, state, [], selection_event(row, column))
+    assert result[:2] == [record.display_id, record.title]
+    assert result[4] == record.content
+    assert state[fn.outputs[6]._id] == record.id
+    assert state[fn.outputs[7]._id] == "view"
+    assert result[8]["visible"] is True
+    assert result[9]["visible"] is False
+    assert [a.id for a in kb.get_articles_for_case(case_id)] == [article_id]
+
+
+@pytest.mark.parametrize("name", ["open_linked_article", "open_linked_case"])
+def test_remove_column_does_not_open_or_clear_opposite_panel(ui, name):
+    _, blocks = ui
+    fn = callback(blocks, name)
+    state = SessionState(blocks)
+    state[fn.outputs[6]._id] = "previous-selection"
+    row = ["AN00000001", "Title", "✕"]
+    result = invoke(blocks, fn, state, [], selection_event(row, 2))
+    assert state[fn.outputs[6]._id] == "previous-selection"
+    assert all(result[index] == {"__type__": "update"}
+               for index in [0, 1, 2, 3, 4, 5, 8, 9])

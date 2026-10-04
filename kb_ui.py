@@ -463,6 +463,32 @@ def build_kb_tab():
                             traceback.print_exc()
                             return "", "", "", "", "", None, None
 
+                    def open_linked_article(evt: gr.SelectData):
+                        """Open ID/title clicks; the Remove column has its own action."""
+                        if evt is None or not evt.selected or not evt.row_value or evt.index[1] == 2:
+                            return (gr.skip(),) * 10
+                        linked_event = gr.SelectData(None, {
+                            "index": evt.index, "value": evt.value,
+                            "row_value": evt.row_value[:2], "selected": True,
+                        })
+                        values = load_article_view_full(linked_event)
+                        if values[-1] is None:
+                            return (gr.skip(),) * 10
+                        return (*values, *toggle_article_view())
+
+                    def open_linked_case(evt: gr.SelectData):
+                        """Open the linked case without changing the relationship."""
+                        if evt is None or not evt.selected or not evt.row_value or evt.index[1] == 2:
+                            return (gr.skip(),) * 10
+                        linked_event = gr.SelectData(None, {
+                            "index": evt.index, "value": evt.value,
+                            "row_value": evt.row_value[:2], "selected": True,
+                        })
+                        values = load_case_view_full(linked_event)
+                        if values[-1] is None:
+                            return (gr.skip(),) * 10
+                        return (*values, *toggle_case_view())
+
                     def delete_case(case_uuid):
                         if case_uuid:
                             kb.delete_case(case_uuid)
@@ -521,10 +547,11 @@ def build_kb_tab():
 
                     # Click linked item to navigate (PHASE 3)
                     case_linked_articles.select(
-                        fn=load_article_view_full,
+                        fn=open_linked_article,
                         outputs=[
                             article_view_id, article_view_title, article_view_tags, article_view_summary, article_view_content,
-                            article_linked_cases, selected_article_id
+                            article_linked_cases, selected_article_id,
+                            article_view_mode, article_view_group, article_edit_group
                         ]
                     ).then(
                         fn=reload_article_results,
@@ -533,10 +560,11 @@ def build_kb_tab():
                     )
 
                     article_linked_cases.select(
-                        fn=load_case_view_full,
+                        fn=open_linked_case,
                         outputs=[
                             case_view_id, case_view_title, case_view_tags, case_view_summary, case_view_content,
-                            case_linked_articles, selected_case_id
+                            case_linked_articles, selected_case_id,
+                            case_view_mode, case_view_group, case_edit_group
                         ]
                     ).then(
                         fn=reload_case_results,
@@ -831,6 +859,21 @@ def build_kb_tab():
                         if evt is None or not evt.selected or evt.index[1] != 2 or not evt.row_value:
                             return gr.skip()
                         return remove_case_from_article(article_id, evt.row_value[0])
+
+                    case_edit_linked.select(
+                        fn=open_linked_article,
+                        outputs=[article_view_id, article_view_title, article_view_tags,
+                                 article_view_summary, article_view_content, article_linked_cases,
+                                 selected_article_id, article_view_mode, article_view_group,
+                                 article_edit_group],
+                    )
+                    article_edit_linked.select(
+                        fn=open_linked_case,
+                        outputs=[case_view_id, case_view_title, case_view_tags,
+                                 case_view_summary, case_view_content, case_linked_articles,
+                                 selected_case_id, case_view_mode, case_view_group,
+                                 case_edit_group],
+                    )
 
                     for parent, search_btn_link, query, results, selection, add_btn, add_fn, linked, remove_fn, refresh_fn, status, edit_btn_link in [
                         (selected_case_id, case_edit_link_search_btn, case_edit_link_search,
