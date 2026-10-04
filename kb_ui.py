@@ -36,6 +36,10 @@ def build_kb_tab() -> Tuple:
         selected_article_id = gr.State(None)
         selected_case_id = gr.State(None)
 
+        # Store current search results for re-rendering with selection
+        article_search_results = gr.State([])  # List of Article objects
+        case_search_results = gr.State([])    # List of Case objects
+
         with gr.Column(elem_classes=["psa-shell"], scale=1):
             # Header
             gr.Markdown("""
@@ -325,8 +329,16 @@ def build_kb_tab() -> Tuple:
     # HANDLERS
     # ========================
 
-    def refresh_all_knowledge():
-        """Refresh Articles and Cases lists (first 10 records) with current selection highlighting."""
+    def refresh_all_knowledge(
+        selected_article_uuid=None,
+        selected_case_uuid=None,
+    ):
+        """Refresh Articles and Cases lists (first 10 records) with current selection highlighting.
+
+        Args:
+            selected_article_uuid: Current selected Article UUID (from gr.State)
+            selected_case_uuid: Current selected Case UUID (from gr.State)
+        """
         all_articles = kb.list_articles()
         all_cases = kb.list_cases()
 
@@ -340,8 +352,8 @@ def build_kb_tab() -> Tuple:
         cases_count_text = f"{len(cases)} of {total_cases}" if total_cases > 10 else f"{total_cases}"
 
         # Use render helpers to get styled dataframes with selection highlighting
-        articles_styled, _ = render_articles_table(articles, selected_article_id.value)
-        cases_styled, _ = render_cases_table(cases, selected_case_id.value)
+        articles_styled, _ = render_articles_table(articles, selected_article_uuid)
+        cases_styled, _ = render_cases_table(cases, selected_case_uuid)
 
         return (
             articles_count_text,
@@ -350,10 +362,21 @@ def build_kb_tab() -> Tuple:
             cases_styled,
         )
 
-    def perform_search(query):
-        """Search KB and return styled dataframes with selection highlighting."""
+    def perform_search(query, selected_article_uuid=None, selected_case_uuid=None):
+        """Search KB and return styled dataframes with selection highlighting.
+
+        Args:
+            query: Search query string
+            selected_article_uuid: Current selected Article UUID
+            selected_case_uuid: Current selected Case UUID
+
+        Returns:
+            Tuple of (articles_styled, cases_styled, articles_list, cases_list)
+        """
         if not query:
-            return pd.DataFrame(columns=["Selected", "ID", "Title", "Summary"]), pd.DataFrame(columns=["Selected", "ID", "Title", "Summary"])
+            empty_articles = pd.DataFrame(columns=["Selected", "ID", "Title", "Summary"])
+            empty_cases = pd.DataFrame(columns=["Selected", "ID", "Title", "Summary"])
+            return empty_articles, empty_cases, [], []
 
         try:
             result = kb.search(query, limit=10)
@@ -364,15 +387,17 @@ def build_kb_tab() -> Tuple:
             print(f"Found {len(articles)} articles, {len(cases)} cases")
 
             # Use render helpers to get styled dataframes with selection highlighting
-            articles_styled, _ = render_search_articles_table(articles, selected_article_id.value)
-            cases_styled, _ = render_search_cases_table(cases, selected_case_id.value)
+            articles_styled, _ = render_search_articles_table(articles, selected_article_uuid)
+            cases_styled, _ = render_search_cases_table(cases, selected_case_uuid)
 
-            return articles_styled, cases_styled
+            return articles_styled, cases_styled, articles, cases
         except Exception as e:
             print(f"Search error: {e}")
             import traceback
             traceback.print_exc()
-            return pd.DataFrame(columns=["Selected", "ID", "Title", "Summary"]), pd.DataFrame(columns=["Selected", "ID", "Title", "Summary"])
+            empty_articles = pd.DataFrame(columns=["Selected", "ID", "Title", "Summary"])
+            empty_cases = pd.DataFrame(columns=["Selected", "ID", "Title", "Summary"])
+            return empty_articles, empty_cases, [], []
 
     def create_new_article(title, tags_str, content):
         """Create new Article."""
@@ -476,6 +501,8 @@ Conflicts detected: {len(result['conflicts'])}"""
         if not article:
             return None, "", "", "", "", "", "", None
 
+        print(f"[ARTICLE SELECT] display_id={display_id}, canonical_uuid={article.id}")
+
         # Format revision history
         revisions = kb.get_revisions(article.id)
         rev_text = "Version history:\n"
@@ -559,6 +586,8 @@ Conflicts detected: {len(result['conflicts'])}"""
         if not case:
             return None, "", "", "", "", [], None
 
+        print(f"[CASE SELECT] display_id={display_id}, canonical_uuid={case.id}")
+
         # Get related articles
         related_data = []
         for article_id in case.related_article_ids:
@@ -616,23 +645,64 @@ Conflicts detected: {len(result['conflicts'])}"""
         except Exception as e:
             return f"❌ Error: {str(e)}"
 
-    def refresh_articles_display_only():
-        """Refresh Articles table to show current selection highlighting."""
+    def refresh_articles_display_only(selected_article_uuid=None):
+        """Refresh Articles table to show current selection highlighting.
+
+        Args:
+            selected_article_uuid: Current selected Article UUID (from gr.State)
+        """
         all_articles = kb.list_articles()[:10]
-        articles_styled, _ = render_articles_table(all_articles, selected_article_id.value)
+        articles_styled, _ = render_articles_table(all_articles, selected_article_uuid)
         return articles_styled
 
-    def refresh_cases_display_only():
-        """Refresh Cases table to show current selection highlighting."""
+    def refresh_cases_display_only(selected_case_uuid=None):
+        """Refresh Cases table to show current selection highlighting.
+
+        Args:
+            selected_case_uuid: Current selected Case UUID (from gr.State)
+        """
         all_cases = kb.list_cases()[:10]
-        cases_styled, _ = render_cases_table(all_cases, selected_case_id.value)
+        cases_styled, _ = render_cases_table(all_cases, selected_case_uuid)
+        return cases_styled
+
+    def refresh_search_articles_display(
+        selected_article_uuid=None,
+        search_results=None,
+    ):
+        """Refresh search results articles table with current selection.
+
+        Args:
+            selected_article_uuid: Current selected Article UUID
+            search_results: List of Article objects from last search
+        """
+        if not search_results:
+            search_results = []
+        print(f"[RENDER SEARCH ARTICLES] selected_uuid={selected_article_uuid}, results_count={len(search_results)}")
+        articles_styled, _ = render_search_articles_table(search_results, selected_article_uuid)
+        return articles_styled
+
+    def refresh_search_cases_display(
+        selected_case_uuid=None,
+        search_results=None,
+    ):
+        """Refresh search results cases table with current selection.
+
+        Args:
+            selected_case_uuid: Current selected Case UUID
+            search_results: List of Case objects from last search
+        """
+        if not search_results:
+            search_results = []
+        cases_styled, _ = render_search_cases_table(search_results, selected_case_uuid)
         return cases_styled
 
     # Wire handlers
+
+    # Search - capture results in state AND pass current selection for correct rendering
     search_btn.click(
         fn=perform_search,
-        inputs=[search_query],
-        outputs=[search_results_articles, search_results_cases],
+        inputs=[search_query, selected_article_id, selected_case_id],
+        outputs=[search_results_articles, search_results_cases, article_search_results, case_search_results],
     )
 
     # Article list selection - load into editor (from All Knowledge tab)
@@ -643,17 +713,23 @@ Conflicts detected: {len(result['conflicts'])}"""
                  selected_article_id],
     ).then(
         fn=refresh_articles_display_only,
+        inputs=[selected_article_id],
         outputs=[articles_list],
     )
 
-    # Search results - load into editor (from Search Results tab)
+    # Search results articles - load into editor AND re-render search results with selection
     search_results_articles.select(
         fn=load_article_for_edit,
         outputs=[article_id_edit, article_title_edit, article_summary_edit,
                  article_content_edit, article_tags_edit, article_findings_edit, article_history,
                  selected_article_id],
     ).then(
+        fn=refresh_search_articles_display,
+        inputs=[selected_article_id, article_search_results],
+        outputs=[search_results_articles],
+    ).then(
         fn=refresh_articles_display_only,
+        inputs=[selected_article_id],
         outputs=[articles_list],
     )
 
@@ -665,6 +741,7 @@ Conflicts detected: {len(result['conflicts'])}"""
         outputs=[article_status],
     ).then(
         fn=refresh_all_knowledge,
+        inputs=[selected_article_id, selected_case_id],
         outputs=[articles_count, cases_count, articles_list, cases_list],
     )
 
@@ -674,6 +751,7 @@ Conflicts detected: {len(result['conflicts'])}"""
         outputs=[article_status],
     ).then(
         fn=refresh_all_knowledge,
+        inputs=[selected_case_id],  # Pass None for selected_article (will be cleared)
         outputs=[articles_count, cases_count, articles_list, cases_list],
     ).then(
         fn=lambda: (None, "", "", "", "", "", "", ""),
@@ -687,6 +765,7 @@ Conflicts detected: {len(result['conflicts'])}"""
         outputs=[create_article_status],
     ).then(
         fn=refresh_all_knowledge,
+        inputs=[selected_article_id, selected_case_id],
         outputs=[articles_count, cases_count, articles_list, cases_list],
     )
 
@@ -697,16 +776,22 @@ Conflicts detected: {len(result['conflicts'])}"""
                  case_content_edit, case_tags_edit, case_related_articles, selected_case_id],
     ).then(
         fn=refresh_cases_display_only,
+        inputs=[selected_case_id],
         outputs=[cases_list],
     )
 
-    # Search results cases - load into editor (from Search Results tab)
+    # Search results cases - load into editor AND re-render search results with selection
     search_results_cases.select(
         fn=load_case_for_edit,
         outputs=[case_id_edit, case_title_edit, case_summary_edit,
                  case_content_edit, case_tags_edit, case_related_articles, selected_case_id],
     ).then(
+        fn=refresh_search_cases_display,
+        inputs=[selected_case_id, case_search_results],
+        outputs=[search_results_cases],
+    ).then(
         fn=refresh_cases_display_only,
+        inputs=[selected_case_id],
         outputs=[cases_list],
     )
 
@@ -718,6 +803,7 @@ Conflicts detected: {len(result['conflicts'])}"""
         outputs=[case_status],
     ).then(
         fn=refresh_all_knowledge,
+        inputs=[selected_article_id, selected_case_id],
         outputs=[articles_count, cases_count, articles_list, cases_list],
     )
 
@@ -727,6 +813,7 @@ Conflicts detected: {len(result['conflicts'])}"""
         outputs=[case_status],
     ).then(
         fn=refresh_all_knowledge,
+        inputs=[selected_article_id],  # Pass None for selected_case (will be cleared)
         outputs=[articles_count, cases_count, articles_list, cases_list],
     ).then(
         fn=lambda: (None, "", "", "", "", ""),
@@ -740,6 +827,7 @@ Conflicts detected: {len(result['conflicts'])}"""
         outputs=[create_case_status],
     ).then(
         fn=refresh_all_knowledge,
+        inputs=[selected_article_id, selected_case_id],
         outputs=[articles_count, cases_count, articles_list, cases_list],
     )
 
@@ -756,6 +844,7 @@ Conflicts detected: {len(result['conflicts'])}"""
         outputs=[import_status],
     ).then(
         fn=refresh_all_knowledge,
+        inputs=[selected_article_id, selected_case_id],
         outputs=[articles_count, cases_count, articles_list, cases_list],
     )
 
@@ -773,6 +862,8 @@ Conflicts detected: {len(result['conflicts'])}"""
         search_results_cases,
         selected_article_id,
         selected_case_id,
+        article_search_results,
+        case_search_results,
     )
 
 
