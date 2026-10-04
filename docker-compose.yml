@@ -1,19 +1,29 @@
-version: '3.8'
-
 services:
   iddqd-light:
     build: .
     container_name: iddqd-support-analyzer-light
+
     ports:
       - "7860:7860"
+
     volumes:
-      - ./inputs:/app/inputs
-      - ./outputs:/app/outputs
+      - ./data:/app/data
+
     environment:
-      - PYTHONUNBUFFERED=1
+      PYTHONUNBUFFERED: "1"
+      IDDQD_EDITION: "light"
+      APP_HOST: "0.0.0.0"
+
     restart: unless-stopped
+
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7860/api/predict"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7860/', timeout=5).read(1)"
+        ]
       interval: 30s
       timeout: 10s
       retries: 3

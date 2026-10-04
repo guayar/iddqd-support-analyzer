@@ -1,99 +1,130 @@
 # IDDQD Support Analyzer - Docker (Light Edition)
 
-Uruchamiaj IDDQD Light Edition na Windows/Mac/Linux za pomocą Docker'a.
+Run **IDDQD Light Edition** in a container on Windows, Mac, or Linux.
 
-## Wymagania
+## Requirements
 
 - **Docker Desktop** (https://www.docker.com/products/docker-desktop)
-- **Port 7860** dostępny
+- **Port 7860** available
+- ~500MB disk for Light image + Knowledge Base
 
 ## Quick Start
 
-### 1. Build image
+### 1. Build image (first time only)
+
 ```bash
-docker-compose build
+docker compose build
 ```
 
-### 2. Uruchomić aplikację
+### 2. Run application
+
 ```bash
-docker-compose up
+docker compose up -d
 ```
 
-Otwórz: http://localhost:7860
+Open: **http://localhost:7860**
 
-### 3. Dodaj logi do analizy
+### 3. Analyze logs and SAML
 
-Umieść pliki logów w folderze `inputs/`:
-```
-./inputs/
-  ├── app.log
-  ├── error.log
-  └── system.log
-```
+Upload files directly in the **Analyze** tab. Knowledge Base persists in `./data/iddqd_kb.db`.
 
-Wyniki analiz będą dostępne w `outputs/`
+## Usage
 
-## Zaawansowane
+Upload any log file or SAML trace via the web UI. Results and Knowledge Base entries are stored locally.
 
-### Stop
+## Advanced Commands
+
+### Stop container
 ```bash
-docker-compose down
+docker compose down
 ```
 
-### Rebuild
+### Rebuild from scratch
 ```bash
-docker-compose build --no-cache
-docker-compose up
+docker compose down
+docker compose build --no-cache
+docker compose up -d
 ```
 
-### Logi
+### View live logs
 ```bash
-docker-compose logs -f
+docker compose logs -f iddqd-light
 ```
 
-### Shell w container'e
+### Access container shell
 ```bash
-docker-compose exec iddqd-light bash
+docker compose exec iddqd-light bash
 ```
 
-## Co jest w Light Edition
+### Check container status
+```bash
+docker compose ps
+```
 
-✅ Log Analysis (Syslog, Windows Event Log, itp.)
-✅ SAML Metadata Analysis
-✅ Incident Detection
-✅ Export (JSON, Markdown, CSV)
+## Persistence
 
-❌ LLM Features (Full Edition only)
-❌ Vision Analysis (Full Edition only)
+The Knowledge Base is stored in `./data/iddqd_kb.db` and persists between restarts:
 
-## Volumes
+```bash
+# Start container
+docker compose up -d
 
-- `./inputs/` → Twoje pliki logów
-- `./outputs/` → Wyniki analiz
+# Verify Knowledge Base is created
+ls -la ./data/iddqd_kb.db
+
+# Stop container (data remains)
+docker compose down
+
+# Start again (Knowledge Base is loaded)
+docker compose up -d
+```
+
+## What's included (Light Edition)
+
+✅ **Analyze** - Log and SAML analysis  
+✅ **Knowledge Base** - SQLite local database with full-text search  
+✅ **Anonymize** - Structure-aware pseudonymization  
+✅ **Export** - JSON, Markdown, CSV formats  
+
+❌ **Assistant** - Not included (requires local Ollama)  
+❌ **General Chat** - Not included (requires local Ollama)  
 
 ## Troubleshooting
 
-**Port 7860 już zajęty?**
+**Port 7860 already in use?**
+
+Edit `docker-compose.yml` and change:
 ```yaml
-# docker-compose.yml - zmień:
 ports:
-  - "8080:7860"  # Potem otwórz http://localhost:8080
+  - "8080:7860"
 ```
 
-**Out of memory?**
+Then open: http://localhost:8080
+
+**Container won't start?**
+
+Check logs:
 ```bash
-docker-compose up --memory 2g
+docker compose logs iddqd-light
+```
+
+**Knowledge Base not persisting?**
+
+Verify `./data` folder exists:
+```bash
+mkdir -p ./data
+docker compose restart
 ```
 
 ## Updates
 
-Każdy `git pull` pobrze nową wersję Light Edition.
-Rebuild image:
+Each `git pull` gets the latest Light Edition code. Rebuild the container:
+
 ```bash
-docker-compose build --no-cache
-docker-compose up
+docker compose build --no-cache
+docker compose up -d
 ```
 
 ---
 
-**Light Edition** - all-in-one SAML/Log analyzer w jednym container'e. 🐳
+**Light Edition in Docker** — Analyze logs and SAML, manage a local Knowledge Base, all offline. 🐳

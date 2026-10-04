@@ -913,7 +913,7 @@ if __name__ == "__main__":
     if os.getenv("BASIC_AUTH_USER") and os.getenv("BASIC_AUTH_PASS"):
         auth = (os.environ["BASIC_AUTH_USER"], os.environ["BASIC_AUTH_PASS"])
     demo.launch(
-        server_name="127.0.0.1",
+        server_name=os.getenv("APP_HOST", "127.0.0.1"),
         server_port=APP_PORT,
         auth=auth,
         show_error=False,
