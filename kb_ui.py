@@ -245,8 +245,8 @@ def build_kb_tab():
                             case_edit_btn = gr.Button("Edit", scale=1)
                             case_delete_btn = gr.Button("Delete", scale=1, variant="stop")
 
-                    # Case edit form (PHASES 6-7) - hidden by default
-                    with gr.Group(visible=False) as case_edit_group:
+                    # Case edit form (PHASES 6-7)
+                    with gr.Group() as case_edit_group:
                         gr.Markdown("### Case Edit")
                         case_edit_id = gr.Textbox(label="ID", interactive=False)
                         case_edit_title = gr.Textbox(label="Title", interactive=True)
@@ -329,8 +329,8 @@ def build_kb_tab():
                             article_edit_btn = gr.Button("Edit", scale=1)
                             article_delete_btn = gr.Button("Delete", scale=1, variant="stop")
 
-                    # Article edit form (PHASES 6-7) - hidden by default
-                    with gr.Group(visible=False) as article_edit_group:
+                    # Article edit form (PHASES 6-7)
+                    with gr.Group() as article_edit_group:
                         gr.Markdown("### Article Edit")
                         article_edit_id = gr.Textbox(label="ID", interactive=False)
                         article_edit_title = gr.Textbox(label="Title", interactive=True)
