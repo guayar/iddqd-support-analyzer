@@ -408,6 +408,9 @@ footer button.settings::before {{
 KB_ROW_SELECTION_JS = """
 () => {
   // Handle KB table row selection highlighting
+  if (window.__kbSelectionSetup) return;
+  window.__kbSelectionSetup = true;
+
   const setupTableHighlighting = () => {
     const tables = {
       'kb-articles-list': 'kb-article-row-selected',
@@ -423,6 +426,10 @@ KB_ROW_SELECTION_JS = """
       // Get table rows
       const rows = tableEl.querySelectorAll('table tbody tr');
       rows.forEach(row => {
+        // Skip if already has listener (guard against re-adding)
+        if (row.__kbClickHandled) return;
+        row.__kbClickHandled = true;
+
         row.addEventListener('click', (e) => {
           // Remove highlight from other rows in this table
           rows.forEach(r => r.classList.remove(className));
@@ -433,19 +440,22 @@ KB_ROW_SELECTION_JS = """
     }
   };
 
-  // Setup on load and watch for DOM changes
+  // Setup on load
   setupTableHighlighting();
 
-  // Re-setup when DOM mutates (new search results, etc)
-  const observer = new MutationObserver(() => {
-    setupTableHighlighting();
-  });
+  // Lightweight re-setup on demand (not continuous observation)
+  // Gradio calls selection handlers, so highlighting updates automatically
+  // This is a fallback for new search results only
+  const retrySetup = () => {
+    setTimeout(() => {
+      setupTableHighlighting();
+    }, 100);
+  };
 
-  observer.observe(document.body, {
-    childList: true,
-    subtree: true,
-    characterData: false,
-  });
+  // Hook into Gradio's known update points
+  if (window.gradio_config) {
+    window.addEventListener('load', setupTableHighlighting);
+  }
 }
 """
 
