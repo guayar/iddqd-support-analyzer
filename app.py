@@ -65,6 +65,12 @@ CSS = """
     padding: 0 !important;
     background: transparent !important;
 }
+.psa-kb-tabs > .tabitem {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    border-left: 0 !important;
+    border-right: 0 !important;
+}
 .psa-shell,
 .psa-shell > div,
 .psa-shell .block,

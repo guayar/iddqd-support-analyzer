@@ -19,9 +19,9 @@ def build_kb_tab():
         query_state = gr.State("")
         page_state = gr.State(1)
         article_view_mode = gr.State("view")
-        with gr.Column(scale=2, elem_classes=["psa-shell"]):
+        with gr.Column(elem_classes=["psa-shell"]):
             gr.Markdown("# Knowledge Base\nCreate, find and edit Articles.")
-            with gr.Tabs():
+            with gr.Tabs(elem_classes=["psa-kb-tabs"]):
                 with gr.Tab("Create", height=KB_TAB_HEIGHT):
                     create_title = gr.Textbox(label="Title")
                     create_tags = gr.Textbox(label="Tags (comma-separated)")
