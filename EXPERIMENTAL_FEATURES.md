@@ -2,6 +2,52 @@
 
 IDDQD Support Analyzer includes several EXPERIMENTAL features that are not production-grade diagnostic tools but may be useful for investigation hints.
 
+## Knowledge Base (KB) - Under Development
+
+### Status: EXPERIMENTAL / UNDER DEVELOPMENT
+
+The Knowledge Base (create/edit/delete Articles and Cases, full-text search, export/import) is currently under active development and has known limitations.
+
+### Known Issues
+
+- **Search**: Full-text search may not return results in all cases; fallback substring search is available
+- **Persistence**: Articles and cases may not persist across browser refreshes in all scenarios
+- **UI**: Layout and interaction patterns are being refined
+- **Export/Import**: ZIP export/import functionality is functional but format may change
+
+### What It Does
+
+- Create and edit **Articles**: reusable troubleshooting knowledge linked to finding codes
+- Create and edit **Cases**: individual investigation records with snapshots and findings
+- **Full-text search** with SQLite FTS5 (with substring fallback)
+- **Tag support** for organizing content
+- **Export/Import** as ZIP for backup and sharing
+- **No LLM required** — works in Light Edition
+
+### What It's NOT
+
+❌ Not suitable for production knowledge management  
+❌ Not guaranteed to persist across deployments  
+❌ Not a replacement for static documentation  
+❌ Search reliability not guaranteed  
+
+### Intended Use
+
+- Local reference during troubleshooting sessions
+- Testing the concept before deploying to permanent KB
+- Temporary notes linked to Analyze findings
+- Backup/sharing articles and cases as ZIP
+
+### Future Improvements
+
+- Robust persistence layer
+- Reliable full-text search
+- Browser storage state management
+- Export to Markdown / static HTML
+- Integration with Analyze findings
+
+---
+
 ## Correlation and Root-Cause Hints (v0.21+)
 
 ### Status: EXPERIMENTAL
