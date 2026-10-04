@@ -540,12 +540,12 @@ def build_kb_tab() -> Tuple:
 
     return (
         dummy_refresh,  # kb_refresh_fn
-        gr.Textbox("0", interactive=False),  # kb_articles_count
-        gr.Textbox("0", interactive=False),  # kb_cases_count
-        gr.Dataframe(interactive=False),  # kb_articles_list
-        gr.Dataframe(interactive=False),  # kb_cases_list
-        gr.Dataframe(interactive=False),  # search_results_articles
-        gr.Dataframe(interactive=False),  # search_results_cases
+        gr.Textbox("0", interactive=False, visible=False),  # kb_articles_count
+        gr.Textbox("0", interactive=False, visible=False),  # kb_cases_count
+        gr.Dataframe(interactive=False, visible=False),  # kb_articles_list
+        gr.Dataframe(interactive=False, visible=False),  # kb_cases_list
+        gr.Dataframe(interactive=False, visible=False),  # search_results_articles
+        gr.Dataframe(interactive=False, visible=False),  # search_results_cases
         selected_article_id,
         selected_case_id,
         article_search_results,
