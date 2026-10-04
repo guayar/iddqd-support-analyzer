@@ -40,25 +40,6 @@ def build_kb_tab() -> Tuple:
             Create Articles and Cases, then use the Search tab to find them.
             """)
 
-            # ========================
-            # SELECTION STATUS
-            # ========================
-            with gr.Row():
-                selected_article_label = gr.Textbox(
-                    label="Selected Article",
-                    value="None",
-                    interactive=False,
-                    scale=1,
-                    min_width=200,
-                )
-                selected_case_label = gr.Textbox(
-                    label="Selected Case",
-                    value="None",
-                    interactive=False,
-                    scale=1,
-                    min_width=200,
-                )
-
             # Filter tabs
             with gr.Tabs():
                 # ========================
@@ -658,31 +639,6 @@ Conflicts detected: {len(result['conflicts'])}"""
         except Exception as e:
             return f"❌ Error: {str(e)}"
 
-    def update_article_selection(selected_id):
-        """Update Article selection label."""
-        if selected_id is None:
-            return "None"
-        article = kb.get_article(selected_id)
-        if article:
-            return f"{article.display_id} — {article.title}"
-        return "None"
-
-    def update_case_selection(selected_id):
-        """Update Case selection label."""
-        if selected_id is None:
-            return "None"
-        case = kb.get_case(selected_id)
-        if case:
-            return f"{case.display_id} — {case.title}"
-        return "None"
-
-    def clear_article_editor():
-        """Clear Article editor when Article is deleted."""
-        return "", "", "", "", "", "", ""
-
-    def clear_case_editor():
-        """Clear Case editor when Case is deleted."""
-        return "", "", "", "", []
 
     # Wire handlers
     search_btn.click(
@@ -697,10 +653,6 @@ Conflicts detected: {len(result['conflicts'])}"""
         outputs=[article_id_edit, article_title_edit, article_summary_edit,
                  article_content_edit, article_tags_edit, article_findings_edit, article_history,
                  selected_article_id],
-    ).then(
-        fn=update_article_selection,
-        inputs=[selected_article_id],
-        outputs=[selected_article_label],
     )
 
     # Search results - load into editor (from Search Results tab)
@@ -709,10 +661,6 @@ Conflicts detected: {len(result['conflicts'])}"""
         outputs=[article_id_edit, article_title_edit, article_summary_edit,
                  article_content_edit, article_tags_edit, article_findings_edit, article_history,
                  selected_article_id],
-    ).then(
-        fn=update_article_selection,
-        inputs=[selected_article_id],
-        outputs=[selected_article_label],
     )
 
     # Save and delete article
@@ -753,10 +701,6 @@ Conflicts detected: {len(result['conflicts'])}"""
         fn=load_case_for_edit,
         outputs=[case_id_edit, case_title_edit, case_summary_edit,
                  case_content_edit, case_tags_edit, case_related_articles, selected_case_id],
-    ).then(
-        fn=update_case_selection,
-        inputs=[selected_case_id],
-        outputs=[selected_case_label],
     )
 
     # Search results cases - load into editor (from Search Results tab)
@@ -764,10 +708,6 @@ Conflicts detected: {len(result['conflicts'])}"""
         fn=load_case_for_edit,
         outputs=[case_id_edit, case_title_edit, case_summary_edit,
                  case_content_edit, case_tags_edit, case_related_articles, selected_case_id],
-    ).then(
-        fn=update_case_selection,
-        inputs=[selected_case_id],
-        outputs=[selected_case_label],
     )
 
     # Save and delete case
@@ -833,8 +773,6 @@ Conflicts detected: {len(result['conflicts'])}"""
         search_results_cases,
         selected_article_id,
         selected_case_id,
-        selected_article_label,
-        selected_case_label,
     )
 
 
