@@ -1026,20 +1026,9 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                     outputs=[files, pasted, signing_cert, idp_metadata, sp_metadata, report, raw, analysis_state, decoded_download],
                 )
 
-            # Combine JS for KB row selection + report copy
-            combined_js = f"""
-() => {{
-  // Run KB row highlighting setup
-  ({KB_ROW_SELECTION_JS}());
-  // Run report copy setup
-  ({COPY_REPORT_JS}());
-}}
-"""
-
             demo.load(
                 fn=kb_refresh_fn,
-                outputs=[kb_articles_count, kb_cases_count, kb_articles_list, kb_cases_list],
-                js=combined_js
+                outputs=[kb_articles_count, kb_cases_count, kb_articles_list, kb_cases_list]
             )
 
 
