@@ -245,6 +245,38 @@ def build_kb_tab():
                             case_edit_btn = gr.Button("Edit", scale=1)
                             case_delete_btn = gr.Button("Delete", scale=1, variant="stop")
 
+                    # Case edit form (PHASES 6-7) - hidden by default
+                    with gr.Group(visible=False) as case_edit_group:
+                        gr.Markdown("### Case Edit")
+                        case_edit_id = gr.Textbox(label="ID", interactive=False)
+                        case_edit_title = gr.Textbox(label="Title", interactive=True)
+                        case_edit_tags = gr.Textbox(label="Tags (comma-separated)", interactive=True)
+                        case_edit_summary = gr.Textbox(label="Summary", lines=3, interactive=True)
+                        case_edit_content = gr.Textbox(label="Content", lines=8, interactive=True)
+
+                        # Link management (PHASE 7)
+                        gr.Markdown("#### Linked Articles")
+                        case_edit_linked = gr.Dataframe(
+                            headers=["ID", "Title", "Remove"],
+                            interactive=False,
+                            label="Current Links"
+                        )
+
+                        with gr.Row():
+                            case_edit_link_search = gr.Textbox(label="Search to add", scale=3)
+                            case_edit_link_btn = gr.Button("Add Link", scale=1)
+                        case_edit_link_results = gr.Dataframe(
+                            headers=["ID", "Title"],
+                            interactive=False,
+                            label="Search Results"
+                        )
+
+                        case_edit_status = gr.Textbox(label="Status", interactive=False, value="")
+
+                        with gr.Row():
+                            case_edit_save_btn = gr.Button("Save", variant="primary", scale=1)
+                            case_edit_cancel_btn = gr.Button("Cancel", scale=1)
+
                     # Articles section
                     gr.Markdown("## Articles")
                     with gr.Row():
@@ -296,6 +328,38 @@ def build_kb_tab():
                         with gr.Row():
                             article_edit_btn = gr.Button("Edit", scale=1)
                             article_delete_btn = gr.Button("Delete", scale=1, variant="stop")
+
+                    # Article edit form (PHASES 6-7) - hidden by default
+                    with gr.Group(visible=False) as article_edit_group:
+                        gr.Markdown("### Article Edit")
+                        article_edit_id = gr.Textbox(label="ID", interactive=False)
+                        article_edit_title = gr.Textbox(label="Title", interactive=True)
+                        article_edit_tags = gr.Textbox(label="Tags (comma-separated)", interactive=True)
+                        article_edit_summary = gr.Textbox(label="Summary", lines=3, interactive=True)
+                        article_edit_content = gr.Textbox(label="Content", lines=8, interactive=True)
+
+                        # Link management (PHASE 7)
+                        gr.Markdown("#### Linked Cases")
+                        article_edit_linked = gr.Dataframe(
+                            headers=["ID", "Title", "Remove"],
+                            interactive=False,
+                            label="Current Links"
+                        )
+
+                        with gr.Row():
+                            article_edit_link_search = gr.Textbox(label="Search to add", scale=3)
+                            article_edit_link_btn = gr.Button("Add Link", scale=1)
+                        article_edit_link_results = gr.Dataframe(
+                            headers=["ID", "Title"],
+                            interactive=False,
+                            label="Search Results"
+                        )
+
+                        article_edit_status = gr.Textbox(label="Status", interactive=False, value="")
+
+                        with gr.Row():
+                            article_edit_save_btn = gr.Button("Save", variant="primary", scale=1)
+                            article_edit_cancel_btn = gr.Button("Cancel", scale=1)
 
                     # ========================
                     # Search / View Event Handlers
@@ -491,6 +555,141 @@ def build_kb_tab():
                         outputs=[article_view_id]
                     )
 
+                    # ========================
+                    # PHASE 6: Inline Edit Mode
+                    # ========================
+
+                    def toggle_case_edit():
+                        """Switch to edit mode for case."""
+                        return "edit"
+
+                    def toggle_case_view():
+                        """Switch back to view mode for case."""
+                        return "view"
+
+                    def populate_case_edit(case_id):
+                        """Populate edit form with case data."""
+                        if not case_id:
+                            return "", "", "", "", "", None, "", ""
+                        case = kb.get_case(case_id)
+                        if not case:
+                            return "", "", "", "", "", None, "", ""
+                        linked = kb.get_articles_for_case(case_id)
+                        linked_data = [[a.display_id, a.title, "✕"] for a in linked]
+                        return (
+                            case.display_id, case.title,
+                            ", ".join(case.tags) if case.tags else "",
+                            case.summary or "", case.content or "",
+                            pd.DataFrame(linked_data, columns=["ID", "Title", "Remove"]) if linked_data else None,
+                            "", ""
+                        )
+
+                    def save_case(case_id, title, tags, summary, content):
+                        """Save case changes."""
+                        if not case_id or not title or not content:
+                            return "❌ ID, Title, Content required", "view"
+                        try:
+                            tag_list = [t.strip() for t in tags.split(",") if t.strip()]
+                            success = kb.update_case(case_id, title, summary or "", content, tag_list)
+                            return ("✅ Case saved" if success else "❌ Save failed"), "view"
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}", "view"
+
+                    def toggle_article_edit():
+                        """Switch to edit mode for article."""
+                        return "edit"
+
+                    def toggle_article_view():
+                        """Switch back to view mode for article."""
+                        return "view"
+
+                    def populate_article_edit(article_id):
+                        """Populate edit form with article data."""
+                        if not article_id:
+                            return "", "", "", "", "", None, "", ""
+                        article = kb.get_article(article_id)
+                        if not article:
+                            return "", "", "", "", "", None, "", ""
+                        linked = kb.get_cases_for_article(article_id)
+                        linked_data = [[c.display_id, c.title, "✕"] for c in linked]
+                        return (
+                            article.display_id, article.title,
+                            ", ".join(article.tags) if article.tags else "",
+                            article.summary or "", article.content or "",
+                            pd.DataFrame(linked_data, columns=["ID", "Title", "Remove"]) if linked_data else None,
+                            "", ""
+                        )
+
+                    def save_article(article_id, title, tags, summary, content):
+                        """Save article changes."""
+                        if not article_id or not title or not content:
+                            return "❌ ID, Title, Content required", "view"
+                        try:
+                            tag_list = [t.strip() for t in tags.split(",") if t.strip()]
+                            success = kb.update_article(article_id, title, summary or "", content, tag_list)
+                            return ("✅ Article saved" if success else "❌ Save failed"), "view"
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}", "view"
+
+                    # Wire edit mode toggle
+                    case_edit_btn.click(
+                        fn=toggle_case_edit,
+                        outputs=[case_view_mode]
+                    ).then(
+                        fn=populate_case_edit,
+                        inputs=[selected_case_id],
+                        outputs=[case_edit_id, case_edit_title, case_edit_tags,
+                                case_edit_summary, case_edit_content, case_edit_linked,
+                                case_edit_link_search, case_edit_status]
+                    )
+
+                    case_edit_cancel_btn.click(
+                        fn=toggle_case_view,
+                        outputs=[case_view_mode]
+                    )
+
+                    case_edit_save_btn.click(
+                        fn=save_case,
+                        inputs=[case_edit_id, case_edit_title, case_edit_tags,
+                               case_edit_summary, case_edit_content],
+                        outputs=[case_edit_status, case_view_mode]
+                    ).then(
+                        fn=populate_case_edit,
+                        inputs=[selected_case_id],
+                        outputs=[case_view_id, case_view_title, case_view_tags,
+                                case_view_summary, case_view_content, case_linked_articles,
+                                case_view_id, case_view_id]
+                    )
+
+                    article_edit_btn.click(
+                        fn=toggle_article_edit,
+                        outputs=[article_view_mode]
+                    ).then(
+                        fn=populate_article_edit,
+                        inputs=[selected_article_id],
+                        outputs=[article_edit_id, article_edit_title, article_edit_tags,
+                                article_edit_summary, article_edit_content, article_edit_linked,
+                                article_edit_link_search, article_edit_status]
+                    )
+
+                    article_edit_cancel_btn.click(
+                        fn=toggle_article_view,
+                        outputs=[article_view_mode]
+                    )
+
+                    article_edit_save_btn.click(
+                        fn=save_article,
+                        inputs=[article_edit_id, article_edit_title, article_edit_tags,
+                               article_edit_summary, article_edit_content],
+                        outputs=[article_edit_status, article_view_mode]
+                    ).then(
+                        fn=populate_article_edit,
+                        inputs=[selected_article_id],
+                        outputs=[article_view_id, article_view_title, article_view_tags,
+                                article_view_summary, article_view_content, article_linked_cases,
+                                article_view_id, article_view_id]
+                    )
+
                 # ========================
                 # 3. EXPORT / IMPORT TAB (PHASE 10 - placeholder)
                 # ========================
@@ -524,7 +723,30 @@ def build_kb_tab():
                         except Exception as e:
                             return f"❌ Error: {str(e)}"
 
+                    def import_kb(file_obj):
+                        """Import KB from JSON file (PHASE 10)."""
+                        if not file_obj:
+                            return "❌ No file selected"
+                        try:
+                            import json
+                            data = json.load(open(file_obj.name))
+                            articles_count = len(data.get("articles", []))
+                            cases_count = len(data.get("cases", []))
+                            for a in data.get("articles", []):
+                                kb.create_article(a["title"], a.get("summary", ""), a.get("content", ""), a.get("tags", []))
+                            for c in data.get("cases", []):
+                                kb.create_case(c["title"], c.get("summary", ""), c.get("content", ""), c.get("tags", []))
+                            return f"✅ Imported {articles_count} articles, {cases_count} cases"
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+
                     export_btn.click(
                         fn=export_kb,
                         outputs=[export_status]
+                    )
+
+                    import_btn.click(
+                        fn=import_kb,
+                        inputs=[import_file],
+                        outputs=[import_status]
                     )
