@@ -52,6 +52,8 @@ class KnowledgeBaseStorage:
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='kb_metadata'"
             )
             if cursor.fetchone():
+                # Schema exists, check if migration is needed
+                self._run_migrations()
                 return  # Already initialized
 
             # Create tables
@@ -65,6 +67,7 @@ class KnowledgeBaseStorage:
                 -- Articles
                 CREATE TABLE kb_articles (
                     id TEXT PRIMARY KEY,
+                    display_id_seq INTEGER NOT NULL,
                     title TEXT NOT NULL,
                     summary TEXT,
                     content TEXT NOT NULL,
@@ -76,6 +79,7 @@ class KnowledgeBaseStorage:
                 -- Cases
                 CREATE TABLE kb_cases (
                     id TEXT PRIMARY KEY,
+                    display_id_seq INTEGER NOT NULL,
                     title TEXT NOT NULL,
                     summary TEXT,
                     content TEXT NOT NULL,
@@ -164,11 +168,136 @@ class KnowledgeBaseStorage:
                     content_rowid=id
                 );
 
+                -- Unique indexes for display_id_seq
+                CREATE UNIQUE INDEX idx_kb_articles_display_id_seq
+                    ON kb_articles(display_id_seq);
+
+                CREATE UNIQUE INDEX idx_kb_cases_display_id_seq
+                    ON kb_cases(display_id_seq);
+
                 -- Metadata
                 INSERT INTO kb_metadata VALUES ('schema_version', '1.0');
                 INSERT INTO kb_metadata VALUES ('created_at', datetime('now'));
             """)
             conn.commit()
+
+    def _run_migrations(self):
+        """Run schema migrations for existing databases."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Check if display_id_seq column exists in kb_articles
+            cursor.execute("PRAGMA table_info(kb_articles)")
+            columns = [col[1] for col in cursor.fetchall()]
+            if "display_id_seq" not in columns:
+                # Migration 1: Add display_id_seq to kb_articles
+                cursor.execute(
+                    "ALTER TABLE kb_articles ADD COLUMN display_id_seq INTEGER"
+                )
+                # Create unique index on display_id_seq
+                cursor.execute(
+                    "CREATE UNIQUE INDEX idx_kb_articles_display_id_seq ON kb_articles(display_id_seq) WHERE display_id_seq IS NOT NULL"
+                )
+                # Assign stable display_id_seq based on current ordering
+                cursor.execute(
+                    """
+                    SELECT id FROM kb_articles
+                    WHERE status = 'active'
+                    ORDER BY created_at ASC, id ASC
+                    """
+                )
+                articles = cursor.fetchall()
+                for seq_num, (article_id,) in enumerate(articles, start=1):
+                    cursor.execute(
+                        "UPDATE kb_articles SET display_id_seq = ? WHERE id = ?",
+                        (seq_num, article_id),
+                    )
+
+            # Check if display_id_seq column exists in kb_cases
+            cursor.execute("PRAGMA table_info(kb_cases)")
+            columns = [col[1] for col in cursor.fetchall()]
+            if "display_id_seq" not in columns:
+                # Migration 2: Add display_id_seq to kb_cases
+                cursor.execute(
+                    "ALTER TABLE kb_cases ADD COLUMN display_id_seq INTEGER"
+                )
+                # Create unique index on display_id_seq
+                cursor.execute(
+                    "CREATE UNIQUE INDEX idx_kb_cases_display_id_seq ON kb_cases(display_id_seq) WHERE display_id_seq IS NOT NULL"
+                )
+                # Assign stable display_id_seq based on current ordering
+                cursor.execute(
+                    """
+                    SELECT id FROM kb_cases
+                    ORDER BY created_at ASC, id ASC
+                    """
+                )
+                cases = cursor.fetchall()
+                for seq_num, (case_id,) in enumerate(cases, start=1):
+                    cursor.execute(
+                        "UPDATE kb_cases SET display_id_seq = ? WHERE id = ?",
+                        (seq_num, case_id),
+                    )
+
+            # Store next available sequences in metadata
+            cursor.execute(
+                "SELECT COUNT(*) + 1 FROM kb_articles WHERE display_id_seq IS NOT NULL"
+            )
+            next_article_seq = cursor.fetchone()[0]
+
+            cursor.execute(
+                "SELECT COUNT(*) + 1 FROM kb_cases WHERE display_id_seq IS NOT NULL"
+            )
+            next_case_seq = cursor.fetchone()[0]
+
+            cursor.execute(
+                "INSERT OR REPLACE INTO kb_metadata VALUES (?, ?)",
+                ("next_article_seq", str(next_article_seq)),
+            )
+            cursor.execute(
+                "INSERT OR REPLACE INTO kb_metadata VALUES (?, ?)",
+                ("next_case_seq", str(next_case_seq)),
+            )
+
+            conn.commit()
+
+    def _get_next_article_seq(self, cursor) -> int:
+        """Get next available article sequence number (atomic)."""
+        cursor.execute(
+            "SELECT value FROM kb_metadata WHERE key = 'next_article_seq'"
+        )
+        row = cursor.fetchone()
+        if row:
+            seq_num = int(row[0])
+        else:
+            # Fallback: count existing and add 1
+            cursor.execute("SELECT COUNT(*) FROM kb_articles")
+            seq_num = cursor.fetchone()[0] + 1
+
+        # Increment for next call
+        cursor.execute(
+            "INSERT OR REPLACE INTO kb_metadata VALUES (?, ?)",
+            ("next_article_seq", str(seq_num + 1)),
+        )
+        return seq_num
+
+    def _get_next_case_seq(self, cursor) -> int:
+        """Get next available case sequence number (atomic)."""
+        cursor.execute("SELECT value FROM kb_metadata WHERE key = 'next_case_seq'")
+        row = cursor.fetchone()
+        if row:
+            seq_num = int(row[0])
+        else:
+            # Fallback: count existing and add 1
+            cursor.execute("SELECT COUNT(*) FROM kb_cases")
+            seq_num = cursor.fetchone()[0] + 1
+
+        # Increment for next call
+        cursor.execute(
+            "INSERT OR REPLACE INTO kb_metadata VALUES (?, ?)",
+            ("next_case_seq", str(seq_num + 1)),
+        )
+        return seq_num
 
     def _get_article_seq(self, cursor, article_id: str) -> int:
         """Get sequential display ID for article (1-based position by created_at)."""
@@ -228,13 +357,16 @@ class KnowledgeBaseStorage:
         with self._get_connection() as conn:
             cursor = conn.cursor()
 
-            # Insert article
+            # Allocate stable display sequence number
+            display_id_seq = self._get_next_article_seq(cursor)
+
+            # Insert article with persistent display_id_seq
             cursor.execute(
                 """
-                INSERT INTO kb_articles (id, title, summary, content, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO kb_articles (id, display_id_seq, title, summary, content, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
-                (article_id, title, summary, content, now, now),
+                (article_id, display_id_seq, title, summary, content, now, now),
             )
 
             # Add tags
@@ -302,9 +434,6 @@ class KnowledgeBaseStorage:
             )
             related_ids = [r[0] for r in cursor.fetchall()]
 
-            # Get sequential display ID
-            display_id_seq = self._get_article_seq(cursor, article_id)
-
             return Article(
                 id=row["id"],
                 title=row["title"],
@@ -316,7 +445,7 @@ class KnowledgeBaseStorage:
                 tags=tags,
                 finding_codes=finding_codes,
                 related_article_ids=related_ids,
-                display_id_seq=display_id_seq,
+                display_id_seq=row["display_id_seq"],
             )
 
     def update_article(
@@ -445,13 +574,16 @@ class KnowledgeBaseStorage:
         with self._get_connection() as conn:
             cursor = conn.cursor()
 
-            # Insert case
+            # Allocate stable display sequence number
+            display_id_seq = self._get_next_case_seq(cursor)
+
+            # Insert case with persistent display_id_seq
             cursor.execute(
                 """
-                INSERT INTO kb_cases (id, title, summary, content, analyze_snapshot, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO kb_cases (id, display_id_seq, title, summary, content, analyze_snapshot, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (case_id, title, summary, content, snapshot_json, now, now),
+                (case_id, display_id_seq, title, summary, content, snapshot_json, now, now),
             )
 
             # Add tags
@@ -499,9 +631,6 @@ class KnowledgeBaseStorage:
             if row["analyze_snapshot"]:
                 analyze_snapshot = json.loads(row["analyze_snapshot"])
 
-            # Get sequential display ID
-            display_id_seq = self._get_case_seq(cursor, case_id)
-
             return Case(
                 id=row["id"],
                 title=row["title"],
@@ -512,7 +641,7 @@ class KnowledgeBaseStorage:
                 updated_at=datetime.fromisoformat(row["updated_at"]),
                 tags=tags,
                 related_article_ids=related_ids,
-                display_id_seq=display_id_seq,
+                display_id_seq=row["display_id_seq"],
             )
 
     def update_case(
@@ -573,6 +702,62 @@ class KnowledgeBaseStorage:
 
         return cases
 
+    def get_article_by_display_id(self, display_id: str) -> Optional[Article]:
+        """Get Article by display ID (e.g., AN00000001).
+
+        Args:
+            display_id: Display ID in format AN########
+
+        Returns:
+            Article object or None if not found
+        """
+        if not display_id or not display_id.startswith("AN"):
+            return None
+
+        try:
+            display_id_seq = int(display_id[2:])
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT id FROM kb_articles WHERE display_id_seq = ?",
+                    (display_id_seq,),
+                )
+                row = cursor.fetchone()
+                if row:
+                    return self.get_article(row[0])
+        except (ValueError, IndexError):
+            pass
+
+        return None
+
+    def get_case_by_display_id(self, display_id: str) -> Optional[Case]:
+        """Get Case by display ID (e.g., CN00000001).
+
+        Args:
+            display_id: Display ID in format CN########
+
+        Returns:
+            Case object or None if not found
+        """
+        if not display_id or not display_id.startswith("CN"):
+            return None
+
+        try:
+            display_id_seq = int(display_id[2:])
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT id FROM kb_cases WHERE display_id_seq = ?",
+                    (display_id_seq,),
+                )
+                row = cursor.fetchone()
+                if row:
+                    return self.get_case(row[0])
+        except (ValueError, IndexError):
+            pass
+
+        return None
+
     # ========================
     # TAGS
     # ========================
@@ -628,6 +813,50 @@ class KnowledgeBaseStorage:
             conn.commit()
 
         return True
+
+    def get_cases_for_article(self, article_id: str) -> List[Case]:
+        """Get all Cases linked to an Article (reverse lookup).
+
+        Args:
+            article_id: Article canonical UUID
+
+        Returns:
+            List of Case objects
+        """
+        cases = []
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT case_id FROM kb_case_articles WHERE article_id = ?",
+                (article_id,),
+            )
+            for row in cursor.fetchall():
+                case = self.get_case(row[0])
+                if case:
+                    cases.append(case)
+        return cases
+
+    def get_articles_for_case(self, case_id: str) -> List[Article]:
+        """Get all Articles linked to a Case (forward lookup).
+
+        Args:
+            case_id: Case canonical UUID
+
+        Returns:
+            List of Article objects
+        """
+        articles = []
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT article_id FROM kb_case_articles WHERE case_id = ?",
+                (case_id,),
+            )
+            for row in cursor.fetchall():
+                article = self.get_article(row[0])
+                if article:
+                    articles.append(article)
+        return articles
 
     def link_articles(self, article_id: str, related_article_id: str) -> bool:
         """Link two Articles."""

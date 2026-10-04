@@ -87,17 +87,7 @@ class KnowledgeBaseActions:
         Returns:
             Article object or None if not found
         """
-        if not display_id or not display_id.startswith('AN'):
-            return None
-
-        try:
-            seq_num = int(display_id[2:])
-            all_articles = self.list_articles()
-            for article in all_articles:
-                if article.display_id == display_id:
-                    return article
-        except (ValueError, IndexError):
-            pass
+        return self.storage.get_article_by_display_id(display_id)
 
         return None
 
@@ -169,19 +159,7 @@ class KnowledgeBaseActions:
         Returns:
             Case object or None if not found
         """
-        if not display_id or not display_id.startswith('CN'):
-            return None
-
-        try:
-            seq_num = int(display_id[2:])
-            all_cases = self.list_cases()
-            for case in all_cases:
-                if case.display_id == display_id:
-                    return case
-        except (ValueError, IndexError):
-            pass
-
-        return None
+        return self.storage.get_case_by_display_id(display_id)
 
     # ========================
     # SEARCH
@@ -248,6 +226,28 @@ class KnowledgeBaseActions:
     def link_finding_to_article(self, finding_code: str, article_id: str) -> bool:
         """Link finding to Article."""
         return self.storage.link_finding_to_article(finding_code, article_id)
+
+    def get_cases_for_article(self, article_id: str) -> List[Case]:
+        """Get all Cases linked to an Article (reverse lookup).
+
+        Args:
+            article_id: Article canonical UUID
+
+        Returns:
+            List of Case objects
+        """
+        return self.storage.get_cases_for_article(article_id)
+
+    def get_articles_for_case(self, case_id: str) -> List[Article]:
+        """Get all Articles linked to a Case (forward lookup).
+
+        Args:
+            case_id: Case canonical UUID
+
+        Returns:
+            List of Article objects
+        """
+        return self.storage.get_articles_for_case(case_id)
 
     # ========================
     # REVISIONS
