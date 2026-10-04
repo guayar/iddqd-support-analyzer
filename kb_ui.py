@@ -425,15 +425,17 @@ def build_kb_tab() -> Tuple:
                     )
 
                     # Click linked item to navigate (PHASE 3)
-                    def navigate_to_case(evt):
-                        if not evt or not hasattr(evt, 'row_value'):
+                    def navigate_to_case(evt: gr.SelectData):
+                        """Click linked article -> load that case."""
+                        if not evt or not evt.row_value or len(evt.row_value) < 1:
                             return None
                         display_id = evt.row_value[0]
                         case = kb.get_case_by_display_id(display_id)
                         return case.id if case else None
 
-                    def navigate_to_article(evt):
-                        if not evt or not hasattr(evt, 'row_value'):
+                    def navigate_to_article(evt: gr.SelectData):
+                        """Click linked case -> load that article."""
+                        if not evt or not evt.row_value or len(evt.row_value) < 1:
                             return None
                         display_id = evt.row_value[0]
                         article = kb.get_article_by_display_id(display_id)
@@ -441,11 +443,13 @@ def build_kb_tab() -> Tuple:
 
                     case_linked_articles.select(
                         fn=navigate_to_article,
+                        inputs=[],
                         outputs=[selected_article_id]
                     )
 
                     article_linked_cases.select(
                         fn=navigate_to_case,
+                        inputs=[],
                         outputs=[selected_case_id]
                     )
 
