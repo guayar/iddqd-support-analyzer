@@ -36,6 +36,7 @@ class KnowledgeBaseStorage:
         """Context manager for database connections."""
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")  # CRITICAL: Enable FK enforcement
         try:
             yield conn
         finally:
