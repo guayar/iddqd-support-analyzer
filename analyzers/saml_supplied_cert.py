@@ -91,8 +91,13 @@ def load_supplied_certificates(data: bytes | str | None) -> tuple[list[dict[str,
                 "subject": cert.subject.rfc4514_string(),
                 "issuer": cert.issuer.rfc4514_string(),
                 "serial_number": format(cert.serial_number, "X"),
-                "not_valid_before": _dt_iso(getattr(cert, "not_valid_before_utc", cert.not_valid_before)),
-                "not_valid_after": _dt_iso(getattr(cert, "not_valid_after_utc", cert.not_valid_after)),
+                # Use UTC versions if available (newer cryptography), fallback to naive
+                "not_valid_before": _dt_iso(
+                    cert.not_valid_before_utc if hasattr(cert, "not_valid_before_utc") else cert.not_valid_before
+                ),
+                "not_valid_after": _dt_iso(
+                    cert.not_valid_after_utc if hasattr(cert, "not_valid_after_utc") else cert.not_valid_after
+                ),
             }
         )
     return out, None
