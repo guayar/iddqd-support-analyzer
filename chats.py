@@ -243,6 +243,25 @@ def assistant_system_prompt(assistant_context=None, *, image_turn: bool = False)
             + "\n\n"
         )
 
+    # Get KB context if available (findings-based article suggestions)
+    kb_section = ""
+    try:
+        from analyzers.kb_assistant import KBAssistantContext
+        kb_ctx = KBAssistantContext()
+        findings = analysis.get("findings", []) if isinstance(analysis, dict) else []
+        if findings:
+            kb_content = kb_ctx.get_kb_context(findings, findings_by_code=True)
+            if kb_content and "No directly matching" not in kb_content:
+                kb_section = (
+                    "RELEVANT KNOWLEDGE BASE GUIDANCE (previous troubleshooting notes; "
+                    "verify against current evidence, these are suggestions not facts):\n"
+                    + kb_content
+                    + "\n\n"
+                )
+    except Exception:
+        # Graceful fallback: KB unavailable should not break Assistant
+        pass
+
     head = (
         ASSISTANT_SYSTEM
         + "\n\nAttached material from the latest Analyze run (local only; you have no web-search tool). "
@@ -250,6 +269,7 @@ def assistant_system_prompt(assistant_context=None, *, image_turn: bool = False)
         "Keep Analyzer JSON, source files, screenshots and OCR extracts as separate evidence. "
         "Do not claim you searched the internet.\n\n"
         + sources_section
+        + kb_section
         + "ANALYZER OUTPUT:\n"
     )
     analysis_json = json.dumps(analysis, ensure_ascii=False) if analysis is not None else "{}"

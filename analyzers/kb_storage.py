@@ -239,14 +239,14 @@ class KnowledgeBaseStorage:
                         (seq_num, case_id),
                     )
 
-            # Store next available sequences in metadata
+            # Store next available sequences in metadata using MAX to preserve gaps
             cursor.execute(
-                "SELECT COUNT(*) + 1 FROM kb_articles WHERE display_id_seq IS NOT NULL"
+                "SELECT COALESCE(MAX(display_id_seq), 0) + 1 FROM kb_articles WHERE display_id_seq IS NOT NULL"
             )
             next_article_seq = cursor.fetchone()[0]
 
             cursor.execute(
-                "SELECT COUNT(*) + 1 FROM kb_cases WHERE display_id_seq IS NOT NULL"
+                "SELECT COALESCE(MAX(display_id_seq), 0) + 1 FROM kb_cases WHERE display_id_seq IS NOT NULL"
             )
             next_case_seq = cursor.fetchone()[0]
 
@@ -270,9 +270,9 @@ class KnowledgeBaseStorage:
         if row:
             seq_num = int(row[0])
         else:
-            # Fallback: count existing and add 1
-            cursor.execute("SELECT COUNT(*) FROM kb_articles")
-            seq_num = cursor.fetchone()[0] + 1
+            # Fallback: use MAX to preserve gaps after deletion
+            cursor.execute("SELECT COALESCE(MAX(display_id_seq), 0) + 1 FROM kb_articles")
+            seq_num = cursor.fetchone()[0]
 
         # Increment for next call
         cursor.execute(
@@ -288,9 +288,9 @@ class KnowledgeBaseStorage:
         if row:
             seq_num = int(row[0])
         else:
-            # Fallback: count existing and add 1
-            cursor.execute("SELECT COUNT(*) FROM kb_cases")
-            seq_num = cursor.fetchone()[0] + 1
+            # Fallback: use MAX to preserve gaps after deletion
+            cursor.execute("SELECT COALESCE(MAX(display_id_seq), 0) + 1 FROM kb_cases")
+            seq_num = cursor.fetchone()[0]
 
         # Increment for next call
         cursor.execute(

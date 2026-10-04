@@ -94,7 +94,8 @@ def build_kb_tab():
                 return (*article_fields(article_id), "edit", gr.update(visible=False), gr.update(visible=True), "")
 
             def render_page(query, page, selected=None):
-                articles = kb._search_engine.search_articles((query or "").strip(), limit=10000)
+                query = (query or "").strip()
+                articles = kb.search_articles(query, limit=10000) if query else kb.list_articles()
                 pages = max(1, (len(articles) + PAGE_SIZE - 1) // PAGE_SIZE)
                 page = max(1, min(page, pages))
                 table = render_search_articles_table(articles[(page - 1) * PAGE_SIZE:page * PAGE_SIZE], selected)[0]
