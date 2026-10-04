@@ -1,9 +1,15 @@
 """Tests for v0.22 API server."""
 
+import os
 import json
 import unittest
 from io import BytesIO
 from unittest.mock import Mock, patch
+
+# API server tests require complex HTTP mocking
+import pytest
+if os.getenv("LIGHT_EDITION"):
+    pytest.skip("API server not available in Light edition", allow_module_level=True)
 
 from analyzers.api_server import AnalysisHandler
 
