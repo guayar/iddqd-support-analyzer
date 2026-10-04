@@ -22,7 +22,7 @@ def build_kb_tab() -> Tuple:
     """
 
     with gr.Tab("Knowledge Base"):
-        with gr.Column(elem_classes=["psa-shell"]):
+        with gr.Column(elem_classes=["psa-shell"], scale=1):
             # Header
             gr.Markdown("""
             # Knowledge Base
@@ -89,6 +89,11 @@ def build_kb_tab() -> Tuple:
                                 "Create Article",
                                 variant="primary"
                             )
+                            create_article_status = gr.Textbox(
+                                label="Status",
+                                interactive=False,
+                                value="Ready to create"
+                            )
 
                         with gr.Tab("Cases"):
                             cases_list = gr.Dataframe(
@@ -117,6 +122,11 @@ def build_kb_tab() -> Tuple:
                             create_case_btn = gr.Button(
                                 "Create Case",
                                 variant="primary"
+                            )
+                            create_case_status = gr.Textbox(
+                                label="Status",
+                                interactive=False,
+                                value="Ready to create"
                             )
 
                 # ========================
@@ -592,8 +602,15 @@ Conflicts detected: {len(result['conflicts'])}"""
         outputs=[search_results_articles, search_results_cases],
     )
 
-    # Article list selection - load into editor
+    # Article list selection - load into editor (from All Knowledge tab)
     articles_list.select(
+        fn=load_article_for_edit,
+        outputs=[article_id_edit, article_title_edit, article_summary_edit,
+                 article_content_edit, article_tags_edit, article_findings_edit, article_history],
+    )
+
+    # Search results - load into editor (from Search Results tab)
+    search_results_articles.select(
         fn=load_article_for_edit,
         outputs=[article_id_edit, article_title_edit, article_summary_edit,
                  article_content_edit, article_tags_edit, article_findings_edit, article_history],
@@ -622,14 +639,21 @@ Conflicts detected: {len(result['conflicts'])}"""
     create_article_btn.click(
         fn=create_new_article,
         inputs=[new_article_title, new_article_tags, new_article_content],
-        outputs=[gr.Textbox(visible=False)],  # Just for success message
+        outputs=[create_article_status],
     ).then(
         fn=refresh_all_knowledge,
         outputs=[articles_count, cases_count, articles_list, cases_list],
     )
 
-    # Case list selection - load into editor
+    # Case list selection - load into editor (from All Knowledge tab)
     cases_list.select(
+        fn=load_case_for_edit,
+        outputs=[case_id_edit, case_title_edit, case_summary_edit,
+                 case_content_edit, case_tags_edit, case_related_articles],
+    )
+
+    # Search results cases - load into editor (from Search Results tab)
+    search_results_cases.select(
         fn=load_case_for_edit,
         outputs=[case_id_edit, case_title_edit, case_summary_edit,
                  case_content_edit, case_tags_edit, case_related_articles],
@@ -658,7 +682,7 @@ Conflicts detected: {len(result['conflicts'])}"""
     create_case_btn.click(
         fn=create_new_case,
         inputs=[new_case_title, new_case_tags, new_case_content],
-        outputs=[gr.Textbox(visible=False)],
+        outputs=[create_case_status],
     ).then(
         fn=refresh_all_knowledge,
         outputs=[articles_count, cases_count, articles_list, cases_list],
@@ -690,6 +714,8 @@ Conflicts detected: {len(result['conflicts'])}"""
         cases_count,
         articles_list,
         cases_list,
+        search_results_articles,
+        search_results_cases,
     )
 
 
