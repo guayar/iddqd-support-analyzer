@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements-core.txt .
 RUN pip install --no-cache-dir -r requirements-core.txt
 
-COPY app.py actions.py config.py modules.py reporting.py uploads.py kb_ui.py ./
+COPY app.py actions.py config.py modules.py reporting.py uploads.py kb_ui.py kb_rendering.py ./
 COPY VERSION ./
 COPY analyzers/*.py ./analyzers/
 
