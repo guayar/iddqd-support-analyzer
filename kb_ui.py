@@ -31,6 +31,7 @@ def build_kb_tab() -> Tuple:
     Returns:
         Tuple of state components for integration with main app
     """
+    print("[DEBUG] build_kb_tab() called")
 
     with gr.Tab("Knowledge Base"):
         # ========================
