@@ -309,6 +309,10 @@ def build_kb_tab() -> Tuple:
                         cases = results.get("cases", [])
                         articles = results.get("articles", [])
 
+                        # Store results in state for re-rendering after selection
+                        case_search_results.value = cases
+                        article_search_results.value = articles
+
                         cases_styled, _ = render_search_cases_table(cases, None)
                         articles_styled, _ = render_search_articles_table(articles, None)
 
@@ -333,6 +337,9 @@ def build_kb_tab() -> Tuple:
                             case = kb.get_case_by_display_id(display_id)
                             if not case:
                                 return "", "", "", "", "", None, None
+
+                            # Update selection state
+                            selected_case_id.value = case.id
 
                             # Get linked articles (PHASE 3)
                             linked_articles = kb.get_articles_for_case(case.id)
@@ -362,6 +369,9 @@ def build_kb_tab() -> Tuple:
                             article = kb.get_article_by_display_id(display_id)
                             if not article:
                                 return "", "", "", "", "", None, None
+
+                            # Update selection state
+                            selected_article_id.value = article.id
 
                             # Get linked cases (PHASE 3)
                             linked_cases = kb.get_cases_for_article(article.id)
@@ -406,12 +416,29 @@ def build_kb_tab() -> Tuple:
                         ]
                     )
 
+                    def reload_case_results():
+                        """Re-render case results with selection marker."""
+                        if selected_case_id.value and case_search_results.value:
+                            cases_rerendered, _ = render_search_cases_table(case_search_results.value, selected_case_id.value)
+                            return cases_rerendered
+                        return case_results_table
+
+                    def reload_article_results():
+                        """Re-render article results with selection marker."""
+                        if selected_article_id.value and article_search_results.value:
+                            articles_rerendered, _ = render_search_articles_table(article_search_results.value, selected_article_id.value)
+                            return articles_rerendered
+                        return article_results_table
+
                     case_results_table.select(
                         fn=load_case_view_full,
                         outputs=[
                             case_view_id, case_view_title, case_view_tags, case_view_summary, case_view_content,
                             case_linked_articles, selected_case_id
                         ]
+                    ).then(
+                        fn=reload_case_results,
+                        outputs=[case_results_table]
                     )
 
                     article_results_table.select(
@@ -420,6 +447,9 @@ def build_kb_tab() -> Tuple:
                             article_view_id, article_view_title, article_view_tags, article_view_summary, article_view_content,
                             article_linked_cases, selected_article_id
                         ]
+                    ).then(
+                        fn=reload_article_results,
+                        outputs=[article_results_table]
                     )
 
                     # Click linked item to navigate (PHASE 3)
