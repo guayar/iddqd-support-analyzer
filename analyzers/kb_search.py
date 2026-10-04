@@ -20,84 +20,28 @@ class KnowledgeBaseSearch:
         self.storage = storage
 
     def search_articles(self, query: str, limit: int = 20) -> List[Article]:
-        """Search Articles using FTS5.
+        """Search Articles using case-insensitive substring matching.
 
         Args:
-            query: Search query
+            query: Search query (partial text OK, case-insensitive)
             limit: Max results
 
         Returns:
             List of Articles matching query
         """
-        articles = []
-        db_path = self.storage.db_path
-
-        try:
-            with sqlite3.connect(db_path) as conn:
-                conn.row_factory = sqlite3.Row
-                cursor = conn.cursor()
-
-                # Search FTS table
-                cursor.execute(
-                    """
-                    SELECT rowid FROM kb_articles_fts
-                    WHERE kb_articles_fts MATCH ?
-                    ORDER BY rank
-                    LIMIT ?
-                    """,
-                    (query, limit),
-                )
-
-                for row in cursor.fetchall():
-                    article = self.storage.get_article(str(row[0]))
-                    if article and article.status == "active":
-                        articles.append(article)
-
-        except sqlite3.OperationalError:
-            # Fallback: simple substring search
-            articles = self._search_articles_simple(query, limit)
-
-        return articles
+        return self._search_articles_simple(query, limit)
 
     def search_cases(self, query: str, limit: int = 20) -> List[Case]:
-        """Search Cases using FTS5.
+        """Search Cases using case-insensitive substring matching.
 
         Args:
-            query: Search query
+            query: Search query (partial text OK, case-insensitive)
             limit: Max results
 
         Returns:
             List of Cases matching query
         """
-        cases = []
-        db_path = self.storage.db_path
-
-        try:
-            with sqlite3.connect(db_path) as conn:
-                conn.row_factory = sqlite3.Row
-                cursor = conn.cursor()
-
-                # Search FTS table
-                cursor.execute(
-                    """
-                    SELECT rowid FROM kb_cases_fts
-                    WHERE kb_cases_fts MATCH ?
-                    ORDER BY rank
-                    LIMIT ?
-                    """,
-                    (query, limit),
-                )
-
-                for row in cursor.fetchall():
-                    case = self.storage.get_case(str(row[0]))
-                    if case:
-                        cases.append(case)
-
-        except sqlite3.OperationalError:
-            # Fallback: simple substring search
-            cases = self._search_cases_simple(query, limit)
-
-        return cases
+        return self._search_cases_simple(query, limit)
 
     def search_by_tag(self, tag_name: str) -> Tuple[List[Article], List[Case]]:
         """Find Articles and Cases by tag.
