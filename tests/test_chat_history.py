@@ -1,6 +1,12 @@
 from __future__ import annotations
 
+import os
 from unittest.mock import patch
+
+# Skip entire test module in Light edition
+import pytest
+if os.getenv("LIGHT_EDITION"):
+    pytest.skip("Full edition only", allow_module_level=True)
 
 from chats import _history_messages, assistant_chat, assistant_system_prompt
 from websearch import history_text

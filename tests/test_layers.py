@@ -1,3 +1,8 @@
+import os
+import pytest
+if os.getenv("LIGHT_EDITION"):
+    pytest.skip("Full edition only", allow_module_level=True)
+
 from pathlib import Path
 import base64
 
