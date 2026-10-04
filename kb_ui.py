@@ -257,8 +257,10 @@ def build_kb_tab():
                         # Link management (PHASE 7)
                         gr.Markdown("#### Linked Articles")
                         case_edit_linked = gr.Dataframe(
-                            headers=["ID", "Title"],
+                            headers=["ID", "Title", "Remove"],
                             interactive=False,
+                            column_count=(3, "fixed"),
+                            elem_classes=["kb-link-table"],
                             label="Current Links"
                         )
 
@@ -270,6 +272,8 @@ def build_kb_tab():
                         case_edit_link_results = gr.Dataframe(
                             headers=["▶", "ID", "Title"],
                             interactive=False,
+                            column_count=(3, "fixed"),
+                            elem_classes=["kb-link-table"],
                             label="Search Results - click to select"
                         )
                         case_edit_link_btn = gr.Button("✓ Add Selected Link", variant="primary")
@@ -344,8 +348,10 @@ def build_kb_tab():
                         # Link management (PHASE 7)
                         gr.Markdown("#### Linked Cases")
                         article_edit_linked = gr.Dataframe(
-                            headers=["ID", "Title"],
+                            headers=["ID", "Title", "Remove"],
                             interactive=False,
+                            column_count=(3, "fixed"),
+                            elem_classes=["kb-link-table"],
                             label="Current Links"
                         )
 
@@ -357,6 +363,8 @@ def build_kb_tab():
                         article_edit_link_results = gr.Dataframe(
                             headers=["▶", "ID", "Title"],
                             interactive=False,
+                            column_count=(3, "fixed"),
+                            elem_classes=["kb-link-table"],
                             label="Search Results - click to select"
                         )
                         article_edit_link_btn = gr.Button("✓ Add Selected Link", variant="primary")
@@ -373,15 +381,11 @@ def build_kb_tab():
 
                     def perform_search(query: str):
                         if not query or not query.strip():
-                            return None, None, 0, 0, "1 / 1", "1 / 1", "", "", "", "", "", "", "", "", ""
+                            return None, None, 0, 0, "1 / 1", "1 / 1", "", "", "", "", "", "", "", "", "", "", [], [], None, None
 
                         results = kb.search(query.strip(), limit=1000)
                         cases = results.get("cases", [])
                         articles = results.get("articles", [])
-
-                        # Store results in state for re-rendering after selection
-                        case_search_results.value = cases
-                        article_search_results.value = articles
 
                         cases_styled, _ = render_search_cases_table(cases, None)
                         articles_styled, _ = render_search_articles_table(articles, None)
@@ -394,7 +398,8 @@ def build_kb_tab():
                             "1 / 1",
                             "1 / 1",
                             "", "", "", "", "",
-                            "", "", "", "", ""
+                            "", "", "", "", "",
+                            cases, articles, None, None
                         )
 
                     def load_case_view_full(evt: gr.SelectData):
@@ -409,9 +414,6 @@ def build_kb_tab():
                             case = kb.get_case_by_display_id(display_id)
                             if not case:
                                 return "", "", "", "", "", None, None
-
-                            # Update selection state
-                            selected_case_id.value = case.id
 
                             # Get linked articles (PHASE 3)
                             linked_articles = kb.get_articles_for_case(case.id)
@@ -442,9 +444,6 @@ def build_kb_tab():
                             article = kb.get_article_by_display_id(display_id)
                             if not article:
                                 return "", "", "", "", "", None, None
-
-                            # Update selection state
-                            selected_article_id.value = article.id
 
                             # Get linked cases (PHASE 3)
                             linked_cases = kb.get_cases_for_article(article.id)
@@ -485,23 +484,16 @@ def build_kb_tab():
                             cases_count_text, articles_count_text,
                             case_page_text, article_page_text,
                             case_view_id, case_view_title, case_view_tags, case_view_summary, case_view_content,
-                            article_view_id, article_view_title, article_view_tags, article_view_summary, article_view_content
+                            article_view_id, article_view_title, article_view_tags, article_view_summary, article_view_content,
+                            case_search_results, article_search_results, selected_case_id, selected_article_id
                         ]
                     )
 
-                    def reload_case_results():
-                        """Re-render case results with selection marker."""
-                        if selected_case_id.value and case_search_results.value:
-                            cases_rerendered, _ = render_search_cases_table(case_search_results.value, selected_case_id.value)
-                            return cases_rerendered
-                        return case_results_table
+                    def reload_case_results(case_id, cases):
+                        return render_search_cases_table(cases or [], case_id)[0]
 
-                    def reload_article_results():
-                        """Re-render article results with selection marker."""
-                        if selected_article_id.value and article_search_results.value:
-                            articles_rerendered, _ = render_search_articles_table(article_search_results.value, selected_article_id.value)
-                            return articles_rerendered
-                        return article_results_table
+                    def reload_article_results(article_id, articles):
+                        return render_search_articles_table(articles or [], article_id)[0]
 
                     case_results_table.select(
                         fn=load_case_view_full,
@@ -511,6 +503,7 @@ def build_kb_tab():
                         ]
                     ).then(
                         fn=reload_case_results,
+                        inputs=[selected_case_id, case_search_results],
                         outputs=[case_results_table]
                     )
 
@@ -522,6 +515,7 @@ def build_kb_tab():
                         ]
                     ).then(
                         fn=reload_article_results,
+                        inputs=[selected_article_id, article_search_results],
                         outputs=[article_results_table]
                     )
 
@@ -534,6 +528,7 @@ def build_kb_tab():
                         ]
                     ).then(
                         fn=reload_article_results,
+                        inputs=[selected_article_id, article_search_results],
                         outputs=[article_results_table]
                     )
 
@@ -545,6 +540,7 @@ def build_kb_tab():
                         ]
                     ).then(
                         fn=reload_case_results,
+                        inputs=[selected_case_id, case_search_results],
                         outputs=[case_results_table]
                     )
 
@@ -644,20 +640,20 @@ def build_kb_tab():
                     def search_articles_for_case(query: str):
                         """Search articles to link to case - with marker column (read-only)."""
                         if not query or not query.strip():
-                            return None
+                            return pd.DataFrame(columns=["▶", "ID", "Title"]), None
                         results = kb.search(query.strip(), limit=100)
                         articles = results.get("articles", [])
                         # Store results in state for later use
-                        case_edit_link_results_data = [articles]  # Store article objects
                         # Include marker column (empty initially)
                         data = [["", a.display_id, a.title] for a in articles]
                         df = pd.DataFrame(data, columns=["▶", "ID", "Title"]) if data else None
-                        return df
+                        return df, None
 
-                    def add_article_to_case(case_id, article_display_id):
+                    def add_article_to_case(case_id, selection):
                         """Link article to case - with duplicate prevention."""
-                        if not case_id or not article_display_id:
+                        if not case_id or not selection or selection[0] != case_id:
                             return "❌ Select case and article"
+                        article_display_id = selection[1]
                         try:
                             article = kb.get_article_by_display_id(article_display_id)
                             if not article:
@@ -681,28 +677,28 @@ def build_kb_tab():
                             article = kb.get_article_by_display_id(article_display_id)
                             if not article:
                                 return "❌ Article not found"
-                            kb.unlink_case_from_article(case_id, article.id)
-                            return f"✅ Unlinked {article_display_id}"
+                            removed = kb.unlink_case_from_article(case_id, article.id)
+                            return f"✅ Unlinked {article_display_id}" if removed else "ℹ️ Link was already removed"
                         except Exception as e:
                             return f"❌ Error: {str(e)}"
 
                     def search_cases_for_article(query: str):
                         """Search cases to link to article - with marker column (read-only)."""
                         if not query or not query.strip():
-                            return None
+                            return pd.DataFrame(columns=["▶", "ID", "Title"]), None
                         results = kb.search(query.strip(), limit=100)
                         cases = results.get("cases", [])
                         # Store results for later use
-                        article_edit_link_results_data = [cases]  # Store case objects
                         # Include marker column (empty initially)
                         data = [["", c.display_id, c.title] for c in cases]
                         df = pd.DataFrame(data, columns=["▶", "ID", "Title"]) if data else None
-                        return df
+                        return df, None
 
-                    def add_case_to_article(article_id, case_display_id):
+                    def add_case_to_article(article_id, selection):
                         """Link case to article - with duplicate prevention."""
-                        if not article_id or not case_display_id:
+                        if not article_id or not selection or selection[0] != article_id:
                             return "❌ Select article and case"
+                        case_display_id = selection[1]
                         try:
                             case = kb.get_case_by_display_id(case_display_id)
                             if not case:
@@ -726,8 +722,8 @@ def build_kb_tab():
                             case = kb.get_case_by_display_id(case_display_id)
                             if not case:
                                 return "❌ Case not found"
-                            kb.unlink_case_from_article(case.id, article_id)
-                            return f"✅ Unlinked {case_display_id}"
+                            removed = kb.unlink_case_from_article(case.id, article_id)
+                            return f"✅ Unlinked {case_display_id}" if removed else "ℹ️ Link was already removed"
                         except Exception as e:
                             return f"❌ Error: {str(e)}"
 
@@ -796,146 +792,65 @@ def build_kb_tab():
                                 article_view_id, article_view_id]
                     )
 
-                    # Wire link search and management (PHASE 7)
-                    def render_search_with_marker(articles, selected_id):
-                        """Render article search results with selection marker."""
-                        data = []
-                        for a in articles:
-                            marker = "▶" if a.id == selected_id else ""
-                            data.append([marker, a.display_id, a.title])
-                        return pd.DataFrame(data, columns=["▶", "ID", "Title"]) if data else None
+                    # Link events use session inputs and refresh only relationship tables.
+                    def clear_link_selection():
+                        return None, pd.DataFrame(columns=["▶", "ID", "Title"])
 
-                    def render_case_search_with_marker(cases, selected_id):
-                        """Render case search results with selection marker."""
-                        data = []
-                        for c in cases:
-                            marker = "▶" if c.id == selected_id else ""
-                            data.append([marker, c.display_id, c.title])
-                        return pd.DataFrame(data, columns=["▶", "ID", "Title"]) if data else None
+                    def select_link_result(parent_id, results_df, evt: gr.SelectData):
+                        if not parent_id or evt is None or not evt.selected or not evt.row_value:
+                            selected = None
+                        else:
+                            selected = evt.row_value[1] if len(evt.row_value) > 1 else None
+                        if not isinstance(results_df, pd.DataFrame):
+                            return None, pd.DataFrame(columns=["▶", "ID", "Title"])
+                        table = results_df.copy()
+                        if selected not in table["ID"].values:
+                            selected = None
+                        table["▶"] = ["▶" if selected == value else "" for value in table["ID"]]
+                        styled = table.style.apply(
+                            lambda row: ["background-color: #fff1cc" if row["ID"] == selected else ""] * len(row),
+                            axis=1)
+                        return (parent_id, selected) if selected else None, styled
 
-                    case_edit_link_search_btn.click(
-                        fn=search_articles_for_case,
-                        inputs=[case_edit_link_search],
-                        outputs=[case_edit_link_results]
-                    )
+                    def refresh_case_links(case_id):
+                        linked = kb.get_articles_for_case(case_id) if case_id else []
+                        return pd.DataFrame([[a.display_id, a.title, "✕"] for a in linked],
+                                            columns=["ID", "Title", "Remove"])
 
-                    def mark_selected_article(evt, results_df):
-                        """Show marker on selected article in search results."""
-                        if not evt or not evt.row_value or not isinstance(results_df, pd.DataFrame):
-                            return results_df
-                        selected_id = evt.row_value[1]
-                        # Re-create dataframe with marker on selected row
-                        data = []
-                        for _, row in results_df.iterrows():
-                            marker = "▶" if row["ID"] == selected_id else ""
-                            data.append([marker, row["ID"], row["Title"]])
-                        return pd.DataFrame(data, columns=["▶", "ID", "Title"])
+                    def refresh_article_links(article_id):
+                        linked = kb.get_cases_for_article(article_id) if article_id else []
+                        return pd.DataFrame([[c.display_id, c.title, "✕"] for c in linked],
+                                            columns=["ID", "Title", "Remove"])
 
-                    case_edit_link_results.select(
-                        fn=lambda evt: evt.row_value[1] if evt and evt.row_value and len(evt.row_value) > 1 else None,
-                        outputs=[case_edit_selected_link_id]
-                    ).then(
-                        fn=mark_selected_article,
-                        inputs=[case_edit_link_results],
-                        outputs=[case_edit_link_results]
-                    )
+                    def remove_article_link_handler(case_id, evt: gr.SelectData):
+                        if evt is None or not evt.selected or evt.index[1] != 2 or not evt.row_value:
+                            return gr.skip()
+                        return remove_article_from_case(case_id, evt.row_value[0])
 
-                    def remove_article_link_handler(evt):
-                        """Remove article link when clicking current links table."""
-                        if not evt or not evt.row_value or len(evt.row_value) < 1:
-                            return "❌ Select link to remove"
-                        # evt.row_value[0] = display_id (AN00000001)
-                        article_display_id = evt.row_value[0]
-                        case_id = selected_case_id.value  # Get UUID from state
-                        if not case_id:
-                            return "❌ Case ID not available"
-                        try:
-                            # Convert display_id to actual article UUID
-                            article = kb.get_article_by_display_id(article_display_id)
-                            if not article:
-                                return f"❌ Article {article_display_id} not found"
-                            # Call backend with correct UUIDs
-                            kb.unlink_case_from_article(case_id, article.id)
-                            return f"✅ Removed link to {article_display_id}"
-                        except Exception as e:
-                            return f"❌ Error: {str(e)}"
+                    def remove_case_link_handler(article_id, evt: gr.SelectData):
+                        if evt is None or not evt.selected or evt.index[1] != 2 or not evt.row_value:
+                            return gr.skip()
+                        return remove_case_from_article(article_id, evt.row_value[0])
 
-                    case_edit_linked.select(
-                        fn=remove_article_link_handler,
-                        outputs=[case_edit_status]
-                    ).then(
-                        fn=populate_case_edit,
-                        inputs=[selected_case_id],
-                        outputs=[case_edit_id, case_edit_title, case_edit_tags,
-                                case_edit_summary, case_edit_content, case_edit_linked,
-                                case_edit_link_search, case_edit_status]
-                    )
-
-                    case_edit_link_btn.click(
-                        fn=add_article_to_case,
-                        inputs=[selected_case_id, case_edit_selected_link_id],
-                        outputs=[case_edit_status]
-                    ).then(
-                        fn=populate_case_edit,
-                        inputs=[selected_case_id],
-                        outputs=[case_edit_id, case_edit_title, case_edit_tags,
-                                case_edit_summary, case_edit_content, case_edit_linked,
-                                case_edit_link_search, case_edit_status]
-                    )
-
-                    article_edit_link_search_btn.click(
-                        fn=search_cases_for_article,
-                        inputs=[article_edit_link_search],
-                        outputs=[article_edit_link_results]
-                    )
-
-                    article_edit_link_results.select(
-                        fn=lambda evt: evt.row_value[1] if evt and evt.row_value and len(evt.row_value) > 1 else None,
-                        outputs=[article_edit_selected_link_id]
-                    )
-
-                    def remove_case_link_handler(evt):
-                        """Remove case link when clicking current links table."""
-                        if not evt or not evt.row_value or len(evt.row_value) < 1:
-                            return "❌ Select link to remove"
-                        # evt.row_value[0] = display_id (CN00000001)
-                        case_display_id = evt.row_value[0]
-                        article_id = selected_article_id.value  # Get UUID from state
-                        if not article_id:
-                            return "❌ Article ID not available"
-                        try:
-                            # Convert display_id to actual case UUID
-                            case = kb.get_case_by_display_id(case_display_id)
-                            if not case:
-                                return f"❌ Case {case_display_id} not found"
-                            # Call backend with correct UUIDs
-                            kb.unlink_case_from_article(article_id, case.id)
-                            return f"✅ Removed link to {case_display_id}"
-                        except Exception as e:
-                            return f"❌ Error: {str(e)}"
-
-                    article_edit_linked.select(
-                        fn=remove_case_link_handler,
-                        outputs=[article_edit_status]
-                    ).then(
-                        fn=populate_article_edit,
-                        inputs=[selected_article_id],
-                        outputs=[article_edit_id, article_edit_title, article_edit_tags,
-                                article_edit_summary, article_edit_content, article_edit_linked,
-                                article_edit_link_search, article_edit_status]
-                    )
-
-                    article_edit_link_btn.click(
-                        fn=add_case_to_article,
-                        inputs=[selected_article_id, article_edit_selected_link_id],
-                        outputs=[article_edit_status]
-                    ).then(
-                        fn=populate_article_edit,
-                        inputs=[selected_article_id],
-                        outputs=[article_edit_id, article_edit_title, article_edit_tags,
-                                article_edit_summary, article_edit_content, article_edit_linked,
-                                article_edit_link_search, article_edit_status]
-                    )
+                    for parent, search_btn_link, query, results, selection, add_btn, add_fn, linked, remove_fn, refresh_fn, status, edit_btn_link in [
+                        (selected_case_id, case_edit_link_search_btn, case_edit_link_search,
+                         case_edit_link_results, case_edit_selected_link_id, case_edit_link_btn,
+                         add_article_to_case, case_edit_linked, remove_article_link_handler,
+                         refresh_case_links, case_edit_status, case_edit_btn),
+                        (selected_article_id, article_edit_link_search_btn, article_edit_link_search,
+                         article_edit_link_results, article_edit_selected_link_id, article_edit_link_btn,
+                         add_case_to_article, article_edit_linked, remove_case_link_handler,
+                         refresh_article_links, article_edit_status, article_edit_btn),
+                    ]:
+                        search_fn = search_articles_for_case if parent is selected_case_id else search_cases_for_article
+                        parent.change(fn=clear_link_selection, outputs=[selection, results])
+                        edit_btn_link.click(fn=clear_link_selection, outputs=[selection, results])
+                        search_btn_link.click(fn=search_fn, inputs=[query], outputs=[results, selection])
+                        results.select(fn=select_link_result, inputs=[parent, results], outputs=[selection, results])
+                        linked.select(fn=remove_fn, inputs=[parent], outputs=[status]).then(
+                            fn=refresh_fn, inputs=[parent], outputs=[linked])
+                        add_btn.click(fn=add_fn, inputs=[parent, selection], outputs=[status]).then(
+                            fn=refresh_fn, inputs=[parent], outputs=[linked])
 
                 # ========================
                 # 3. EXPORT / IMPORT TAB (PHASE 10 - placeholder)

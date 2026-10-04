@@ -812,7 +812,7 @@ class KnowledgeBaseStorage:
             )
             conn.commit()
 
-        return True
+        return cursor.rowcount > 0
 
     def get_cases_for_article(self, article_id: str) -> List[Case]:
         """Get all Cases linked to an Article (reverse lookup).
