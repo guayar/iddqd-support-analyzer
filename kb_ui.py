@@ -6,8 +6,15 @@ Builds the Knowledge Base tab with Articles, Cases, and Search.
 import gradio as gr
 from typing import Optional, Tuple, List
 import json
+import pandas as pd
 
 from analyzers.kb_actions import KnowledgeBaseActions
+from kb_rendering import (
+    render_articles_table,
+    render_cases_table,
+    render_search_articles_table,
+    render_search_cases_table,
+)
 
 
 # Initialize KB at module level
@@ -61,7 +68,7 @@ def build_kb_tab() -> Tuple:
                     with gr.Tabs():
                         with gr.Tab("Articles"):
                             articles_list = gr.Dataframe(
-                                headers=["ID", "Title", "Updated", "Tags"],
+                                headers=["Selected", "ID", "Title", "Updated", "Tags"],
                                 interactive=False,
                                 label="Articles",
                                 elem_classes=["kb-dataframe"],
@@ -97,7 +104,7 @@ def build_kb_tab() -> Tuple:
 
                         with gr.Tab("Cases"):
                             cases_list = gr.Dataframe(
-                                headers=["ID", "Title", "Created", "Tags"],
+                                headers=["Selected", "ID", "Title", "Created", "Tags"],
                                 interactive=False,
                                 label="Cases",
                                 elem_classes=["kb-dataframe"],
@@ -247,7 +254,7 @@ def build_kb_tab() -> Tuple:
                         search_btn = gr.Button("🔍 Search", scale=1, variant="primary")
 
                     search_results_articles = gr.Dataframe(
-                        headers=["ID", "Title", "Summary"],
+                        headers=["Selected", "ID", "Title", "Summary"],
                         interactive=False,
                         label="Articles Found",
                         elem_classes=["kb-dataframe"],
@@ -255,7 +262,7 @@ def build_kb_tab() -> Tuple:
                     )
 
                     search_results_cases = gr.Dataframe(
-                        headers=["ID", "Title", "Summary"],
+                        headers=["Selected", "ID", "Title", "Summary"],
                         interactive=False,
                         label="Cases Found",
                         elem_classes=["kb-dataframe"],
@@ -319,7 +326,7 @@ def build_kb_tab() -> Tuple:
     # ========================
 
     def refresh_all_knowledge():
-        """Refresh Articles and Cases lists (first 10 records)."""
+        """Refresh Articles and Cases lists (first 10 records) with current selection highlighting."""
         all_articles = kb.list_articles()
         all_cases = kb.list_cases()
 
@@ -329,73 +336,43 @@ def build_kb_tab() -> Tuple:
         total_articles = len(all_articles)
         total_cases = len(all_cases)
 
-        articles_data = [
-            [
-                a.display_id,
-                a.title,
-                a.updated_at.strftime("%Y-%m-%d") if a.updated_at else "—",
-                ", ".join(a.tags) if a.tags else "—",
-            ]
-            for a in articles
-        ]
+        articles_count_text = f"{len(articles)} of {total_articles}" if total_articles > 10 else f"{total_articles}"
+        cases_count_text = f"{len(cases)} of {total_cases}" if total_cases > 10 else f"{total_cases}"
 
-        cases_data = [
-            [
-                c.display_id,
-                c.title,
-                c.created_at.strftime("%Y-%m-%d") if c.created_at else "—",
-                ", ".join(c.tags) if c.tags else "—",
-            ]
-            for c in cases
-        ]
-
-        articles_count_text = f"{len(articles_data)} of {total_articles}" if total_articles > 10 else f"{total_articles}"
-        cases_count_text = f"{len(cases_data)} of {total_cases}" if total_cases > 10 else f"{total_cases}"
+        # Use render helpers to get styled dataframes with selection highlighting
+        articles_styled, _ = render_articles_table(articles, selected_article_id.value)
+        cases_styled, _ = render_cases_table(cases, selected_case_id.value)
 
         return (
             articles_count_text,
             cases_count_text,
-            articles_data if articles else [],
-            cases_data if cases else [],
+            articles_styled,
+            cases_styled,
         )
 
     def perform_search(query):
-        """Search KB."""
+        """Search KB and return styled dataframes with selection highlighting."""
         if not query:
-            return [], []
+            return pd.DataFrame(columns=["Selected", "ID", "Title", "Summary"]), pd.DataFrame(columns=["Selected", "ID", "Title", "Summary"])
 
         try:
-            result = kb.search(query, limit=10)  # Changed from 20 to 10 for pagination
+            result = kb.search(query, limit=10)
             articles = result["articles"]
             cases = result["cases"]
 
             print(f"Search query: '{query}'")
             print(f"Found {len(articles)} articles, {len(cases)} cases")
 
-            articles_data = [
-                [
-                    a.display_id,
-                    a.title,
-                    a.summary or (a.content[:100] + "..." if len(a.content) > 100 else a.content),
-                ]
-                for a in articles
-            ]
+            # Use render helpers to get styled dataframes with selection highlighting
+            articles_styled, _ = render_search_articles_table(articles, selected_article_id.value)
+            cases_styled, _ = render_search_cases_table(cases, selected_case_id.value)
 
-            cases_data = [
-                [
-                    c.display_id,
-                    c.title,
-                    c.summary or (c.content[:100] + "..." if len(c.content) > 100 else c.content),
-                ]
-                for c in cases
-            ]
-
-            return articles_data, cases_data
+            return articles_styled, cases_styled
         except Exception as e:
             print(f"Search error: {e}")
             import traceback
             traceback.print_exc()
-            return [], []
+            return pd.DataFrame(columns=["Selected", "ID", "Title", "Summary"]), pd.DataFrame(columns=["Selected", "ID", "Title", "Summary"])
 
     def create_new_article(title, tags_str, content):
         """Create new Article."""
@@ -485,14 +462,14 @@ Conflicts detected: {len(result['conflicts'])}"""
     def load_article_for_edit(evt: gr.SelectData):
         """Load selected article into editor.
 
-        Uses evt.row_value[0] (display ID) instead of row index
-        to correctly handle search results.
+        Uses evt.row_value[1] (display ID at index 1) instead of row index
+        to correctly handle search results. Index 0 is the selection marker.
         """
-        if evt is None or evt.row_value is None or len(evt.row_value) == 0:
+        if evt is None or evt.row_value is None or len(evt.row_value) < 2:
             return None, "", "", "", "", "", "", None
 
-        # Extract display ID from first column
-        display_id = evt.row_value[0]
+        # Extract display ID from second column (index 1, after selection marker at 0)
+        display_id = evt.row_value[1]
 
         # Resolve display ID to actual article
         article = kb.get_article_by_display_id(display_id)
@@ -568,14 +545,14 @@ Conflicts detected: {len(result['conflicts'])}"""
     def load_case_for_edit(evt: gr.SelectData):
         """Load selected case into editor.
 
-        Uses evt.row_value[0] (display ID) instead of row index
-        to correctly handle search results.
+        Uses evt.row_value[1] (display ID at index 1) instead of row index
+        to correctly handle search results. Index 0 is the selection marker.
         """
-        if evt is None or evt.row_value is None or len(evt.row_value) == 0:
+        if evt is None or evt.row_value is None or len(evt.row_value) < 2:
             return None, "", "", "", "", [], None
 
-        # Extract display ID from first column
-        display_id = evt.row_value[0]
+        # Extract display ID from second column (index 1, after selection marker at 0)
+        display_id = evt.row_value[1]
 
         # Resolve display ID to actual case
         case = kb.get_case_by_display_id(display_id)
@@ -639,6 +616,17 @@ Conflicts detected: {len(result['conflicts'])}"""
         except Exception as e:
             return f"❌ Error: {str(e)}"
 
+    def refresh_articles_display_only():
+        """Refresh Articles table to show current selection highlighting."""
+        all_articles = kb.list_articles()[:10]
+        articles_styled, _ = render_articles_table(all_articles, selected_article_id.value)
+        return articles_styled
+
+    def refresh_cases_display_only():
+        """Refresh Cases table to show current selection highlighting."""
+        all_cases = kb.list_cases()[:10]
+        cases_styled, _ = render_cases_table(all_cases, selected_case_id.value)
+        return cases_styled
 
     # Wire handlers
     search_btn.click(
@@ -653,6 +641,9 @@ Conflicts detected: {len(result['conflicts'])}"""
         outputs=[article_id_edit, article_title_edit, article_summary_edit,
                  article_content_edit, article_tags_edit, article_findings_edit, article_history,
                  selected_article_id],
+    ).then(
+        fn=refresh_articles_display_only,
+        outputs=[articles_list],
     )
 
     # Search results - load into editor (from Search Results tab)
@@ -661,6 +652,9 @@ Conflicts detected: {len(result['conflicts'])}"""
         outputs=[article_id_edit, article_title_edit, article_summary_edit,
                  article_content_edit, article_tags_edit, article_findings_edit, article_history,
                  selected_article_id],
+    ).then(
+        fn=refresh_articles_display_only,
+        outputs=[articles_list],
     )
 
     # Save and delete article
@@ -701,6 +695,9 @@ Conflicts detected: {len(result['conflicts'])}"""
         fn=load_case_for_edit,
         outputs=[case_id_edit, case_title_edit, case_summary_edit,
                  case_content_edit, case_tags_edit, case_related_articles, selected_case_id],
+    ).then(
+        fn=refresh_cases_display_only,
+        outputs=[cases_list],
     )
 
     # Search results cases - load into editor (from Search Results tab)
@@ -708,6 +705,9 @@ Conflicts detected: {len(result['conflicts'])}"""
         fn=load_case_for_edit,
         outputs=[case_id_edit, case_title_edit, case_summary_edit,
                  case_content_edit, case_tags_edit, case_related_articles, selected_case_id],
+    ).then(
+        fn=refresh_cases_display_only,
+        outputs=[cases_list],
     )
 
     # Save and delete case
