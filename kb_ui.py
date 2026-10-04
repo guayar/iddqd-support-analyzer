@@ -560,12 +560,12 @@ def build_kb_tab():
                     # ========================
 
                     def toggle_case_edit():
-                        """Switch to edit mode for case."""
-                        return "edit"
+                        """Switch to edit mode for case - show edit, hide view."""
+                        return "edit", gr.update(visible=False), gr.update(visible=True)
 
                     def toggle_case_view():
-                        """Switch back to view mode for case."""
-                        return "view"
+                        """Switch back to view mode for case - show view, hide edit."""
+                        return "view", gr.update(visible=True), gr.update(visible=False)
 
                     def populate_case_edit(case_id):
                         """Populate edit form with case data."""
@@ -596,12 +596,12 @@ def build_kb_tab():
                             return f"❌ Error: {str(e)}", "view"
 
                     def toggle_article_edit():
-                        """Switch to edit mode for article."""
-                        return "edit"
+                        """Switch to edit mode for article - show edit, hide view."""
+                        return "edit", gr.update(visible=False), gr.update(visible=True)
 
                     def toggle_article_view():
-                        """Switch back to view mode for article."""
-                        return "view"
+                        """Switch back to view mode for article - show view, hide edit."""
+                        return "view", gr.update(visible=True), gr.update(visible=False)
 
                     def populate_article_edit(article_id):
                         """Populate edit form with article data."""
@@ -708,7 +708,7 @@ def build_kb_tab():
                     # Wire edit mode toggle
                     case_edit_btn.click(
                         fn=toggle_case_edit,
-                        outputs=[case_view_mode]
+                        outputs=[case_view_mode, case_view_group, case_edit_group]
                     ).then(
                         fn=populate_case_edit,
                         inputs=[selected_case_id],
@@ -719,7 +719,7 @@ def build_kb_tab():
 
                     case_edit_cancel_btn.click(
                         fn=toggle_case_view,
-                        outputs=[case_view_mode]
+                        outputs=[case_view_mode, case_view_group, case_edit_group]
                     )
 
                     case_edit_save_btn.click(
@@ -727,6 +727,9 @@ def build_kb_tab():
                         inputs=[case_edit_id, case_edit_title, case_edit_tags,
                                case_edit_summary, case_edit_content],
                         outputs=[case_edit_status, case_view_mode]
+                    ).then(
+                        fn=toggle_case_view,
+                        outputs=[case_view_mode, case_view_group, case_edit_group]
                     ).then(
                         fn=populate_case_edit,
                         inputs=[selected_case_id],
@@ -737,7 +740,7 @@ def build_kb_tab():
 
                     article_edit_btn.click(
                         fn=toggle_article_edit,
-                        outputs=[article_view_mode]
+                        outputs=[article_view_mode, article_view_group, article_edit_group]
                     ).then(
                         fn=populate_article_edit,
                         inputs=[selected_article_id],
@@ -748,7 +751,7 @@ def build_kb_tab():
 
                     article_edit_cancel_btn.click(
                         fn=toggle_article_view,
-                        outputs=[article_view_mode]
+                        outputs=[article_view_mode, article_view_group, article_edit_group]
                     )
 
                     article_edit_save_btn.click(
@@ -756,6 +759,9 @@ def build_kb_tab():
                         inputs=[article_edit_id, article_edit_title, article_edit_tags,
                                article_edit_summary, article_edit_content],
                         outputs=[article_edit_status, article_view_mode]
+                    ).then(
+                        fn=toggle_article_view,
+                        outputs=[article_view_mode, article_view_group, article_edit_group]
                     ).then(
                         fn=populate_article_edit,
                         inputs=[selected_article_id],
