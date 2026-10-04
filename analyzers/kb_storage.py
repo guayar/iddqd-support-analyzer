@@ -170,6 +170,34 @@ class KnowledgeBaseStorage:
             """)
             conn.commit()
 
+    def _get_article_seq(self, cursor, article_id: str) -> int:
+        """Get sequential display ID for article (1-based position by created_at)."""
+        cursor.execute(
+            """
+            SELECT COUNT(*) + 1 FROM kb_articles
+            WHERE status = 'active' AND created_at <= (
+                SELECT created_at FROM kb_articles WHERE id = ?
+            )
+            """,
+            (article_id,),
+        )
+        result = cursor.fetchone()
+        return result[0] if result else 1
+
+    def _get_case_seq(self, cursor, case_id: str) -> int:
+        """Get sequential display ID for case (1-based position by created_at)."""
+        cursor.execute(
+            """
+            SELECT COUNT(*) + 1 FROM kb_cases
+            WHERE created_at <= (
+                SELECT created_at FROM kb_cases WHERE id = ?
+            )
+            """,
+            (case_id,),
+        )
+        result = cursor.fetchone()
+        return result[0] if result else 1
+
     # ========================
     # ARTICLES
     # ========================
@@ -274,6 +302,9 @@ class KnowledgeBaseStorage:
             )
             related_ids = [r[0] for r in cursor.fetchall()]
 
+            # Get sequential display ID
+            display_id_seq = self._get_article_seq(cursor, article_id)
+
             return Article(
                 id=row["id"],
                 title=row["title"],
@@ -285,6 +316,7 @@ class KnowledgeBaseStorage:
                 tags=tags,
                 finding_codes=finding_codes,
                 related_article_ids=related_ids,
+                display_id_seq=display_id_seq,
             )
 
     def update_article(
@@ -467,6 +499,9 @@ class KnowledgeBaseStorage:
             if row["analyze_snapshot"]:
                 analyze_snapshot = json.loads(row["analyze_snapshot"])
 
+            # Get sequential display ID
+            display_id_seq = self._get_case_seq(cursor, case_id)
+
             return Case(
                 id=row["id"],
                 title=row["title"],
@@ -477,6 +512,7 @@ class KnowledgeBaseStorage:
                 updated_at=datetime.fromisoformat(row["updated_at"]),
                 tags=tags,
                 related_article_ids=related_ids,
+                display_id_seq=display_id_seq,
             )
 
     def update_case(

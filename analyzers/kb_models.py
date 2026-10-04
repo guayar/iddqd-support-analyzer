@@ -23,15 +23,12 @@ class Article:
     tags: List[str] = field(default_factory=list)
     finding_codes: List[str] = field(default_factory=list)  # JWT_KID_NOT_FOUND, etc
     related_article_ids: List[str] = field(default_factory=list)
+    display_id_seq: int = 0  # Sequential ID for display
 
     @property
     def display_id(self) -> str:
-        """Return friendly display ID (AN00000001 format) from UUID."""
-        if self.id.startswith("AN"):
-            return self.id
-        # Generate from hash of UUID for consistent display
-        hash_val = abs(hash(self.id)) % 100000000
-        return f"AN{hash_val:08d}"
+        """Return friendly sequential display ID (AN00000001 format)."""
+        return f"AN{self.display_id_seq:08d}"
 
     def to_dict(self):
         """Convert to dict, handling datetime serialization."""
@@ -66,15 +63,12 @@ class Case:
     updated_at: Optional[datetime] = None
     tags: List[str] = field(default_factory=list)
     related_article_ids: List[str] = field(default_factory=list)
+    display_id_seq: int = 0  # Sequential ID for display
 
     @property
     def display_id(self) -> str:
-        """Return friendly display ID (CN00000001 format) from UUID."""
-        if self.id.startswith("CN"):
-            return self.id
-        # Generate from hash of UUID for consistent display
-        hash_val = abs(hash(self.id)) % 100000000
-        return f"CN{hash_val:08d}"
+        """Return friendly sequential display ID (CN00000001 format)."""
+        return f"CN{self.display_id_seq:08d}"
 
     def to_dict(self):
         """Convert to dict."""
