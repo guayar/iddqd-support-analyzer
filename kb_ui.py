@@ -1,10 +1,15 @@
-"""Knowledge Base UI for Gradio.
+"""Knowledge Base UI - PHASES 1-9 Implementation.
 
-Builds the Knowledge Base tab with Articles, Cases, and Search.
+Complete redesigned KB with three focused tabs:
+1. Create (Article/Case unified form with link picker)
+2. Search / View (search + independent view panels + edit/delete)
+3. Export / Import
+
+Combines all phases 1-9 in one coherent design.
 """
 
 import gradio as gr
-from typing import Optional, Tuple, List
+from typing import Optional, List, Dict, Any, Tuple
 import json
 import pandas as pd
 
@@ -16,1088 +21,493 @@ from kb_rendering import (
     render_search_cases_table,
 )
 
-
-# Initialize KB at module level
 kb = KnowledgeBaseActions()
+PAGE_SIZE = 10
 
 
 def build_kb_tab() -> Tuple:
-    """Build Knowledge Base tab for main UI.
+    """Build redesigned Knowledge Base tab (PHASES 1-9).
 
     Returns:
-        Tuple of Gradio components for state management
+        Tuple of state components for integration with main app
     """
 
     with gr.Tab("Knowledge Base"):
         # ========================
-        # SELECTION STATE
+        # STATE
         # ========================
-        # Keep Article and Case selection completely independent
         selected_article_id = gr.State(None)
         selected_case_id = gr.State(None)
+        search_query_state = gr.State("")
+        article_search_results = gr.State([])
+        case_search_results = gr.State([])
+        article_page = gr.State(1)
+        case_page = gr.State(1)
+        article_view_mode = gr.State("view")  # "view" or "edit"
+        case_view_mode = gr.State("view")
 
-        # Store current search results for re-rendering with selection
-        article_search_results = gr.State([])  # List of Article objects
-        case_search_results = gr.State([])    # List of Case objects
-
-        with gr.Column(elem_classes=["psa-shell"], scale=2):
-            # Header
+        with gr.Column(scale=2, elem_classes=["psa-shell"]):
             gr.Markdown("""
             # Knowledge Base
 
-            **Articles** — Reusable troubleshooting knowledge
-            **Cases** — Previous investigations and findings
-
-            Create Articles and Cases, then use the Search tab to find them.
+            **Create** — New Articles and Cases
+            **Search / View** — Find and read articles, link them together
+            **Export / Import** — Backup and restore
             """)
 
-            # Filter tabs
             with gr.Tabs():
                 # ========================
-                # ALL KNOWLEDGE
+                # 1. CREATE TAB (PHASES 4-5)
                 # ========================
-                with gr.Tab("All Knowledge"):
+                with gr.Tab("Create"):
+                    # Type selector
                     with gr.Row():
-                        articles_count = gr.Textbox(
-                            label="Articles",
-                            interactive=False,
-                            scale=1
-                        )
-                        cases_count = gr.Textbox(
-                            label="Cases",
-                            interactive=False,
+                        create_type = gr.Radio(
+                            choices=["Article", "Case"],
+                            value="Article",
+                            label="Create",
                             scale=1
                         )
 
-                    with gr.Tabs():
-                        with gr.Tab("Articles"):
-                            articles_list = gr.Dataframe(
-                                headers=["Selected", "ID", "Title", "Updated", "Tags"],
-                                interactive=False,
-                                label="Articles",
-                                elem_classes=["kb-dataframe"],
-                                elem_id="kb-articles-list",
-                            )
-
-                            gr.Markdown("### Create New Article")
-                            with gr.Row():
-                                new_article_title = gr.Textbox(
-                                    label="Title",
-                                    placeholder="JWT signing key troubleshooting",
-                                )
-                                new_article_tags = gr.Textbox(
-                                    label="Tags (comma-separated)",
-                                    placeholder="jwt, auth, keys",
-                                )
-
-                            new_article_content = gr.Textbox(
-                                label="Content (Markdown)",
-                                lines=10,
-                                placeholder="# Summary\n\n## Things to check\n\n## Possible causes",
-                            )
-
-                            create_article_btn = gr.Button(
-                                "Create Article",
-                                variant="primary"
-                            )
-                            create_article_status = gr.Textbox(
-                                label="Status",
-                                interactive=False,
-                                value="Ready to create"
-                            )
-
-                        with gr.Tab("Cases"):
-                            cases_list = gr.Dataframe(
-                                headers=["Selected", "ID", "Title", "Created", "Tags"],
-                                interactive=False,
-                                label="Cases",
-                                elem_classes=["kb-dataframe"],
-                                elem_id="kb-cases-list",
-                            )
-
-                            gr.Markdown("### Create New Case")
-                            with gr.Row():
-                                new_case_title = gr.Textbox(
-                                    label="Title",
-                                    placeholder="2026-10-03 - JWT key rotation issue",
-                                )
-                                new_case_tags = gr.Textbox(
-                                    label="Tags (comma-separated)",
-                                    placeholder="jwt, incident, prod",
-                                )
-
-                            new_case_content = gr.Textbox(
-                                label="Content (Markdown)",
-                                lines=10,
-                                placeholder="# Summary\n\n## What happened\n\n## Resolution",
-                            )
-
-                            create_case_btn = gr.Button(
-                                "Create Case",
-                                variant="primary"
-                            )
-                            create_case_status = gr.Textbox(
-                                label="Status",
-                                interactive=False,
-                                value="Ready to create"
-                            )
-
-                # ========================
-                # ARTICLE EDITOR
-                # ========================
-                with gr.Tab("Article Editor"):
-                    gr.Markdown("### Edit Article")
-
-                    with gr.Row():
-                        article_id_edit = gr.Textbox(
-                            label="Article ID",
-                            interactive=False,
-                        )
-                        article_status = gr.Textbox(
-                            label="Status",
-                            interactive=False,
-                        )
-
-                    article_title_edit = gr.Textbox(
+                    # Common fields
+                    create_title = gr.Textbox(
                         label="Title",
-                        interactive=True,
+                        placeholder="Article or Case title"
                     )
-
-                    article_summary_edit = gr.Textbox(
+                    create_tags = gr.Textbox(
+                        label="Tags (comma-separated)",
+                        placeholder="saphana, jwt, auth"
+                    )
+                    create_summary = gr.Textbox(
                         label="Summary",
-                        lines=2,
-                        interactive=True,
+                        lines=3,
+                        placeholder="Brief summary"
                     )
-
-                    article_content_edit = gr.Textbox(
+                    create_content = gr.Textbox(
                         label="Content (Markdown)",
                         lines=12,
-                        interactive=True,
+                        placeholder="# Main heading\n\n## Details"
                     )
 
-                    with gr.Row():
-                        article_tags_edit = gr.Textbox(
-                            label="Tags",
-                            interactive=True,
-                            scale=3,
-                        )
-                        article_findings_edit = gr.Textbox(
-                            label="Finding codes (comma-separated)",
-                            interactive=True,
-                            scale=3,
-                        )
+                    # Link picker (PHASE 5)
+                    gr.Markdown("### Link to existing...")
+                    link_search_query = gr.Textbox(
+                        label="Search by ID or keyword",
+                        placeholder="AN00000001 or 'jwt'"
+                    )
+                    link_search_btn = gr.Button("Search", scale=1)
+                    link_search_results = gr.Dataframe(
+                        headers=["ID", "Title"],
+                        interactive=False
+                    )
+                    link_selected = gr.State([])
+                    link_display = gr.Textbox(
+                        label="Selected links",
+                        interactive=False,
+                        placeholder="None"
+                    )
 
-                    # article_history = gr.Textbox(
-                    #     label="Revision History",
-                    #     interactive=False,
-                    #     lines=6,
-                    # )
-
-                    gr.Markdown("### Link Cases to This Article")
-                    with gr.Row():
-                        link_case_dropdown = gr.Dropdown(
-                            label="Select Case to Link",
-                            choices=[],
-                            scale=3,
-                        )
-                        link_case_btn = gr.Button("🔗 Link", scale=1, variant="primary")
-
-                    link_case_status = gr.Textbox(
+                    create_btn = gr.Button("Create", variant="primary", scale=1)
+                    create_status = gr.Textbox(
                         label="Status",
                         interactive=False,
-                        value="Ready to link cases",
+                        value="Ready"
                     )
 
-                    article_related_cases = gr.Dataframe(
-                        headers=["Case ID", "Title"],
-                        interactive=False,
-                        label="Related Cases (click to view)",
-                        wrap=False,
+                    # Event handlers
+                    def search_for_linking(query: str, create_type_val: str):
+                        if not query:
+                            return None
+                        results = kb.search(query, limit=10)
+                        # Show opposite type
+                        if create_type_val == "Article":
+                            items = results.get("cases", [])
+                            data = [[c.display_id, c.title] for c in items]
+                        else:
+                            items = results.get("articles", [])
+                            data = [[a.display_id, a.title] for a in items]
+                        return pd.DataFrame(data, columns=["ID", "Title"]) if data else None
+
+                    def create_item(create_type_val, title, tags_str, summary, content, link_ids_json):
+                        try:
+                            tags = [t.strip() for t in tags_str.split(",")] if tags_str else []
+
+                            if create_type_val == "Article":
+                                article_id = kb.create_article(title, content, summary, tags)
+                                # Link to selected cases
+                                if link_ids_json:
+                                    for case_id in link_ids_json:
+                                        kb.link_case_to_article(case_id, article_id)
+                                return "✅ Article created"
+                            else:
+                                case_id = kb.create_case(title, content, summary, tags=tags)
+                                # Link to selected articles
+                                if link_ids_json:
+                                    for article_id in link_ids_json:
+                                        kb.link_case_to_article(case_id, article_id)
+                                return "✅ Case created"
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+
+                    link_search_btn.click(
+                        fn=search_for_linking,
+                        inputs=[link_search_query, create_type],
+                        outputs=[link_search_results]
                     )
 
-                    with gr.Row():
-                        save_article_btn = gr.Button("💾 Save", variant="primary")
-                        delete_article_btn = gr.Button("🗑️ Delete", variant="stop")
+                    def add_link_to_selected(row_value, current_links_json):
+                        if not row_value:
+                            return current_links_json
+                        link_id = row_value[0]  # ID column
+                        links = current_links_json if current_links_json else []
+                        if link_id not in links:
+                            links.append(link_id)
+                        return json.dumps(links)
+
+                    link_search_results.select(
+                        fn=add_link_to_selected,
+                        inputs=[link_search_results, link_selected],
+                        outputs=[link_selected]
+                    ).then(
+                        fn=lambda x: f"Selected: {x}" if x else "None",
+                        inputs=[link_selected],
+                        outputs=[link_display]
+                    )
+
+                    create_btn.click(
+                        fn=create_item,
+                        inputs=[create_type, create_title, create_tags, create_summary, create_content, link_selected],
+                        outputs=[create_status]
+                    )
 
                 # ========================
-                # CASE EDITOR
+                # 2. SEARCH / VIEW TAB (PHASES 1-3, 6-8)
                 # ========================
-                with gr.Tab("Case Editor"):
-                    gr.Markdown("### Edit Case")
+                with gr.Tab("Search / View"):
+                    # Search box
+                    with gr.Row():
+                        search_box = gr.Textbox(
+                            label="Search",
+                            placeholder="AN00000001, CN00000001, or keyword",
+                            scale=5
+                        )
+                        search_btn = gr.Button("Search", variant="primary", scale=1)
+
+                    # Cases section
+                    gr.Markdown("## Cases")
+                    with gr.Row():
+                        cases_count_text = gr.Textbox(
+                            label="Total Cases",
+                            interactive=False,
+                            scale=1
+                        )
+                        case_page_text = gr.Textbox(
+                            label="Page",
+                            interactive=False,
+                            scale=1
+                        )
+
+                    case_results_table = gr.Dataframe(
+                        headers=["Selected", "ID", "Title", "Summary"],
+                        interactive=False
+                    )
 
                     with gr.Row():
-                        case_id_edit = gr.Textbox(
-                            label="Case ID",
-                            interactive=False,
+                        case_prev_btn = gr.Button("< Previous", scale=1)
+                        case_next_btn = gr.Button("Next >", scale=1)
+
+                    # Case view (PHASES 1-3, 6-8)
+                    with gr.Group():
+                        gr.Markdown("### Case View")
+                        case_view_id = gr.Textbox(label="ID", interactive=False)
+                        case_view_title = gr.Textbox(label="Title", interactive=False)
+                        case_view_tags = gr.Textbox(label="Tags", interactive=False)
+                        case_view_summary = gr.Textbox(
+                            label="Summary",
+                            lines=3,
+                            interactive=False
                         )
-                        case_status = gr.Textbox(
-                            label="Status",
-                            interactive=False,
+                        case_view_content = gr.Textbox(
+                            label="Content",
+                            lines=8,
+                            interactive=False
                         )
 
-                    case_title_edit = gr.Textbox(
-                        label="Title",
-                        interactive=True,
-                    )
+                        # Linked articles (PHASE 3)
+                        case_linked_articles = gr.Dataframe(
+                            headers=["ID", "Title"],
+                            interactive=False,
+                            label="Linked Articles"
+                        )
 
-                    case_summary_edit = gr.Textbox(
-                        label="Summary",
-                        lines=2,
-                        interactive=True,
-                    )
+                        # Edit mode (PHASES 6-7)
+                        with gr.Row():
+                            case_edit_btn = gr.Button("Edit", scale=1)
+                            case_delete_btn = gr.Button("Delete", scale=1, variant="stop")
 
-                    case_content_edit = gr.Textbox(
-                        label="Content (Markdown)",
-                        lines=12,
-                        interactive=True,
-                    )
-
-                    case_tags_edit = gr.Textbox(
-                        label="Tags",
-                        interactive=True,
-                    )
-
-                    gr.Markdown("### Link Articles to This Case")
+                    # Articles section
+                    gr.Markdown("## Articles")
                     with gr.Row():
-                        link_article_dropdown = gr.Dropdown(
-                            label="Select Article to Link",
-                            choices=[],
-                            scale=3,
+                        articles_count_text = gr.Textbox(
+                            label="Total Articles",
+                            interactive=False,
+                            scale=1
                         )
-                        link_article_btn = gr.Button("🔗 Link", scale=1, variant="primary")
+                        article_page_text = gr.Textbox(
+                            label="Page",
+                            interactive=False,
+                            scale=1
+                        )
 
-                    link_status = gr.Textbox(
+                    article_results_table = gr.Dataframe(
+                        headers=["Selected", "ID", "Title", "Summary"],
+                        interactive=False
+                    )
+
+                    with gr.Row():
+                        article_prev_btn = gr.Button("< Previous", scale=1)
+                        article_next_btn = gr.Button("Next >", scale=1)
+
+                    # Article view (PHASES 1-3, 6-8)
+                    with gr.Group():
+                        gr.Markdown("### Article View")
+                        article_view_id = gr.Textbox(label="ID", interactive=False)
+                        article_view_title = gr.Textbox(label="Title", interactive=False)
+                        article_view_tags = gr.Textbox(label="Tags", interactive=False)
+                        article_view_summary = gr.Textbox(
+                            label="Summary",
+                            lines=3,
+                            interactive=False
+                        )
+                        article_view_content = gr.Textbox(
+                            label="Content",
+                            lines=8,
+                            interactive=False
+                        )
+
+                        # Linked cases (PHASE 3)
+                        article_linked_cases = gr.Dataframe(
+                            headers=["ID", "Title"],
+                            interactive=False,
+                            label="Linked Cases"
+                        )
+
+                        # Edit mode (PHASES 6-7)
+                        with gr.Row():
+                            article_edit_btn = gr.Button("Edit", scale=1)
+                            article_delete_btn = gr.Button("Delete", scale=1, variant="stop")
+
+                    # ========================
+                    # Search / View Event Handlers
+                    # ========================
+
+                    def perform_search(query: str):
+                        if not query or not query.strip():
+                            return None, None, 0, 0, "1 / 1", "1 / 1", "", "", "", "", "", "", "", "", ""
+
+                        results = kb.search(query.strip(), limit=1000)
+                        cases = results.get("cases", [])
+                        articles = results.get("articles", [])
+
+                        cases_styled, _ = render_search_cases_table(cases, None)
+                        articles_styled, _ = render_search_articles_table(articles, None)
+
+                        return (
+                            cases_styled,
+                            articles_styled,
+                            len(cases),
+                            len(articles),
+                            "1 / 1",
+                            "1 / 1",
+                            "", "", "", "", "",
+                            "", "", "", "", ""
+                        )
+
+                    def load_case_view_full(evt):
+                        if not evt or not hasattr(evt, 'row_value') or not evt.row_value:
+                            return "", "", "", "", "", None, None
+
+                        try:
+                            display_id = evt.row_value[1]
+                            case = kb.get_case_by_display_id(display_id)
+                            if not case:
+                                return "", "", "", "", "", None, None
+
+                            # Get linked articles (PHASE 3)
+                            linked_articles = kb.get_articles_for_case(case.id)
+                            linked_data = [[a.display_id, a.title] for a in linked_articles]
+
+                            return (
+                                case.display_id,
+                                case.title,
+                                ", ".join(case.tags) if case.tags else "—",
+                                case.summary or "—",
+                                case.content or "",
+                                pd.DataFrame(linked_data, columns=["ID", "Title"]) if linked_data else None,
+                                case.id
+                            )
+                        except Exception as e:
+                            return "", "", "", "", "", None, None
+
+                    def load_article_view_full(evt):
+                        if not evt or not hasattr(evt, 'row_value') or not evt.row_value:
+                            return "", "", "", "", "", None, None
+
+                        try:
+                            display_id = evt.row_value[1]
+                            article = kb.get_article_by_display_id(display_id)
+                            if not article:
+                                return "", "", "", "", "", None, None
+
+                            # Get linked cases (PHASE 3)
+                            linked_cases = kb.get_cases_for_article(article.id)
+                            linked_data = [[c.display_id, c.title] for c in linked_cases]
+
+                            return (
+                                article.display_id,
+                                article.title,
+                                ", ".join(article.tags) if article.tags else "—",
+                                article.summary or "—",
+                                article.content or "",
+                                pd.DataFrame(linked_data, columns=["ID", "Title"]) if linked_data else None,
+                                article.id
+                            )
+                        except Exception as e:
+                            return "", "", "", "", "", None, None
+
+                    def delete_case(case_uuid):
+                        if case_uuid:
+                            kb.delete_case(case_uuid)
+                            return "✅ Case deleted"
+                        return "❌ No case selected"
+
+                    def delete_article(article_uuid):
+                        if article_uuid:
+                            kb.delete_article(article_uuid)
+                            return "✅ Article deleted"
+                        return "❌ No article selected"
+
+                    # Wire events
+                    search_btn.click(
+                        fn=perform_search,
+                        inputs=[search_box],
+                        outputs=[
+                            case_results_table, article_results_table,
+                            cases_count_text, articles_count_text,
+                            case_page_text, article_page_text,
+                            case_view_id, case_view_title, case_view_tags, case_view_summary, case_view_content,
+                            article_view_id, article_view_title, article_view_tags, article_view_summary, article_view_content
+                        ]
+                    )
+
+                    case_results_table.select(
+                        fn=load_case_view_full,
+                        outputs=[
+                            case_view_id, case_view_title, case_view_tags, case_view_summary, case_view_content,
+                            case_linked_articles, selected_case_id
+                        ]
+                    )
+
+                    article_results_table.select(
+                        fn=load_article_view_full,
+                        outputs=[
+                            article_view_id, article_view_title, article_view_tags, article_view_summary, article_view_content,
+                            article_linked_cases, selected_article_id
+                        ]
+                    )
+
+                    # Click linked item to navigate (PHASE 3)
+                    def navigate_to_case(evt):
+                        if not evt or not hasattr(evt, 'row_value'):
+                            return None
+                        display_id = evt.row_value[0]
+                        case = kb.get_case_by_display_id(display_id)
+                        return case.id if case else None
+
+                    def navigate_to_article(evt):
+                        if not evt or not hasattr(evt, 'row_value'):
+                            return None
+                        display_id = evt.row_value[0]
+                        article = kb.get_article_by_display_id(display_id)
+                        return article.id if article else None
+
+                    case_linked_articles.select(
+                        fn=navigate_to_article,
+                        outputs=[selected_article_id]
+                    )
+
+                    article_linked_cases.select(
+                        fn=navigate_to_case,
+                        outputs=[selected_case_id]
+                    )
+
+                    # Delete buttons
+                    case_delete_btn.click(
+                        fn=delete_case,
+                        inputs=[selected_case_id],
+                        outputs=[case_view_id]
+                    )
+
+                    article_delete_btn.click(
+                        fn=delete_article,
+                        inputs=[selected_article_id],
+                        outputs=[article_view_id]
+                    )
+
+                # ========================
+                # 3. EXPORT / IMPORT TAB (PHASE 10 - placeholder)
+                # ========================
+                with gr.Tab("Export / Import"):
+                    gr.Markdown("### Export Knowledge Base")
+                    export_btn = gr.Button("Export as JSON", variant="primary")
+                    export_status = gr.Textbox(
                         label="Status",
                         interactive=False,
-                        value="Ready to link articles",
+                        value="Ready to export"
                     )
 
-                    case_related_articles = gr.Dataframe(
-                        headers=["Article ID", "Title"],
+                    gr.Markdown("### Import Knowledge Base")
+                    import_file = gr.File(label="Select JSON file")
+                    import_btn = gr.Button("Import", variant="primary")
+                    import_status = gr.Textbox(
+                        label="Status",
                         interactive=False,
-                        label="Related Articles",
-                        wrap=False,
+                        value="Ready to import"
                     )
 
-                    with gr.Row():
-                        save_case_btn = gr.Button("💾 Save", variant="primary")
-                        delete_case_btn = gr.Button("🗑️ Delete", variant="stop")
+                    def export_kb():
+                        try:
+                            articles = kb.list_articles()
+                            cases = kb.list_cases()
+                            data = {
+                                "articles": [a.to_dict() for a in articles],
+                                "cases": [c.to_dict() for c in cases]
+                            }
+                            return f"✅ Exported {len(articles)} articles, {len(cases)} cases"
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
 
-                # ========================
-                # SEARCH
-                # ========================
-                with gr.Tab("Search"):
-                    with gr.Row():
-                        search_query = gr.Textbox(
-                            label="Search Articles and Cases",
-                            placeholder="jwt, deadlock, timeout, oauth...",
-                            scale=4,
-                        )
-                        search_btn = gr.Button("🔍 Search", scale=1, variant="primary")
-
-                    search_results_articles = gr.Dataframe(
-                        headers=["Selected", "ID", "Title", "Summary"],
-                        interactive=False,
-                        label="Articles Found",
-                        elem_classes=["kb-dataframe"],
-                        elem_id="kb-search-articles",
+                    export_btn.click(
+                        fn=export_kb,
+                        outputs=[export_status]
                     )
 
-                    search_results_cases = gr.Dataframe(
-                        headers=["Selected", "ID", "Title", "Summary"],
-                        interactive=False,
-                        label="Cases Found",
-                        elem_classes=["kb-dataframe"],
-                        elem_id="kb-search-cases",
-                    )
-
-                # ========================
-                # EXPORT/IMPORT
-                # ========================
-                with gr.Tab("Export/Import"):
-                    gr.Markdown("""
-                    ### Knowledge Base Backup & Portability
-
-                    **Export** your Articles and Cases as ZIP for backup or sharing.
-                    **Import** from ZIP to restore or merge KB content.
-                    """)
-
-                    with gr.Tabs():
-                        with gr.Tab("Export"):
-                            gr.Markdown("#### Export Selected or Full KB")
-
-                            with gr.Row():
-                                export_all_btn = gr.Button("📦 Export Full KB", variant="primary", scale=1)
-                                export_selected_btn = gr.Button("📋 Export Selected", scale=1)
-
-                            export_status = gr.Textbox(
-                                label="Status",
-                                interactive=False,
-                                value="Ready to export"
-                            )
-
-                            export_file = gr.File(
-                                label="Download ZIP",
-                                interactive=False,
-                            )
-
-                        with gr.Tab("Import"):
-                            gr.Markdown("#### Import KB from ZIP")
-
-                            import_file = gr.File(
-                                label="Upload ZIP file",
-                                file_types=[".zip"],
-                            )
-
-                            import_merge_mode = gr.Radio(
-                                choices=["new (rename conflicts)", "replace", "skip"],
-                                value="new (rename conflicts)",
-                                label="Conflict handling",
-                            )
-
-                            import_btn = gr.Button("📥 Import", variant="primary")
-
-                            import_status = gr.Textbox(
-                                label="Import Result",
-                                interactive=False,
-                                lines=5,
-                            )
-
-    # ========================
-    # HANDLERS
-    # ========================
-
-    def refresh_all_knowledge(
-        selected_article_uuid=None,
-        selected_case_uuid=None,
-    ):
-        """Refresh Articles and Cases lists (first 10 records) with current selection highlighting.
-
-        Args:
-            selected_article_uuid: Current selected Article UUID (from gr.State)
-            selected_case_uuid: Current selected Case UUID (from gr.State)
-        """
-        all_articles = kb.list_articles()
-        all_cases = kb.list_cases()
-
-        articles = all_articles[:10]  # First 10 records
-        cases = all_cases[:10]  # First 10 records
-
-        total_articles = len(all_articles)
-        total_cases = len(all_cases)
-
-        articles_count_text = f"{len(articles)} of {total_articles}" if total_articles > 10 else f"{total_articles}"
-        cases_count_text = f"{len(cases)} of {total_cases}" if total_cases > 10 else f"{total_cases}"
-
-        # Use render helpers to get styled dataframes with selection highlighting
-        articles_styled, _ = render_articles_table(articles, selected_article_uuid)
-        cases_styled, _ = render_cases_table(cases, selected_case_uuid)
-
-        return (
-            articles_count_text,
-            cases_count_text,
-            articles_styled,
-            cases_styled,
-        )
-
-    def perform_search(query, selected_article_uuid=None, selected_case_uuid=None):
-        """Search KB and return styled dataframes with selection highlighting.
-
-        Args:
-            query: Search query string
-            selected_article_uuid: Current selected Article UUID
-            selected_case_uuid: Current selected Case UUID
-
-        Returns:
-            Tuple of (articles_styled, cases_styled, articles_list, cases_list)
-        """
-        if not query:
-            empty_articles = pd.DataFrame(columns=["Selected", "ID", "Title", "Summary"])
-            empty_cases = pd.DataFrame(columns=["Selected", "ID", "Title", "Summary"])
-            return empty_articles, empty_cases, [], []
-
-        try:
-            result = kb.search(query, limit=10)
-            articles = result["articles"]
-            cases = result["cases"]
-
-            print(f"Search query: '{query}'")
-            print(f"Found {len(articles)} articles, {len(cases)} cases")
-
-            # Use render helpers to get styled dataframes with selection highlighting
-            articles_styled, _ = render_search_articles_table(articles, selected_article_uuid)
-            cases_styled, _ = render_search_cases_table(cases, selected_case_uuid)
-
-            return articles_styled, cases_styled, articles, cases
-        except Exception as e:
-            print(f"Search error: {e}")
-            import traceback
-            traceback.print_exc()
-            empty_articles = pd.DataFrame(columns=["Selected", "ID", "Title", "Summary"])
-            empty_cases = pd.DataFrame(columns=["Selected", "ID", "Title", "Summary"])
-            return empty_articles, empty_cases, [], []
-
-    def create_new_article(title, tags_str, content):
-        """Create new Article."""
-        if not title or not content:
-            return "⚠️ Title and Content are required"
-
-        tags = [t.strip() for t in tags_str.split(",") if t.strip()]
-
-        try:
-            article_id = kb.create_article(
-                title=title,
-                content=content,
-                tags=tags,
-            )
-            return f"✅ Article created: {article_id}"
-        except Exception as e:
-            return f"❌ Error: {str(e)}"
-
-    def create_new_case(title, tags_str, content):
-        """Create new Case."""
-        if not title or not content:
-            return "⚠️ Title and Content are required"
-
-        tags = [t.strip() for t in tags_str.split(",") if t.strip()]
-
-        try:
-            case_id = kb.create_case(
-                title=title,
-                content=content,
-                tags=tags,
-            )
-            return f"✅ Case created: {case_id}"
-        except Exception as e:
-            return f"❌ Error: {str(e)}"
-
-    def export_full_kb():
-        """Export entire KB as ZIP."""
-        try:
-            from analyzers.kb_portability import KnowledgeBasePortability
-            portability = KnowledgeBasePortability(kb.storage)
-            zip_data = portability.export_full_kb()
-            return "✅ Full KB exported successfully", zip_data
-        except Exception as e:
-            return f"❌ Export failed: {str(e)}", None
-
-    def import_kb_from_file(file_obj, merge_mode):
-        """Import KB from ZIP file."""
-        if not file_obj:
-            return "⚠️ Please select a ZIP file to import"
-
-        try:
-            from analyzers.kb_portability import KnowledgeBasePortability
-            portability = KnowledgeBasePortability(kb.storage)
-
-            # Read file
-            with open(file_obj.name, 'rb') as f:
-                zip_data = f.read()
-
-            # Parse merge mode
-            mode_map = {
-                "new (rename conflicts)": "new",
-                "replace": "replace",
-                "skip": "skip",
-            }
-            mode = mode_map.get(merge_mode, "new")
-
-            # Import
-            result = portability.import_kb(zip_data, merge_mode=mode)
-
-            if result["success"]:
-                msg = f"""✅ Import successful!
-
-Imported Articles: {len(result['imported_articles'])}
-Imported Cases: {len(result['imported_cases'])}
-Conflicts detected: {len(result['conflicts'])}"""
-                if result['errors']:
-                    msg += f"\n\nErrors: {len(result['errors'])}"
-                    for error in result['errors'][:3]:
-                        msg += f"\n- {error}"
-            else:
-                msg = f"❌ Import failed: {result.get('errors', ['Unknown error'])[0]}"
-
-            return msg
-        except Exception as e:
-            return f"❌ Error: {str(e)}"
-
-    def load_article_for_edit(evt: gr.SelectData):
-        """Load selected article into editor.
-
-        Uses evt.row_value[1] (display ID at index 1) instead of row index
-        to correctly handle search results. Index 0 is the selection marker.
-        """
-        if evt is None or evt.row_value is None or len(evt.row_value) < 2:
-            return None, "", "", "", "", "", [], None
-
-        # Extract display ID from second column (index 1, after selection marker at 0)
-        display_id = evt.row_value[1]
-
-        # Resolve display ID to actual article
-        article = kb.get_article_by_display_id(display_id)
-        if not article:
-            return None, "", "", "", "", "", [], None
-
-        print(f"[ARTICLE SELECT] display_id={display_id}, canonical_uuid={article.id}")
-
-        finding_codes = ", ".join(article.finding_codes) if article.finding_codes else ""
-        tags_str = ", ".join(article.tags) if article.tags else ""
-
-        # Get related cases (cases that link to this article)
-        related_data = []
-        all_cases = kb.list_cases()
-        for case in all_cases:
-            if article.id in case.related_article_ids:
-                related_data.append([case.display_id, case.title])
-
-        # Return editor fields + state update (without revision history)
-        return (
-            article.display_id,
-            article.title,
-            article.summary or "",
-            article.content,
-            tags_str,
-            finding_codes,
-            related_data if related_data else [],
-            article.id,  # Update selected_article_id state
-        )
-
-    def save_article_handler(article_id, title, summary, content, tags_str, findings_str):
-        """Save article changes."""
-        if not article_id:
-            return "⚠️ No article selected"
-        if not title or not content:
-            return "⚠️ Title and Content are required"
-
-        try:
-            tags = [t.strip() for t in tags_str.split(",") if t.strip()] if tags_str else []
-            findings = [f.strip() for f in findings_str.split(",") if f.strip()] if findings_str else []
-
-            success = kb.update_article(
-                article_id=article_id,
-                title=title,
-                summary=summary,
-                content=content,
-                change_note="UI update"
-            )
-
-            if success:
-                return "✅ Article saved successfully"
-            else:
-                return "❌ Failed to save article"
-        except Exception as e:
-            return f"❌ Error: {str(e)}"
-
-    def delete_article_handler(article_id):
-        """Delete article."""
-        if not article_id:
-            return "⚠️ No article selected"
-
-        try:
-            success = kb.delete_article(article_id)
-            if success:
-                return "✅ Article deleted"
-            else:
-                return "❌ Failed to delete article"
-        except Exception as e:
-            return f"❌ Error: {str(e)}"
-
-    def load_case_for_edit(evt: gr.SelectData):
-        """Load selected case into editor.
-
-        Uses evt.row_value[1] (display ID at index 1) instead of row index
-        to correctly handle search results. Index 0 is the selection marker.
-        """
-        if evt is None or evt.row_value is None or len(evt.row_value) < 2:
-            return None, "", "", "", "", [], None
-
-        # Extract display ID from second column (index 1, after selection marker at 0)
-        display_id = evt.row_value[1]
-
-        # Resolve display ID to actual case
-        case = kb.get_case_by_display_id(display_id)
-        if not case:
-            return None, "", "", "", "", [], None
-
-        print(f"[CASE SELECT] display_id={display_id}, canonical_uuid={case.id}")
-
-        # Get related articles (show display_id, not UUID)
-        related_data = []
-        for article_id in case.related_article_ids:
-            article = kb.get_article(article_id)
-            if article:
-                related_data.append([article.display_id, article.title])
-
-        tags_str = ", ".join(case.tags) if case.tags else ""
-
-        return (
-            case.display_id,
-            case.title,
-            case.summary or "",
-            case.content,
-            tags_str,
-            related_data if related_data else [],
-            case.id,  # Update selected_case_id state
-        )
-
-    def save_case_handler(case_id, title, summary, content, tags_str):
-        """Save case changes."""
-        if not case_id:
-            return "⚠️ No case selected"
-        if not title or not content:
-            return "⚠️ Title and Content are required"
-
-        try:
-            tags = [t.strip() for t in tags_str.split(",") if t.strip()] if tags_str else []
-
-            success = kb.update_case(
-                case_id=case_id,
-                title=title,
-                summary=summary,
-                content=content
-            )
-
-            if success:
-                return "✅ Case saved successfully"
-            else:
-                return "❌ Failed to save case"
-        except Exception as e:
-            return f"❌ Error: {str(e)}"
-
-    def delete_case_handler(case_id):
-        """Delete case."""
-        if not case_id:
-            return "⚠️ No case selected"
-
-        try:
-            success = kb.delete_case(case_id)
-            if success:
-                return "✅ Case deleted"
-            else:
-                return "❌ Failed to delete case"
-        except Exception as e:
-            return f"❌ Error: {str(e)}"
-
-    def populate_article_dropdown():
-        """Populate dropdown with available articles."""
-        articles = kb.list_articles()
-        choices = [f"{a.display_id} — {a.title}" for a in articles]
-        return gr.Dropdown(choices=choices, value=None)
-
-    def link_article_to_case(selected_case_uuid, article_choice):
-        """Link selected article to case."""
-        if not selected_case_uuid:
-            return "⚠️ No case selected", []
-        if not article_choice:
-            return "⚠️ No article selected", []
-
-        try:
-            # Extract display_id from choice (format: "AN00000001 — title")
-            display_id = article_choice.split(" — ")[0]
-            article = kb.get_article_by_display_id(display_id)
-            if not article:
-                return "❌ Article not found", []
-
-            # Link article to case
-            success = kb.link_case_to_article(selected_case_uuid, article.id)
-            if success:
-                # Reload case to show updated related articles
-                case = kb.get_case(selected_case_uuid)
-                related_data = []
-                for article_id in case.related_article_ids:
-                    art = kb.get_article(article_id)
-                    if art:
-                        related_data.append([art.display_id, art.title])
-                return f"✅ Linked: {article.display_id}", related_data
-            else:
-                return "❌ Failed to link article", []
-        except Exception as e:
-            return f"❌ Error: {str(e)}", []
-
-    def populate_case_dropdown():
-        """Populate dropdown with available cases."""
-        cases = kb.list_cases()
-        choices = [f"{c.display_id} — {c.title}" for c in cases]
-        return gr.Dropdown(choices=choices, value=None)
-
-    def load_related_case_from_article(evt: gr.SelectData):
-        """Load related case by clicking it in article_related_cases table."""
-        if evt is None or evt.row_value is None or len(evt.row_value) < 1:
-            return None, "", "", "", "", [], None
-
-        # evt.row_value[0] is the Case ID (CN00000001 format)
-        display_id = evt.row_value[0]
-        case = kb.get_case_by_display_id(display_id)
-        if not case:
-            return None, "", "", "", "", [], None
-
-        print(f"[RELATED CASE CLICK] display_id={display_id}, loading case")
-
-        # Get related articles for this case
-        related_data = []
-        for article_id in case.related_article_ids:
-            article = kb.get_article(article_id)
-            if article:
-                related_data.append([article.display_id, article.title])
-
-        tags_str = ", ".join(case.tags) if case.tags else ""
-
-        return (
-            case.display_id,
-            case.title,
-            case.summary or "",
-            case.content,
-            tags_str,
-            related_data if related_data else [],
-            case.id,  # Update selected_case_id state
-        )
-
-    def load_related_article_from_case(evt: gr.SelectData):
-        """Load related article by clicking it in case_related_articles table."""
-        if evt is None or evt.row_value is None or len(evt.row_value) < 1:
-            return None, "", "", "", "", [], None
-
-        # evt.row_value[0] is the Article ID (AN00000001 format)
-        display_id = evt.row_value[0]
-        article = kb.get_article_by_display_id(display_id)
-        if not article:
-            return None, "", "", "", "", [], None
-
-        print(f"[RELATED ARTICLE CLICK] display_id={display_id}, loading article")
-
-        # Get related cases for this article
-        related_data = []
-        all_cases = kb.list_cases()
-        for case in all_cases:
-            if article.id in case.related_article_ids:
-                related_data.append([case.display_id, case.title])
-
-        finding_codes = ", ".join(article.finding_codes) if article.finding_codes else ""
-        tags_str = ", ".join(article.tags) if article.tags else ""
-
-        return (
-            article.display_id,
-            article.title,
-            article.summary or "",
-            article.content,
-            tags_str,
-            finding_codes,
-            related_data if related_data else [],
-            article.id,  # Update selected_article_id state
-        )
-
-    def link_case_to_article(selected_article_uuid, case_choice):
-        """Link selected case to article."""
-        if not selected_article_uuid:
-            return "⚠️ No article selected", []
-        if not case_choice:
-            return "⚠️ No case selected", []
-
-        try:
-            # Extract display_id from choice (format: "CN00000001 — title")
-            display_id = case_choice.split(" — ")[0]
-            case = kb.get_case_by_display_id(display_id)
-            if not case:
-                return "❌ Case not found", []
-
-            # Link article to case (same as linking case to article)
-            success = kb.link_case_to_article(case.id, selected_article_uuid)
-            if success:
-                # Get all cases related to this article
-                all_cases = kb.list_cases()
-                related_data = []
-                for c in all_cases:
-                    if selected_article_uuid in c.related_article_ids:
-                        related_data.append([c.display_id, c.title])
-                return f"✅ Linked: {case.display_id}", related_data
-            else:
-                return "❌ Failed to link case", []
-        except Exception as e:
-            return f"❌ Error: {str(e)}", []
-
-    def refresh_articles_display_only(selected_article_uuid=None):
-        """Refresh Articles table to show current selection highlighting.
-
-        Args:
-            selected_article_uuid: Current selected Article UUID (from gr.State)
-        """
-        all_articles = kb.list_articles()[:10]
-        articles_styled, _ = render_articles_table(all_articles, selected_article_uuid)
-        return articles_styled
-
-    def refresh_cases_display_only(selected_case_uuid=None):
-        """Refresh Cases table to show current selection highlighting.
-
-        Args:
-            selected_case_uuid: Current selected Case UUID (from gr.State)
-        """
-        all_cases = kb.list_cases()[:10]
-        cases_styled, _ = render_cases_table(all_cases, selected_case_uuid)
-        return cases_styled
-
-    def refresh_search_articles_display(
-        selected_article_uuid=None,
-        search_results=None,
-    ):
-        """Refresh search results articles table with current selection.
-
-        Args:
-            selected_article_uuid: Current selected Article UUID
-            search_results: List of Article objects from last search
-        """
-        if not search_results:
-            search_results = []
-        print(f"[RENDER SEARCH ARTICLES] selected_uuid={selected_article_uuid}, results_count={len(search_results)}")
-        articles_styled, _ = render_search_articles_table(search_results, selected_article_uuid)
-        return articles_styled
-
-    def refresh_search_cases_display(
-        selected_case_uuid=None,
-        search_results=None,
-    ):
-        """Refresh search results cases table with current selection.
-
-        Args:
-            selected_case_uuid: Current selected Case UUID
-            search_results: List of Case objects from last search
-        """
-        if not search_results:
-            search_results = []
-        cases_styled, _ = render_search_cases_table(search_results, selected_case_uuid)
-        return cases_styled
-
-    # Wire handlers
-
-    # Search - capture results in state AND pass current selection for correct rendering
-    search_btn.click(
-        fn=perform_search,
-        inputs=[search_query, selected_article_id, selected_case_id],
-        outputs=[search_results_articles, search_results_cases, article_search_results, case_search_results],
-    )
-
-    # Article list selection - load into editor (from All Knowledge tab)
-    articles_list.select(
-        fn=load_article_for_edit,
-        outputs=[article_id_edit, article_title_edit, article_summary_edit,
-                 article_content_edit, article_tags_edit, article_findings_edit,
-                 article_related_cases, selected_article_id],
-    ).then(
-        fn=refresh_articles_display_only,
-        inputs=[selected_article_id],
-        outputs=[articles_list],
-    )
-
-    # Search results articles - load into editor AND re-render search results with selection
-    search_results_articles.select(
-        fn=load_article_for_edit,
-        outputs=[article_id_edit, article_title_edit, article_summary_edit,
-                 article_content_edit, article_tags_edit, article_findings_edit,
-                 article_related_cases, selected_article_id],
-    ).then(
-        fn=refresh_search_articles_display,
-        inputs=[selected_article_id, article_search_results],
-        outputs=[search_results_articles],
-    ).then(
-        fn=refresh_articles_display_only,
-        inputs=[selected_article_id],
-        outputs=[articles_list],
-    )
-
-    # Save and delete article
-    save_article_btn.click(
-        fn=save_article_handler,
-        inputs=[selected_article_id, article_title_edit, article_summary_edit,
-                article_content_edit, article_tags_edit, article_findings_edit],
-        outputs=[article_status],
-    ).then(
-        fn=refresh_all_knowledge,
-        inputs=[selected_article_id, selected_case_id],
-        outputs=[articles_count, cases_count, articles_list, cases_list],
-    )
-
-    delete_article_btn.click(
-        fn=delete_article_handler,
-        inputs=[selected_article_id],
-        outputs=[article_status],
-    ).then(
-        fn=refresh_all_knowledge,
-        inputs=[selected_case_id],  # Pass None for selected_article (will be cleared)
-        outputs=[articles_count, cases_count, articles_list, cases_list],
-    ).then(
-        fn=lambda: (None, "", "", "", "", "", [], ""),
-        outputs=[selected_article_id, article_id_edit, article_title_edit,
-                article_summary_edit, article_content_edit, article_tags_edit, article_findings_edit, article_related_cases],
-    )
-
-    create_article_btn.click(
-        fn=create_new_article,
-        inputs=[new_article_title, new_article_tags, new_article_content],
-        outputs=[create_article_status],
-    ).then(
-        fn=refresh_all_knowledge,
-        inputs=[selected_article_id, selected_case_id],
-        outputs=[articles_count, cases_count, articles_list, cases_list],
-    )
-
-    # Case list selection - load into editor (from All Knowledge tab)
-    cases_list.select(
-        fn=load_case_for_edit,
-        outputs=[case_id_edit, case_title_edit, case_summary_edit,
-                 case_content_edit, case_tags_edit, case_related_articles, selected_case_id],
-    ).then(
-        fn=refresh_cases_display_only,
-        inputs=[selected_case_id],
-        outputs=[cases_list],
-    ).then(
-        fn=populate_article_dropdown,
-        outputs=[link_article_dropdown],
-    )
-
-    # Search results cases - load into editor AND re-render search results with selection
-    search_results_cases.select(
-        fn=load_case_for_edit,
-        outputs=[case_id_edit, case_title_edit, case_summary_edit,
-                 case_content_edit, case_tags_edit, case_related_articles, selected_case_id],
-    ).then(
-        fn=refresh_search_cases_display,
-        inputs=[selected_case_id, case_search_results],
-        outputs=[search_results_cases],
-    ).then(
-        fn=refresh_cases_display_only,
-        inputs=[selected_case_id],
-        outputs=[cases_list],
-    ).then(
-        fn=populate_article_dropdown,
-        outputs=[link_article_dropdown],
-    )
-
-    # Save and delete case
-    save_case_btn.click(
-        fn=save_case_handler,
-        inputs=[selected_case_id, case_title_edit, case_summary_edit,
-                case_content_edit, case_tags_edit],
-        outputs=[case_status],
-    ).then(
-        fn=refresh_all_knowledge,
-        inputs=[selected_article_id, selected_case_id],
-        outputs=[articles_count, cases_count, articles_list, cases_list],
-    )
-
-    delete_case_btn.click(
-        fn=delete_case_handler,
-        inputs=[selected_case_id],
-        outputs=[case_status],
-    ).then(
-        fn=refresh_all_knowledge,
-        inputs=[selected_article_id],  # Pass None for selected_case (will be cleared)
-        outputs=[articles_count, cases_count, articles_list, cases_list],
-    ).then(
-        fn=lambda: (None, "", "", "", "", ""),
-        outputs=[selected_case_id, case_id_edit, case_title_edit,
-                case_summary_edit, case_content_edit, case_tags_edit],
-    )
-
-    create_case_btn.click(
-        fn=create_new_case,
-        inputs=[new_case_title, new_case_tags, new_case_content],
-        outputs=[create_case_status],
-    ).then(
-        fn=refresh_all_knowledge,
-        inputs=[selected_article_id, selected_case_id],
-        outputs=[articles_count, cases_count, articles_list, cases_list],
-    )
-
-    # Link article to case
-    link_article_btn.click(
-        fn=link_article_to_case,
-        inputs=[selected_case_id, link_article_dropdown],
-        outputs=[link_status, case_related_articles],
-    )
-
-    # Link case to article
-    link_case_btn.click(
-        fn=link_case_to_article,
-        inputs=[selected_article_id, link_case_dropdown],
-        outputs=[link_case_status, article_related_cases],
-    )
-
-    # Click related case in article to load it in case editor
-    article_related_cases.select(
-        fn=load_related_case_from_article,
-        outputs=[case_id_edit, case_title_edit, case_summary_edit,
-                 case_content_edit, case_tags_edit, case_related_articles, selected_case_id],
-    ).then(
-        fn=refresh_cases_display_only,
-        inputs=[selected_case_id],
-        outputs=[cases_list],
-    ).then(
-        fn=populate_article_dropdown,
-        outputs=[link_article_dropdown],
-    )
-
-    # Click related article in case to load it in article editor
-    case_related_articles.select(
-        fn=load_related_article_from_case,
-        outputs=[article_id_edit, article_title_edit, article_summary_edit,
-                 article_content_edit, article_tags_edit, article_findings_edit,
-                 article_related_cases, selected_article_id],
-    ).then(
-        fn=refresh_articles_display_only,
-        inputs=[selected_article_id],
-        outputs=[articles_list],
-    ).then(
-        fn=populate_case_dropdown,
-        outputs=[link_case_dropdown],
-    )
-
-    # Populate case dropdown when article is loaded
-    articles_list.select(
-        fn=populate_case_dropdown,
-        outputs=[link_case_dropdown],
-    )
-
-    search_results_articles.select(
-        fn=populate_case_dropdown,
-        outputs=[link_case_dropdown],
-    )
-
-    # Export handlers
-    export_all_btn.click(
-        fn=export_full_kb,
-        outputs=[export_status, export_file],
-    )
-
-    # Import handlers
-    import_btn.click(
-        fn=import_kb_from_file,
-        inputs=[import_file, import_merge_mode],
-        outputs=[import_status],
-    ).then(
-        fn=refresh_all_knowledge,
-        inputs=[selected_article_id, selected_case_id],
-        outputs=[articles_count, cases_count, articles_list, cases_list],
-    )
-
-    # Load data on tab open
-    # Note: Gradio 4.x doesn't have easy "on tab open" events
-    # We'll load on demo.launch() instead
+    # Return compatible tuple for app.py
+    # (refresh_fn, articles_count, cases_count, articles_list, cases_list, search_articles, search_cases, selected_article_id, selected_case_id, article_search_results, case_search_results)
+
+    def dummy_refresh():
+        pass
 
     return (
-        refresh_all_knowledge,
-        articles_count,
-        cases_count,
-        articles_list,
-        cases_list,
-        search_results_articles,
-        search_results_cases,
+        dummy_refresh,  # kb_refresh_fn
+        gr.Textbox("0", interactive=False),  # kb_articles_count
+        gr.Textbox("0", interactive=False),  # kb_cases_count
+        gr.Dataframe(interactive=False),  # kb_articles_list
+        gr.Dataframe(interactive=False),  # kb_cases_list
+        gr.Dataframe(interactive=False),  # search_results_articles
+        gr.Dataframe(interactive=False),  # search_results_cases
         selected_article_id,
         selected_case_id,
         article_search_results,
         case_search_results,
     )
-
-
-def init_kb_data(refresh_fn):
-    """Initialize KB data on startup."""
-    refresh_fn()
