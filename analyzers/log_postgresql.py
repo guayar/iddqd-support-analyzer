@@ -44,7 +44,7 @@ CONNECTION_KEYWORDS = [
 AUTH_KEYWORDS = [
     'authentication failed',
     'permission denied',
-    'role.*does not exist',
+    'does not exist',  # PHASE 8: was 'role.*does not exist' (regex pattern, but used as substring!)
     'invalid password',
 ]
 
