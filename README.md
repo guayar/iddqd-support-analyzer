@@ -102,12 +102,15 @@ Run **Light Edition** in a container on Windows, Mac, or Linux:
 git clone https://github.com/guayar/iddqd-support-analyzer.git
 cd iddqd-support-analyzer
 git checkout docker-light-edition
-docker-compose up
+docker compose build
+docker compose up -d
 ```
 
-Open `http://localhost:7860`. Add logs to `./inputs/` — results appear in `./outputs/`.
+Open: **http://localhost:7860**
 
-See [DOCKER.md](DOCKER.md) for detailed setup (Windows PowerShell quickstart included).
+Knowledge Base persists in `./data/iddqd_kb.db`. See [DOCKER.md](DOCKER.md) for detailed setup and troubleshooting.
+
+Every `git pull` gets the latest Light Edition — rebuild with `docker compose build --no-cache`.
 
 ## Documentation
 
