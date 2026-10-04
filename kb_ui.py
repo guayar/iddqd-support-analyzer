@@ -538,14 +538,17 @@ def build_kb_tab() -> Tuple:
     def dummy_refresh():
         pass
 
+    # Create minimal hidden components for app.py compatibility
+    hidden_group = gr.Group(visible=False)
+
     return (
         dummy_refresh,  # kb_refresh_fn
-        None,  # kb_articles_count - not needed in v2
-        None,  # kb_cases_count - not needed in v2
-        None,  # kb_articles_list - not needed in v2
-        None,  # kb_cases_list - not needed in v2
-        None,  # search_results_articles - not needed in v2
-        None,  # search_results_cases - not needed in v2
+        gr.Textbox("0", interactive=False, container=False),  # kb_articles_count
+        gr.Textbox("0", interactive=False, container=False),  # kb_cases_count
+        gr.Dataframe(interactive=False, container=False),  # kb_articles_list
+        gr.Dataframe(interactive=False, container=False),  # kb_cases_list
+        gr.Dataframe(interactive=False, container=False),  # search_results_articles
+        gr.Dataframe(interactive=False, container=False),  # search_results_cases
         selected_article_id,
         selected_case_id,
         article_search_results,
