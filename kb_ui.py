@@ -30,17 +30,8 @@ def build_kb_tab() -> Tuple:
             **Articles** — Reusable troubleshooting knowledge
             **Cases** — Previous investigations and findings
 
-            Search Articles and Cases, create new ones, and link to Analyze results.
+            Create Articles and Cases, then use the Search tab to find them.
             """)
-
-            # Search
-            with gr.Row():
-                search_query = gr.Textbox(
-                    label="Search Articles and Cases",
-                    placeholder="jwt, deadlock, timeout, oauth...",
-                    scale=4,
-                )
-                search_btn = gr.Button("🔍 Search", scale=1, variant="primary")
 
             # Filter tabs
             with gr.Tabs():
@@ -129,22 +120,6 @@ def build_kb_tab() -> Tuple:
                                 interactive=False,
                                 value="Ready to create"
                             )
-
-                # ========================
-                # SEARCH RESULTS
-                # ========================
-                with gr.Tab("Search Results"):
-                    search_results_articles = gr.Dataframe(
-                        headers=["ID", "Title", "Summary"],
-                        interactive=False,
-                        label="Articles Found",
-                    )
-
-                    search_results_cases = gr.Dataframe(
-                        headers=["ID", "Title", "Summary"],
-                        interactive=False,
-                        label="Cases Found",
-                    )
 
                 # ========================
                 # ARTICLE EDITOR
@@ -248,6 +223,30 @@ def build_kb_tab() -> Tuple:
                     with gr.Row():
                         save_case_btn = gr.Button("💾 Save", variant="primary")
                         delete_case_btn = gr.Button("🗑️ Delete", variant="stop")
+
+                # ========================
+                # SEARCH
+                # ========================
+                with gr.Tab("Search"):
+                    with gr.Row():
+                        search_query = gr.Textbox(
+                            label="Search Articles and Cases",
+                            placeholder="jwt, deadlock, timeout, oauth...",
+                            scale=4,
+                        )
+                        search_btn = gr.Button("🔍 Search", scale=1, variant="primary")
+
+                    search_results_articles = gr.Dataframe(
+                        headers=["ID", "Title", "Summary"],
+                        interactive=False,
+                        label="Articles Found",
+                    )
+
+                    search_results_cases = gr.Dataframe(
+                        headers=["ID", "Title", "Summary"],
+                        interactive=False,
+                        label="Cases Found",
+                    )
 
                 # ========================
                 # EXPORT/IMPORT
