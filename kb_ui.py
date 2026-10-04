@@ -844,15 +844,19 @@ def build_kb_tab():
                         """Remove article link when clicking current links table."""
                         if not evt or not evt.row_value or len(evt.row_value) < 1:
                             return "❌ Select link to remove"
-                        # evt.row_value[0] = ID (display_id)
+                        # evt.row_value[0] = display_id (AN00000001)
                         article_display_id = evt.row_value[0]
-                        case_id = case_edit_id.value  # Get from edit form, not state
+                        case_id = selected_case_id.value  # Get UUID from state
                         if not case_id:
                             return "❌ Case ID not available"
                         try:
-                            # Call backend remove function
-                            result = remove_article_from_case(case_id, article_display_id)
-                            return result
+                            # Convert display_id to actual article UUID
+                            article = kb.get_article_by_display_id(article_display_id)
+                            if not article:
+                                return f"❌ Article {article_display_id} not found"
+                            # Call backend with correct UUIDs
+                            kb.unlink_case_from_article(case_id, article.id)
+                            return f"✅ Removed link to {article_display_id}"
                         except Exception as e:
                             return f"❌ Error: {str(e)}"
 
@@ -869,7 +873,7 @@ def build_kb_tab():
 
                     case_edit_link_btn.click(
                         fn=add_article_to_case,
-                        inputs=[case_edit_id, case_edit_selected_link_id],
+                        inputs=[selected_case_id, case_edit_selected_link_id],
                         outputs=[case_edit_status]
                     ).then(
                         fn=populate_case_edit,
@@ -894,15 +898,19 @@ def build_kb_tab():
                         """Remove case link when clicking current links table."""
                         if not evt or not evt.row_value or len(evt.row_value) < 1:
                             return "❌ Select link to remove"
-                        # evt.row_value[0] = ID (display_id)
+                        # evt.row_value[0] = display_id (CN00000001)
                         case_display_id = evt.row_value[0]
-                        article_id = article_edit_id.value  # Get from edit form, not state
+                        article_id = selected_article_id.value  # Get UUID from state
                         if not article_id:
                             return "❌ Article ID not available"
                         try:
-                            # Call backend remove function
-                            result = remove_case_from_article(article_id, case_display_id)
-                            return result
+                            # Convert display_id to actual case UUID
+                            case = kb.get_case_by_display_id(case_display_id)
+                            if not case:
+                                return f"❌ Case {case_display_id} not found"
+                            # Call backend with correct UUIDs
+                            kb.unlink_case_from_article(article_id, case.id)
+                            return f"✅ Removed link to {case_display_id}"
                         except Exception as e:
                             return f"❌ Error: {str(e)}"
 
@@ -919,7 +927,7 @@ def build_kb_tab():
 
                     article_edit_link_btn.click(
                         fn=add_case_to_article,
-                        inputs=[article_edit_id, article_edit_selected_link_id],
+                        inputs=[selected_article_id, article_edit_selected_link_id],
                         outputs=[article_edit_status]
                     ).then(
                         fn=populate_article_edit,
