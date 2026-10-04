@@ -304,9 +304,15 @@ def build_kb_tab() -> Tuple:
     # ========================
 
     def refresh_all_knowledge():
-        """Refresh Articles and Cases lists."""
-        articles = kb.list_articles()
-        cases = kb.list_cases()
+        """Refresh Articles and Cases lists (first 10 records)."""
+        all_articles = kb.list_articles()
+        all_cases = kb.list_cases()
+
+        articles = all_articles[:10]  # First 10 records
+        cases = all_cases[:10]  # First 10 records
+
+        total_articles = len(all_articles)
+        total_cases = len(all_cases)
 
         articles_data = [
             [
@@ -328,9 +334,12 @@ def build_kb_tab() -> Tuple:
             for c in cases
         ]
 
+        articles_count_text = f"{len(articles_data)} of {total_articles}" if total_articles > 10 else f"{total_articles}"
+        cases_count_text = f"{len(cases_data)} of {total_cases}" if total_cases > 10 else f"{total_cases}"
+
         return (
-            f"{len(articles)}",
-            f"{len(cases)}",
+            articles_count_text,
+            cases_count_text,
             articles_data if articles else [],
             cases_data if cases else [],
         )

@@ -656,7 +656,7 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                         raw = gr.Code(label="JSON", language="json")
 
             # Knowledge Base Tab (always available - even in Light Edition)
-            kb_refresh_fn, *_ = build_kb_tab()
+            kb_refresh_fn, kb_articles_count, kb_cases_count, kb_articles_list, kb_cases_list, *_ = build_kb_tab()
 
             if ANONYMIZE_ON:
                 with gr.Tab("Anonymize log"):
@@ -905,7 +905,11 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                     outputs=[files, pasted, signing_cert, idp_metadata, sp_metadata, report, raw, analysis_state, decoded_download],
                 )
 
-            demo.load(fn=kb_refresh_fn, js=COPY_REPORT_JS)
+            demo.load(
+                fn=kb_refresh_fn,
+                outputs=[kb_articles_count, kb_cases_count, kb_articles_list, kb_cases_list],
+                js=COPY_REPORT_JS
+            )
 
 
 if __name__ == "__main__":
