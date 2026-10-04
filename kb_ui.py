@@ -21,14 +21,14 @@ def build_kb_tab() -> Tuple:
         Tuple of Gradio components for state management
     """
 
-    # ========================
-    # SELECTION STATE
-    # ========================
-    # Keep Article and Case selection completely independent
-    selected_article_id = gr.State(None)
-    selected_case_id = gr.State(None)
-
     with gr.Tab("Knowledge Base"):
+        # ========================
+        # SELECTION STATE
+        # ========================
+        # Keep Article and Case selection completely independent
+        selected_article_id = gr.State(None)
+        selected_case_id = gr.State(None)
+
         with gr.Column(elem_classes=["psa-shell"], scale=1):
             # Header
             gr.Markdown("""
@@ -666,7 +666,7 @@ Conflicts detected: {len(result['conflicts'])}"""
     # Save and delete article
     save_article_btn.click(
         fn=save_article_handler,
-        inputs=[article_id_edit, article_title_edit, article_summary_edit,
+        inputs=[selected_article_id, article_title_edit, article_summary_edit,
                 article_content_edit, article_tags_edit, article_findings_edit],
         outputs=[article_status],
     ).then(
@@ -676,15 +676,15 @@ Conflicts detected: {len(result['conflicts'])}"""
 
     delete_article_btn.click(
         fn=delete_article_handler,
-        inputs=[article_id_edit],
+        inputs=[selected_article_id],
         outputs=[article_status],
     ).then(
         fn=refresh_all_knowledge,
         outputs=[articles_count, cases_count, articles_list, cases_list],
     ).then(
-        fn=lambda: (None, "None", "", "", "", "", "", ""),
-        outputs=[selected_article_id, selected_article_label, article_id_edit, article_title_edit,
-                article_summary_edit, article_content_edit, article_tags_edit, article_findings_edit],
+        fn=lambda: (None, "", "", "", "", "", "", ""),
+        outputs=[selected_article_id, article_id_edit, article_title_edit,
+                article_summary_edit, article_content_edit, article_tags_edit, article_findings_edit, article_history],
     )
 
     create_article_btn.click(
@@ -713,7 +713,7 @@ Conflicts detected: {len(result['conflicts'])}"""
     # Save and delete case
     save_case_btn.click(
         fn=save_case_handler,
-        inputs=[case_id_edit, case_title_edit, case_summary_edit,
+        inputs=[selected_case_id, case_title_edit, case_summary_edit,
                 case_content_edit, case_tags_edit],
         outputs=[case_status],
     ).then(
@@ -723,14 +723,14 @@ Conflicts detected: {len(result['conflicts'])}"""
 
     delete_case_btn.click(
         fn=delete_case_handler,
-        inputs=[case_id_edit],
+        inputs=[selected_case_id],
         outputs=[case_status],
     ).then(
         fn=refresh_all_knowledge,
         outputs=[articles_count, cases_count, articles_list, cases_list],
     ).then(
-        fn=lambda: (None, "None", "", "", "", ""),
-        outputs=[selected_case_id, selected_case_label, case_id_edit, case_title_edit,
+        fn=lambda: (None, "", "", "", "", ""),
+        outputs=[selected_case_id, case_id_edit, case_title_edit,
                 case_summary_edit, case_content_edit, case_tags_edit],
     )
 
