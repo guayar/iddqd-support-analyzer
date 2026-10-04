@@ -311,7 +311,7 @@ def build_kb_tab() -> Tuple:
 
         articles_data = [
             [
-                a.id,
+                a.display_id,
                 a.title,
                 a.updated_at.strftime("%Y-%m-%d") if a.updated_at else "—",
                 ", ".join(a.tags) if a.tags else "—",
@@ -321,7 +321,7 @@ def build_kb_tab() -> Tuple:
 
         cases_data = [
             [
-                c.id,
+                c.display_id,
                 c.title,
                 c.created_at.strftime("%Y-%m-%d") if c.created_at else "—",
                 ", ".join(c.tags) if c.tags else "—",
@@ -345,7 +345,7 @@ def build_kb_tab() -> Tuple:
 
         articles_data = [
             [
-                a.id,
+                a.display_id,
                 a.title,
                 a.summary or a.content[:100] + "..." if len(a.content) > 100 else a.content,
             ]
@@ -354,7 +354,7 @@ def build_kb_tab() -> Tuple:
 
         cases_data = [
             [
-                c.id,
+                c.display_id,
                 c.title,
                 c.summary or c.content[:100] + "..." if len(c.content) > 100 else c.content,
             ]
@@ -477,7 +477,7 @@ Conflicts detected: {len(result['conflicts'])}"""
         tags_str = ", ".join(article.tags) if article.tags else ""
 
         return (
-            article.id,
+            article.display_id,
             article.title,
             article.summary or "",
             article.content,
@@ -549,7 +549,7 @@ Conflicts detected: {len(result['conflicts'])}"""
         tags_str = ", ".join(case.tags) if case.tags else ""
 
         return (
-            case.id,
+            case.display_id,
             case.title,
             case.summary or "",
             case.content,
