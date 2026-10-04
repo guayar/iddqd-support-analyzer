@@ -207,6 +207,38 @@ class KnowledgeBaseActions:
         """
         return self._search_engine.search_by_finding(finding_code)
 
+    def search_articles(self, query: str, limit: int = 20) -> List[Article]:
+        """Search Articles with exact display ID support.
+
+        Checks if query matches AN######## pattern first (case-insensitive).
+        If found, returns that exact article.
+        Otherwise, performs text search (title, summary, content, tags).
+
+        Args:
+            query: Search query - either exact AN ID or text keywords
+            limit: Max results to return
+
+        Returns:
+            List of matching Articles (sorted by relevance)
+        """
+        if not query or not query.strip():
+            return []
+
+        query = query.strip()
+        query_upper = query.upper()
+
+        # Check if query matches AN######## pattern (case-insensitive)
+        if query_upper.startswith("AN") and len(query_upper) >= 10:
+            # Try exact display ID match (normalized to uppercase)
+            article = self.get_article_by_display_id(query_upper)
+            if article:
+                return [article]
+            # If not found, fall through to text search
+
+        # Normal text search
+        articles, _ = self._search_engine.search(query, limit)
+        return articles
+
     # ========================
     # RELATIONSHIPS
     # ========================

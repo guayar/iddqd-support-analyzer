@@ -375,9 +375,12 @@ def build_kb_tab():
                         if not query or not query.strip():
                             return None, None, 0, 0, "1 / 1", "1 / 1", "", "", "", "", "", "", "", "", ""
 
+                        # Use search_articles for exact AN ID support + text search
+                        articles = kb.search_articles(query.strip(), limit=1000)
+
+                        # For now, keep case search using the legacy method
                         results = kb.search(query.strip(), limit=1000)
                         cases = results.get("cases", [])
-                        articles = results.get("articles", [])
 
                         # Store results in state for re-rendering after selection
                         case_search_results.value = cases
