@@ -333,7 +333,9 @@ def build_kb_tab():
                             return "", "", "", "", "", None, None
 
                         try:
-                            display_id = evt.row_value[1]  # Column 1 = ID
+                            # Main results table has selection marker at [0], ID at [1]
+                            # Linked items table has ID at [0], Title at [1]
+                            display_id = evt.row_value[1] if len(evt.row_value) > 2 else evt.row_value[0]
                             case = kb.get_case_by_display_id(display_id)
                             if not case:
                                 return "", "", "", "", "", None, None
@@ -365,7 +367,8 @@ def build_kb_tab():
                             return "", "", "", "", "", None, None
 
                         try:
-                            display_id = evt.row_value[1]  # Column 1 = ID
+                            # Main results table has selection marker at [0], ID at [1]
+                            display_id = evt.row_value[1] if len(evt.row_value) > 2 else evt.row_value[0]
                             article = kb.get_article_by_display_id(display_id)
                             if not article:
                                 return "", "", "", "", "", None, None
