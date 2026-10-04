@@ -59,6 +59,7 @@ def build_kb_tab() -> Tuple:
                             interactive=False,
                             scale=1
                         )
+                        refresh_kb_btn = gr.Button("🔄 Refresh", scale=1, variant="secondary")
 
                     with gr.Tabs():
                         with gr.Tab("Articles"):
@@ -600,6 +601,15 @@ Conflicts detected: {len(result['conflicts'])}"""
         fn=perform_search,
         inputs=[search_query],
         outputs=[search_results_articles, search_results_cases],
+    )
+
+    # Refresh button for All Knowledge tab
+    with gr.Row():
+        refresh_kb_btn = gr.Button("🔄 Refresh", scale=1)
+
+    refresh_kb_btn.click(
+        fn=refresh_all_knowledge,
+        outputs=[articles_count, cases_count, articles_list, cases_list],
     )
 
     # Article list selection - load into editor (from All Knowledge tab)
