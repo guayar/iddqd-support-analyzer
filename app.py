@@ -329,12 +329,18 @@ CSS = """
 .psa-context-on {
     background: #16a34a !important;
 }
-.kb-dataframe tbody tr:hover {
-    background-color: var(--color-accent-soft) !important;
+.kb-dataframe {
+    width: 100% !important;
+}
+.kb-dataframe tr:hover {
+    background-color: rgba(59, 130, 246, 0.15) !important;
     cursor: pointer !important;
 }
-.kb-dataframe tbody tr {
+.kb-dataframe tr {
     transition: background-color 0.15s ease !important;
+}
+.kb-dataframe table tbody tr:hover {
+    background-color: rgba(59, 130, 246, 0.15) !important;
 }
 """ + f"""
 footer button.settings::before {{
