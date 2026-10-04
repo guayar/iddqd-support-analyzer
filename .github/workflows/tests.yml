@@ -26,41 +26,15 @@ jobs:
       - name: Compile
         run: python -m py_compile app.py actions.py chats.py config.py llm.py modules.py reporting.py uploads.py websearch.py vision.py analyzers/*.py tests/*.py scripts/*.py
 
-      - name: Run analyzer tests
+      - name: Run analyzer tests (via pytest)
         run: |
-          PYTHONPATH=. python tests/test_log_incidents.py
-          PYTHONPATH=. python tests/test_log_timestamps.py
-          PYTHONPATH=. python tests/test_log_oracle.py
-          PYTHONPATH=. python tests/test_log_apache.py
-          PYTHONPATH=. python tests/test_log_engine.py
-          PYTHONPATH=. python tests/test_log_syslog_ssh.py
-          PYTHONPATH=. python tests/test_regression_manifest.py
-          PYTHONPATH=. python tests/test_analyzers.py
-          PYTHONPATH=. python tests/test_v021_config.py
-          PYTHONPATH=. python tests/test_v021_deduplication.py
-          PYTHONPATH=. python tests/test_v022_root_cause.py
-          PYTHONPATH=. python tests/test_v022_multi_file.py
-          PYTHONPATH=. python tests/test_saml_clock_skew.py
-          PYTHONPATH=. python tests/test_saml_tracer_json.py
-          PYTHONPATH=. python tests/test_saml_incident_timing.py
-          PYTHONPATH=. python tests/test_saml_metadata.py
-          PYTHONPATH=. python tests/test_input_hardening.py
-          PYTHONPATH=. python tests/test_signature_validation.py
-          PYTHONPATH=. python tests/test_anonymizer_residual.py
-          PYTHONPATH=. python tests/test_anonymizer_saml.py
-          PYTHONPATH=. python tests/test_anonymize_xml_audit.py
-          PYTHONPATH=. python tests/test_saml_anonymizer.py
-          PYTHONPATH=. python tests/test_layers.py
-          PYTHONPATH=. python tests/test_anonymize_sources.py
-          PYTHONPATH=. python tests/test_analyze_routing.py
-          PYTHONPATH=. python tests/test_decoded_saml_export.py
-          PYTHONPATH=. python tests/test_nameid.py
-          PYTHONPATH=. python tests/test_modules.py
-          PYTHONPATH=. python tests/test_edition.py
-          PYTHONPATH=. python tests/test_assistant_handoff.py
-          PYTHONPATH=. python tests/test_chat_history.py
-          PYTHONPATH=. python tests/test_vision.py
-          PYTHONPATH=. python tests/test_llm.py
+          python -m pytest tests/ -v --tb=short \
+            --ignore=tests/test_chat_history.py \
+            --ignore=tests/test_assistant_handoff.py \
+            --ignore=tests/test_layers.py \
+            --ignore=tests/test_llm.py \
+            --ignore=tests/test_vision.py \
+            --ignore=tests/test_v022_api.py
 
   light-edition:
     runs-on: ubuntu-latest

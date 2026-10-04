@@ -1,20 +1,15 @@
 """Tests for v0.22 API server."""
 
 import os
-import sys
 import json
 import unittest
 from io import BytesIO
 from unittest.mock import Mock, patch
 
-# Skip in Light edition - API server not available
-if os.getenv("LIGHT_EDITION"):
-    print("SKIPPED: API server tests not available in Light edition", file=sys.stderr)
-    sys.exit(0)
-
 from analyzers.api_server import AnalysisHandler
 
 
+@unittest.skipIf(os.getenv("LIGHT_EDITION"), "API server not available in Light edition")
 class TestAnalysisAPI(unittest.TestCase):
     """Test API server endpoints."""
 
