@@ -264,14 +264,15 @@ def build_kb_tab():
 
                         case_edit_selected_link_id = gr.State(None)
 
-                        case_edit_link_search = gr.Textbox(label="Search articles to link", scale=1)
-                        case_edit_link_search_btn = gr.Button("Search", scale=1)
+                        with gr.Row():
+                            case_edit_link_search = gr.Textbox(label="Search articles to link", scale=3)
+                            case_edit_link_search_btn = gr.Button("Search", scale=1)
                         case_edit_link_results = gr.Dataframe(
                             headers=["▶", "ID", "Title"],
                             interactive=False,
                             label="Search Results - click to select"
                         )
-                        case_edit_link_btn = gr.Button("✓ Add Selected Link", variant="primary", scale=1)
+                        case_edit_link_btn = gr.Button("✓ Add Selected Link", variant="primary")
 
                         case_edit_status = gr.Textbox(label="Status", interactive=False, value="")
 
@@ -350,14 +351,15 @@ def build_kb_tab():
 
                         article_edit_selected_link_id = gr.State(None)
 
-                        article_edit_link_search = gr.Textbox(label="Search cases to link", scale=1)
-                        article_edit_link_search_btn = gr.Button("Search", scale=1)
+                        with gr.Row():
+                            article_edit_link_search = gr.Textbox(label="Search cases to link", scale=3)
+                            article_edit_link_search_btn = gr.Button("Search", scale=1)
                         article_edit_link_results = gr.Dataframe(
                             headers=["▶", "ID", "Title"],
                             interactive=False,
                             label="Search Results - click to select"
                         )
-                        article_edit_link_btn = gr.Button("✓ Add Selected Link", variant="primary", scale=1)
+                        article_edit_link_btn = gr.Button("✓ Add Selected Link", variant="primary")
 
                         article_edit_status = gr.Textbox(label="Status", interactive=False, value="")
 
