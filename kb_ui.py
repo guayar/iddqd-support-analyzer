@@ -40,7 +40,7 @@ def build_kb_tab() -> Tuple:
         article_search_results = gr.State([])  # List of Article objects
         case_search_results = gr.State([])    # List of Case objects
 
-        with gr.Column(elem_classes=["psa-shell"], scale=1.75):
+        with gr.Column(elem_classes=["psa-shell"], scale=2):
             # Header
             gr.Markdown("""
             # Knowledge Base
@@ -1028,7 +1028,7 @@ Conflicts detected: {len(result['conflicts'])}"""
         outputs=[case_id_edit, case_title_edit, case_summary_edit,
                  case_content_edit, case_tags_edit, case_related_articles, selected_case_id],
     ).then(
-        fn=refresh_case_table_only,
+        fn=refresh_cases_display_only,
         inputs=[selected_case_id],
         outputs=[cases_list],
     ).then(
