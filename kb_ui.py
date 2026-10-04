@@ -408,7 +408,6 @@ def build_kb_tab() -> Tuple:
 
                     case_results_table.select(
                         fn=load_case_view_full,
-                        inputs=[],  # SelectData comes from the component itself
                         outputs=[
                             case_view_id, case_view_title, case_view_tags, case_view_summary, case_view_content,
                             case_linked_articles, selected_case_id
@@ -417,7 +416,6 @@ def build_kb_tab() -> Tuple:
 
                     article_results_table.select(
                         fn=load_article_view_full,
-                        inputs=[],  # SelectData comes from the component itself
                         outputs=[
                             article_view_id, article_view_title, article_view_tags, article_view_summary, article_view_content,
                             article_linked_cases, selected_article_id
