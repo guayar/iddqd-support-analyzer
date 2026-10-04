@@ -193,6 +193,28 @@ def build_kb_tab() -> Tuple:
                     #     lines=6,
                     # )
 
+                    gr.Markdown("### Link Cases to This Article")
+                    with gr.Row():
+                        link_case_dropdown = gr.Dropdown(
+                            label="Select Case to Link",
+                            choices=[],
+                            scale=3,
+                        )
+                        link_case_btn = gr.Button("🔗 Link", scale=1, variant="primary")
+
+                    link_case_status = gr.Textbox(
+                        label="Status",
+                        interactive=False,
+                        value="Ready to link cases",
+                    )
+
+                    article_related_cases = gr.Dataframe(
+                        headers=["Case ID", "Title"],
+                        interactive=False,
+                        label="Related Cases",
+                        wrap=False,
+                    )
+
                     with gr.Row():
                         save_article_btn = gr.Button("💾 Save", variant="primary")
                         delete_article_btn = gr.Button("🗑️ Delete", variant="stop")
@@ -242,7 +264,7 @@ def build_kb_tab() -> Tuple:
                             choices=[],
                             scale=3,
                         )
-                        link_article_btn = gr.Button("🔗 Link", scale=1, variant="secondary")
+                        link_article_btn = gr.Button("🔗 Link", scale=1, variant="primary")
 
                     link_status = gr.Textbox(
                         label="Status",
@@ -507,7 +529,7 @@ Conflicts detected: {len(result['conflicts'])}"""
         to correctly handle search results. Index 0 is the selection marker.
         """
         if evt is None or evt.row_value is None or len(evt.row_value) < 2:
-            return None, "", "", "", "", "", "", None
+            return None, "", "", "", "", "", [], None
 
         # Extract display ID from second column (index 1, after selection marker at 0)
         display_id = evt.row_value[1]
@@ -515,12 +537,19 @@ Conflicts detected: {len(result['conflicts'])}"""
         # Resolve display ID to actual article
         article = kb.get_article_by_display_id(display_id)
         if not article:
-            return None, "", "", "", "", "", "", None
+            return None, "", "", "", "", "", [], None
 
         print(f"[ARTICLE SELECT] display_id={display_id}, canonical_uuid={article.id}")
 
         finding_codes = ", ".join(article.finding_codes) if article.finding_codes else ""
         tags_str = ", ".join(article.tags) if article.tags else ""
+
+        # Get related cases (cases that link to this article)
+        related_data = []
+        all_cases = kb.list_cases()
+        for case in all_cases:
+            if article.id in case.related_article_ids:
+                related_data.append([case.display_id, case.title])
 
         # Return editor fields + state update (without revision history)
         return (
@@ -530,6 +559,7 @@ Conflicts detected: {len(result['conflicts'])}"""
             article.content,
             tags_str,
             finding_codes,
+            related_data if related_data else [],
             article.id,  # Update selected_article_id state
         )
 
@@ -685,6 +715,41 @@ Conflicts detected: {len(result['conflicts'])}"""
         except Exception as e:
             return f"❌ Error: {str(e)}", []
 
+    def populate_case_dropdown():
+        """Populate dropdown with available cases."""
+        cases = kb.list_cases()
+        choices = [f"{c.display_id} — {c.title}" for c in cases]
+        return gr.Dropdown(choices=choices, value=None)
+
+    def link_case_to_article(selected_article_uuid, case_choice):
+        """Link selected case to article."""
+        if not selected_article_uuid:
+            return "⚠️ No article selected", []
+        if not case_choice:
+            return "⚠️ No case selected", []
+
+        try:
+            # Extract display_id from choice (format: "CN00000001 — title")
+            display_id = case_choice.split(" — ")[0]
+            case = kb.get_case_by_display_id(display_id)
+            if not case:
+                return "❌ Case not found", []
+
+            # Link article to case (same as linking case to article)
+            success = kb.link_case_to_article(case.id, selected_article_uuid)
+            if success:
+                # Get all cases related to this article
+                all_cases = kb.list_cases()
+                related_data = []
+                for c in all_cases:
+                    if selected_article_uuid in c.related_article_ids:
+                        related_data.append([c.display_id, c.title])
+                return f"✅ Linked: {case.display_id}", related_data
+            else:
+                return "❌ Failed to link case", []
+        except Exception as e:
+            return f"❌ Error: {str(e)}", []
+
     def refresh_articles_display_only(selected_article_uuid=None):
         """Refresh Articles table to show current selection highlighting.
 
@@ -750,7 +815,7 @@ Conflicts detected: {len(result['conflicts'])}"""
         fn=load_article_for_edit,
         outputs=[article_id_edit, article_title_edit, article_summary_edit,
                  article_content_edit, article_tags_edit, article_findings_edit,
-                 selected_article_id],
+                 article_related_cases, selected_article_id],
     ).then(
         fn=refresh_articles_display_only,
         inputs=[selected_article_id],
@@ -762,7 +827,7 @@ Conflicts detected: {len(result['conflicts'])}"""
         fn=load_article_for_edit,
         outputs=[article_id_edit, article_title_edit, article_summary_edit,
                  article_content_edit, article_tags_edit, article_findings_edit,
-                 selected_article_id],
+                 article_related_cases, selected_article_id],
     ).then(
         fn=refresh_search_articles_display,
         inputs=[selected_article_id, article_search_results],
@@ -794,9 +859,9 @@ Conflicts detected: {len(result['conflicts'])}"""
         inputs=[selected_case_id],  # Pass None for selected_article (will be cleared)
         outputs=[articles_count, cases_count, articles_list, cases_list],
     ).then(
-        fn=lambda: (None, "", "", "", "", "", ""),
+        fn=lambda: (None, "", "", "", "", "", [], ""),
         outputs=[selected_article_id, article_id_edit, article_title_edit,
-                article_summary_edit, article_content_edit, article_tags_edit, article_findings_edit],
+                article_summary_edit, article_content_edit, article_tags_edit, article_findings_edit, article_related_cases],
     )
 
     create_article_btn.click(
@@ -882,6 +947,24 @@ Conflicts detected: {len(result['conflicts'])}"""
         fn=link_article_to_case,
         inputs=[selected_case_id, link_article_dropdown],
         outputs=[link_status, case_related_articles],
+    )
+
+    # Link case to article
+    link_case_btn.click(
+        fn=link_case_to_article,
+        inputs=[selected_article_id, link_case_dropdown],
+        outputs=[link_case_status, article_related_cases],
+    )
+
+    # Populate case dropdown when article is loaded
+    articles_list.select(
+        fn=populate_case_dropdown,
+        outputs=[link_case_dropdown],
+    )
+
+    search_results_articles.select(
+        fn=populate_case_dropdown,
+        outputs=[link_case_dropdown],
     )
 
     # Export handlers
