@@ -257,19 +257,21 @@ def build_kb_tab():
                         # Link management (PHASE 7)
                         gr.Markdown("#### Linked Articles")
                         case_edit_linked = gr.Dataframe(
-                            headers=["ID", "Title", "Remove"],
+                            headers=["ID", "Title"],
                             interactive=False,
                             label="Current Links"
                         )
 
-                        with gr.Row():
-                            case_edit_link_search = gr.Textbox(label="Search to add", scale=3)
-                            case_edit_link_btn = gr.Button("Add Link", scale=1)
+                        case_edit_selected_link_id = gr.State(None)
+
+                        case_edit_link_search = gr.Textbox(label="Search articles to link", scale=1)
+                        case_edit_link_search_btn = gr.Button("Search", scale=1)
                         case_edit_link_results = gr.Dataframe(
-                            headers=["ID", "Title"],
+                            headers=["▶", "ID", "Title"],
                             interactive=False,
-                            label="Search Results"
+                            label="Search Results - click to select"
                         )
+                        case_edit_link_btn = gr.Button("✓ Add Selected Link", variant="primary", scale=1)
 
                         case_edit_status = gr.Textbox(label="Status", interactive=False, value="")
 
@@ -341,19 +343,21 @@ def build_kb_tab():
                         # Link management (PHASE 7)
                         gr.Markdown("#### Linked Cases")
                         article_edit_linked = gr.Dataframe(
-                            headers=["ID", "Title", "Remove"],
+                            headers=["ID", "Title"],
                             interactive=False,
                             label="Current Links"
                         )
 
-                        with gr.Row():
-                            article_edit_link_search = gr.Textbox(label="Search to add", scale=3)
-                            article_edit_link_btn = gr.Button("Add Link", scale=1)
+                        article_edit_selected_link_id = gr.State(None)
+
+                        article_edit_link_search = gr.Textbox(label="Search cases to link", scale=1)
+                        article_edit_link_search_btn = gr.Button("Search", scale=1)
                         article_edit_link_results = gr.Dataframe(
-                            headers=["ID", "Title"],
+                            headers=["▶", "ID", "Title"],
                             interactive=False,
-                            label="Search Results"
+                            label="Search Results - click to select"
                         )
+                        article_edit_link_btn = gr.Button("✓ Add Selected Link", variant="primary", scale=1)
 
                         article_edit_status = gr.Textbox(label="Status", interactive=False, value="")
 
@@ -771,16 +775,66 @@ def build_kb_tab():
                     )
 
                     # Wire link search and management (PHASE 7)
-                    case_edit_link_btn.click(
+                    def render_search_with_marker(articles, selected_id):
+                        """Render article search results with selection marker."""
+                        data = []
+                        for a in articles:
+                            marker = "▶" if a.id == selected_id else ""
+                            data.append([marker, a.display_id, a.title])
+                        return pd.DataFrame(data, columns=["▶", "ID", "Title"]) if data else None
+
+                    def render_case_search_with_marker(cases, selected_id):
+                        """Render case search results with selection marker."""
+                        data = []
+                        for c in cases:
+                            marker = "▶" if c.id == selected_id else ""
+                            data.append([marker, c.display_id, c.title])
+                        return pd.DataFrame(data, columns=["▶", "ID", "Title"]) if data else None
+
+                    case_edit_link_search_btn.click(
                         fn=search_articles_for_case,
                         inputs=[case_edit_link_search],
                         outputs=[case_edit_link_results]
                     )
 
-                    article_edit_link_btn.click(
+                    case_edit_link_results.select(
+                        fn=lambda evt: evt.row_value[1] if evt and evt.row_value else None,
+                        outputs=[case_edit_selected_link_id]
+                    )
+
+                    case_edit_link_btn.click(
+                        fn=add_article_to_case,
+                        inputs=[case_edit_id, case_edit_selected_link_id],
+                        outputs=[case_edit_status]
+                    ).then(
+                        fn=populate_case_edit,
+                        inputs=[selected_case_id],
+                        outputs=[case_edit_id, case_edit_title, case_edit_tags,
+                                case_edit_summary, case_edit_content, case_edit_linked,
+                                case_edit_link_search, case_edit_status]
+                    )
+
+                    article_edit_link_search_btn.click(
                         fn=search_cases_for_article,
                         inputs=[article_edit_link_search],
                         outputs=[article_edit_link_results]
+                    )
+
+                    article_edit_link_results.select(
+                        fn=lambda evt: evt.row_value[1] if evt and evt.row_value else None,
+                        outputs=[article_edit_selected_link_id]
+                    )
+
+                    article_edit_link_btn.click(
+                        fn=add_case_to_article,
+                        inputs=[article_edit_id, article_edit_selected_link_id],
+                        outputs=[article_edit_status]
+                    ).then(
+                        fn=populate_article_edit,
+                        inputs=[selected_article_id],
+                        outputs=[article_edit_id, article_edit_title, article_edit_tags,
+                                article_edit_summary, article_edit_content, article_edit_linked,
+                                article_edit_link_search, article_edit_status]
                     )
 
                 # ========================
