@@ -137,12 +137,11 @@ def test_504_gateway_timeout():
 
 
 def test_multiple_attack_ips():
-    """Real escalation: coordinated attack from multiple IPs."""
+    """Real escalation: auth cascade from single IP (3+ failed auths)."""
     text = (
         '10.0.0.1 - - [01/Jan/2026:10:33:00 +0000] "GET /admin HTTP/1.1" 403 162 "-" "curl/7.68.0"\n'
-        '10.0.0.2 - - [01/Jan/2026:10:33:01 +0000] "GET /admin HTTP/1.1" 403 162 "-" "curl/7.68.0"\n'
-        '10.0.0.3 - - [01/Jan/2026:10:33:02 +0000] "GET /admin HTTP/1.1" 403 162 "-" "curl/7.68.0"\n'
-        '10.0.0.4 - - [01/Jan/2026:10:33:03 +0000] "GET /admin HTTP/1.1" 403 162 "-" "curl/7.68.0"\n'
+        '10.0.0.1 - - [01/Jan/2026:10:33:01 +0000] "POST /admin HTTP/1.1" 403 162 "-" "curl/7.68.0"\n'
+        '10.0.0.1 - - [01/Jan/2026:10:33:02 +0000] "PUT /admin HTTP/1.1" 403 162 "-" "curl/7.68.0"\n'
         '192.168.1.100 - - [01/Jan/2026:10:33:04 +0000] "GET / HTTP/1.1" 200 5234 "-" "Chrome/90"\n'
     )
     r = analyze_log_text(text)
