@@ -266,7 +266,7 @@ def build_kb_tab():
 
                         with gr.Row():
                             case_edit_link_search = gr.Textbox(label="Search articles to link", scale=3)
-                            case_edit_link_search_btn = gr.Button("Search", scale=1)
+                            case_edit_link_search_btn = gr.Button("Search", scale=1, variant="primary")
                         case_edit_link_results = gr.Dataframe(
                             headers=["▶", "ID", "Title"],
                             interactive=False,
@@ -353,7 +353,7 @@ def build_kb_tab():
 
                         with gr.Row():
                             article_edit_link_search = gr.Textbox(label="Search cases to link", scale=3)
-                            article_edit_link_search_btn = gr.Button("Search", scale=1)
+                            article_edit_link_search_btn = gr.Button("Search", scale=1, variant="primary")
                         article_edit_link_results = gr.Dataframe(
                             headers=["▶", "ID", "Title"],
                             interactive=False,
@@ -642,13 +642,14 @@ def build_kb_tab():
                     # ========================
 
                     def search_articles_for_case(query: str):
-                        """Search articles to link to case."""
+                        """Search articles to link to case - with marker column."""
                         if not query or not query.strip():
                             return None
                         results = kb.search(query.strip(), limit=100)
                         articles = results.get("articles", [])
-                        data = [[a.display_id, a.title] for a in articles]
-                        return pd.DataFrame(data, columns=["ID", "Title"]) if data else None
+                        # Include marker column (empty for now, will be filled on selection)
+                        data = [["", a.display_id, a.title] for a in articles]
+                        return pd.DataFrame(data, columns=["▶", "ID", "Title"]) if data else None
 
                     def add_article_to_case(case_id, article_display_id):
                         """Link article to case."""
@@ -677,13 +678,14 @@ def build_kb_tab():
                             return f"❌ Error: {str(e)}"
 
                     def search_cases_for_article(query: str):
-                        """Search cases to link to article."""
+                        """Search cases to link to article - with marker column."""
                         if not query or not query.strip():
                             return None
                         results = kb.search(query.strip(), limit=100)
                         cases = results.get("cases", [])
-                        data = [[c.display_id, c.title] for c in cases]
-                        return pd.DataFrame(data, columns=["ID", "Title"]) if data else None
+                        # Include marker column (empty for now, will be filled on selection)
+                        data = [["", c.display_id, c.title] for c in cases]
+                        return pd.DataFrame(data, columns=["▶", "ID", "Title"]) if data else None
 
                     def add_case_to_article(article_id, case_display_id):
                         """Link case to article."""
@@ -799,9 +801,25 @@ def build_kb_tab():
                         outputs=[case_edit_link_results]
                     )
 
+                    def mark_selected_article(evt, results_df):
+                        """Show marker on selected article in search results."""
+                        if not evt or not evt.row_value or not isinstance(results_df, pd.DataFrame):
+                            return results_df
+                        selected_id = evt.row_value[1]
+                        # Re-create dataframe with marker on selected row
+                        data = []
+                        for _, row in results_df.iterrows():
+                            marker = "▶" if row["ID"] == selected_id else ""
+                            data.append([marker, row["ID"], row["Title"]])
+                        return pd.DataFrame(data, columns=["▶", "ID", "Title"])
+
                     case_edit_link_results.select(
                         fn=lambda evt: evt.row_value[1] if evt and evt.row_value else None,
                         outputs=[case_edit_selected_link_id]
+                    ).then(
+                        fn=mark_selected_article,
+                        inputs=[case_edit_link_results],
+                        outputs=[case_edit_link_results]
                     )
 
                     case_edit_link_btn.click(
