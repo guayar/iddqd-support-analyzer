@@ -57,6 +57,7 @@ def build_kb_tab() -> Tuple:
                                 headers=["ID", "Title", "Updated", "Tags"],
                                 interactive=False,
                                 label="Articles",
+                                elem_classes=["kb-dataframe"],
                             )
 
                             gr.Markdown("### Create New Article")
@@ -91,6 +92,7 @@ def build_kb_tab() -> Tuple:
                                 headers=["ID", "Title", "Created", "Tags"],
                                 interactive=False,
                                 label="Cases",
+                                elem_classes=["kb-dataframe"],
                             )
 
                             gr.Markdown("### Create New Case")
@@ -239,12 +241,14 @@ def build_kb_tab() -> Tuple:
                         headers=["ID", "Title", "Summary"],
                         interactive=False,
                         label="Articles Found",
+                        elem_classes=["kb-dataframe"],
                     )
 
                     search_results_cases = gr.Dataframe(
                         headers=["ID", "Title", "Summary"],
                         interactive=False,
                         label="Cases Found",
+                        elem_classes=["kb-dataframe"],
                     )
 
                 # ========================

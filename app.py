@@ -329,6 +329,13 @@ CSS = """
 .psa-context-on {
     background: #16a34a !important;
 }
+.kb-dataframe tbody tr:hover {
+    background-color: var(--color-accent-soft) !important;
+    cursor: pointer !important;
+}
+.kb-dataframe tbody tr {
+    transition: background-color 0.15s ease !important;
+}
 """ + f"""
 footer button.settings::before {{
     content: "v{APP_VERSION} · ";
