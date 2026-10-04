@@ -349,27 +349,35 @@ def build_kb_tab() -> Tuple:
         if not query:
             return [], []
 
-        articles, cases = kb.search(query, limit=20)
+        try:
+            result = kb.search(query, limit=20)
+            articles = result["articles"]
+            cases = result["cases"]
 
-        articles_data = [
-            [
-                a.display_id,
-                a.title,
-                a.summary or a.content[:100] + "..." if len(a.content) > 100 else a.content,
+            articles_data = [
+                [
+                    a.display_id,
+                    a.title,
+                    a.summary or (a.content[:100] + "..." if len(a.content) > 100 else a.content),
+                ]
+                for a in articles
             ]
-            for a in articles
-        ]
 
-        cases_data = [
-            [
-                c.display_id,
-                c.title,
-                c.summary or c.content[:100] + "..." if len(c.content) > 100 else c.content,
+            cases_data = [
+                [
+                    c.display_id,
+                    c.title,
+                    c.summary or (c.content[:100] + "..." if len(c.content) > 100 else c.content),
+                ]
+                for c in cases
             ]
-            for c in cases
-        ]
 
-        return articles_data, cases_data
+            return articles_data, cases_data
+        except Exception as e:
+            print(f"Search error: {e}")
+            import traceback
+            traceback.print_exc()
+            return [], []
 
     def create_new_article(title, tags_str, content):
         """Create new Article."""
