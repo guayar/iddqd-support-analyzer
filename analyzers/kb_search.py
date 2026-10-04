@@ -119,7 +119,7 @@ class KnowledgeBaseSearch:
                 query_lower in article.title.lower()
                 or query_lower in (article.summary or "").lower()
                 or query_lower in article.content.lower()
-                or any(query_lower in tag.lower() for tag in article.tags)
+                or any(query_lower in tag.lower() for tag in (article.tags or []))
             ):
                 results.append(article)
                 if len(results) >= limit:
@@ -138,7 +138,7 @@ class KnowledgeBaseSearch:
                 query_lower in case.title.lower()
                 or query_lower in (case.summary or "").lower()
                 or query_lower in case.content.lower()
-                or any(query_lower in tag.lower() for tag in case.tags)
+                or any(query_lower in tag.lower() for tag in (case.tags or []))
             ):
                 results.append(case)
                 if len(results) >= limit:
