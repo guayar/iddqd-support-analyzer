@@ -211,7 +211,7 @@ def build_kb_tab() -> Tuple:
                     article_related_cases = gr.Dataframe(
                         headers=["Case ID", "Title"],
                         interactive=False,
-                        label="Related Cases",
+                        label="Related Cases (click to view)",
                         wrap=False,
                     )
 
@@ -721,6 +721,72 @@ Conflicts detected: {len(result['conflicts'])}"""
         choices = [f"{c.display_id} — {c.title}" for c in cases]
         return gr.Dropdown(choices=choices, value=None)
 
+    def load_related_case_from_article(evt: gr.SelectData):
+        """Load related case by clicking it in article_related_cases table."""
+        if evt is None or evt.row_value is None or len(evt.row_value) < 1:
+            return None, "", "", "", "", [], None
+
+        # evt.row_value[0] is the Case ID (CN00000001 format)
+        display_id = evt.row_value[0]
+        case = kb.get_case_by_display_id(display_id)
+        if not case:
+            return None, "", "", "", "", [], None
+
+        print(f"[RELATED CASE CLICK] display_id={display_id}, loading case")
+
+        # Get related articles for this case
+        related_data = []
+        for article_id in case.related_article_ids:
+            article = kb.get_article(article_id)
+            if article:
+                related_data.append([article.display_id, article.title])
+
+        tags_str = ", ".join(case.tags) if case.tags else ""
+
+        return (
+            case.display_id,
+            case.title,
+            case.summary or "",
+            case.content,
+            tags_str,
+            related_data if related_data else [],
+            case.id,  # Update selected_case_id state
+        )
+
+    def load_related_article_from_case(evt: gr.SelectData):
+        """Load related article by clicking it in case_related_articles table."""
+        if evt is None or evt.row_value is None or len(evt.row_value) < 1:
+            return None, "", "", "", "", [], None
+
+        # evt.row_value[0] is the Article ID (AN00000001 format)
+        display_id = evt.row_value[0]
+        article = kb.get_article_by_display_id(display_id)
+        if not article:
+            return None, "", "", "", "", [], None
+
+        print(f"[RELATED ARTICLE CLICK] display_id={display_id}, loading article")
+
+        # Get related cases for this article
+        related_data = []
+        all_cases = kb.list_cases()
+        for case in all_cases:
+            if article.id in case.related_article_ids:
+                related_data.append([case.display_id, case.title])
+
+        finding_codes = ", ".join(article.finding_codes) if article.finding_codes else ""
+        tags_str = ", ".join(article.tags) if article.tags else ""
+
+        return (
+            article.display_id,
+            article.title,
+            article.summary or "",
+            article.content,
+            tags_str,
+            finding_codes,
+            related_data if related_data else [],
+            article.id,  # Update selected_article_id state
+        )
+
     def link_case_to_article(selected_article_uuid, case_choice):
         """Link selected case to article."""
         if not selected_article_uuid:
@@ -954,6 +1020,35 @@ Conflicts detected: {len(result['conflicts'])}"""
         fn=link_case_to_article,
         inputs=[selected_article_id, link_case_dropdown],
         outputs=[link_case_status, article_related_cases],
+    )
+
+    # Click related case in article to load it in case editor
+    article_related_cases.select(
+        fn=load_related_case_from_article,
+        outputs=[case_id_edit, case_title_edit, case_summary_edit,
+                 case_content_edit, case_tags_edit, case_related_articles, selected_case_id],
+    ).then(
+        fn=refresh_case_table_only,
+        inputs=[selected_case_id],
+        outputs=[cases_list],
+    ).then(
+        fn=populate_article_dropdown,
+        outputs=[link_article_dropdown],
+    )
+
+    # Click related article in case to load it in article editor
+    case_related_articles.select(
+        fn=load_related_article_from_case,
+        outputs=[article_id_edit, article_title_edit, article_summary_edit,
+                 article_content_edit, article_tags_edit, article_findings_edit,
+                 article_related_cases, selected_article_id],
+    ).then(
+        fn=refresh_articles_display_only,
+        inputs=[selected_article_id],
+        outputs=[articles_list],
+    ).then(
+        fn=populate_case_dropdown,
+        outputs=[link_case_dropdown],
     )
 
     # Populate case dropdown when article is loaded
