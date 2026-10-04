@@ -59,6 +59,7 @@ class KnowledgeBaseActions:
         summary: Optional[str] = None,
         change_note: Optional[str] = None,
         author: Optional[str] = None,
+        tags: Optional[List[str]] = None,
     ) -> bool:
         """Update Article."""
         return self.storage.update_article(
@@ -68,6 +69,7 @@ class KnowledgeBaseActions:
             summary=summary,
             change_note=change_note,
             created_by=author,
+            tags=tags,
         )
 
     def delete_article(self, article_id: str) -> bool:

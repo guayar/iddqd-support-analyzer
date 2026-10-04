@@ -456,6 +456,7 @@ class KnowledgeBaseStorage:
         summary: Optional[str] = None,
         change_note: Optional[str] = None,
         created_by: Optional[str] = None,
+        tags: Optional[List[str]] = None,
     ) -> bool:
         """Update Article and save revision.
 
@@ -497,6 +498,13 @@ class KnowledgeBaseStorage:
                     change_note,
                 ),
             )
+
+            if tags is not None:
+                cursor.execute("DELETE FROM kb_article_tags WHERE article_id = ?", (article_id,))
+                for tag_name in dict.fromkeys(tags):
+                    tag_id = self._ensure_tag(cursor, tag_name)
+                    cursor.execute("INSERT INTO kb_article_tags (article_id, tag_id) VALUES (?, ?)",
+                                   (article_id, tag_id))
 
             # Update article
             now = datetime.now()

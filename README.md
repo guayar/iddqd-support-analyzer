@@ -20,7 +20,7 @@ I own the requirements, validation rules, tests and spec interpretation; impleme
 ## What it does
 
 - **Analyze** — SAML decoding (POST/Redirect), protocol/profile checks, XML signatures, optional SP/IdP metadata comparisons, and Request/Response/Assertion correlation; Java/Maven/OpenSSH logs, Oracle alert stamps/vendor codes, and `[ts] [error]` records
-- **Knowledge Base** — ⚠️ **EXPERIMENTAL / UNDER DEVELOPMENT** — local SQLite mini-Confluence: create/edit/delete Articles and Cases, full-text search, export/import as ZIP, link findings to troubleshooting docs; works in Light edition without LLM
+- **Knowledge Base** — ⚠️ **EXPERIMENTAL / UNDER DEVELOPMENT** — local SQLite Articles: create/edit/delete, search, and JSON export/import; works in Light edition without LLM. Cases and record linking have been removed. Legacy records remain in existing databases for compatibility and are not displayed or exported. Articles, IDs, tags and revisions are preserved.
 - **Anonymize** — local pseudonymization of logs and SAML so a copy can be shared (not DLP; review the residual leak scan)
 - **Assistant** — local Ollama only (full edition): support/tech help, KB search, screenshots + OCR, latest Analyze JSON; no web search
 - **General Chat** — separate module (full edition): local by default; public web search only when the turn needs current/external info
