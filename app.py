@@ -36,6 +36,7 @@ RESTART_HTML = (
 
 CSS = """
 .gradio-container {
+    width: 100% !important;
     max-width: 1240px !important;
     margin: 0 auto !important;
     padding: 18px 28px 42px !important;
