@@ -332,15 +332,18 @@ CSS = """
 .kb-dataframe {
     width: 100% !important;
 }
-.kb-dataframe tr:hover {
-    background-color: rgba(59, 130, 246, 0.15) !important;
+.kb-dataframe tbody tr {
+    transition: all 0.15s ease !important;
+}
+.kb-dataframe tbody tr:hover,
+.kb-dataframe tbody tr:focus-within {
+    background-color: rgba(59, 130, 246, 0.25) !important;
     cursor: pointer !important;
+    outline: 2px solid rgba(59, 130, 246, 0.5) !important;
+    outline-offset: -1px !important;
 }
-.kb-dataframe tr {
-    transition: background-color 0.15s ease !important;
-}
-.kb-dataframe table tbody tr:hover {
-    background-color: rgba(59, 130, 246, 0.15) !important;
+.kb-dataframe tbody tr td {
+    background-color: inherit !important;
 }
 """ + f"""
 footer button.settings::before {{

@@ -354,7 +354,7 @@ def build_kb_tab() -> Tuple:
             return [], []
 
         try:
-            result = kb.search(query, limit=20)
+            result = kb.search(query, limit=10)  # Changed from 20 to 10 for pagination
             articles = result["articles"]
             cases = result["cases"]
 
