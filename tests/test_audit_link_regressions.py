@@ -179,3 +179,23 @@ def test_remove_column_does_not_open_or_clear_opposite_panel(ui, name):
     assert state[fn.outputs[6]._id] == "previous-selection"
     assert all(result[index] == {"__type__": "update"}
                for index in [0, 1, 2, 3, 4, 5, 8, 9])
+
+
+@pytest.mark.parametrize("kind", ["case", "article"])
+def test_view_and_edit_panels_are_mutually_exclusive(ui, kind):
+    _, blocks = ui
+    edit = callback(blocks, f"toggle_{kind}_edit")
+    view = callback(blocks, f"toggle_{kind}_view")
+    assert edit.outputs == view.outputs
+    assert edit.outputs[0].value == "view"
+    assert edit.outputs[1].visible is True
+    assert edit.outputs[2].visible is False
+    state = SessionState(blocks)
+    result = invoke(blocks, edit, state, [])
+    assert state[edit.outputs[0]._id] == "edit"
+    assert result[1]["visible"] is False
+    assert result[2]["visible"] is True
+    result = invoke(blocks, view, state, [])
+    assert state[view.outputs[0]._id] == "view"
+    assert result[1]["visible"] is True
+    assert result[2]["visible"] is False
