@@ -631,6 +631,80 @@ def build_kb_tab():
                         except Exception as e:
                             return f"❌ Error: {str(e)}", "view"
 
+                    # ========================
+                    # PHASE 7: Link Management Handlers
+                    # ========================
+
+                    def search_articles_for_case(query: str):
+                        """Search articles to link to case."""
+                        if not query or not query.strip():
+                            return None
+                        results = kb.search(query.strip(), limit=100)
+                        articles = results.get("articles", [])
+                        data = [[a.display_id, a.title] for a in articles]
+                        return pd.DataFrame(data, columns=["ID", "Title"]) if data else None
+
+                    def add_article_to_case(case_id, article_display_id):
+                        """Link article to case."""
+                        if not case_id or not article_display_id:
+                            return "❌ Select case and article"
+                        try:
+                            article = kb.get_article_by_display_id(article_display_id)
+                            if not article:
+                                return "❌ Article not found"
+                            kb.link_case_to_article(case_id, article.id)
+                            return f"✅ Linked {article_display_id}"
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+
+                    def remove_article_from_case(case_id, article_display_id):
+                        """Unlink article from case."""
+                        if not case_id or not article_display_id:
+                            return "❌ Select case and article"
+                        try:
+                            article = kb.get_article_by_display_id(article_display_id)
+                            if not article:
+                                return "❌ Article not found"
+                            kb.unlink_case_from_article(case_id, article.id)
+                            return f"✅ Unlinked {article_display_id}"
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+
+                    def search_cases_for_article(query: str):
+                        """Search cases to link to article."""
+                        if not query or not query.strip():
+                            return None
+                        results = kb.search(query.strip(), limit=100)
+                        cases = results.get("cases", [])
+                        data = [[c.display_id, c.title] for c in cases]
+                        return pd.DataFrame(data, columns=["ID", "Title"]) if data else None
+
+                    def add_case_to_article(article_id, case_display_id):
+                        """Link case to article."""
+                        if not article_id or not case_display_id:
+                            return "❌ Select article and case"
+                        try:
+                            case = kb.get_case_by_display_id(case_display_id)
+                            if not case:
+                                return "❌ Case not found"
+                            kb.link_case_to_article(case.id, article_id)
+                            return f"✅ Linked {case_display_id}"
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+
+                    def remove_case_from_article(article_id, case_display_id):
+                        """Unlink case from article."""
+                        if not article_id or not case_display_id:
+                            return "❌ Select article and case"
+                        try:
+                            case = kb.get_case_by_display_id(case_display_id)
+                            if not case:
+                                return "❌ Case not found"
+                            kb.unlink_case_from_article(case.id, article_id)
+                            return f"✅ Unlinked {case_display_id}"
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+
                     # Wire edit mode toggle
                     case_edit_btn.click(
                         fn=toggle_case_edit,
@@ -688,6 +762,19 @@ def build_kb_tab():
                         outputs=[article_view_id, article_view_title, article_view_tags,
                                 article_view_summary, article_view_content, article_linked_cases,
                                 article_view_id, article_view_id]
+                    )
+
+                    # Wire link search and management (PHASE 7)
+                    case_edit_link_btn.click(
+                        fn=search_articles_for_case,
+                        inputs=[case_edit_link_search],
+                        outputs=[case_edit_link_results]
+                    )
+
+                    article_edit_link_btn.click(
+                        fn=search_cases_for_article,
+                        inputs=[article_edit_link_search],
+                        outputs=[article_edit_link_results]
                     )
 
                 # ========================
