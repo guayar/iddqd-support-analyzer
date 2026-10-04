@@ -453,32 +453,26 @@ def build_kb_tab():
                     )
 
                     # Click linked item to navigate (PHASE 3)
-                    def navigate_to_case(evt: gr.SelectData):
-                        """Click linked article -> load that case."""
-                        if not evt or not evt.row_value or len(evt.row_value) < 1:
-                            return None
-                        display_id = evt.row_value[0]
-                        case = kb.get_case_by_display_id(display_id)
-                        return case.id if case else None
-
-                    def navigate_to_article(evt: gr.SelectData):
-                        """Click linked case -> load that article."""
-                        if not evt or not evt.row_value or len(evt.row_value) < 1:
-                            return None
-                        display_id = evt.row_value[0]
-                        article = kb.get_article_by_display_id(display_id)
-                        return article.id if article else None
-
                     case_linked_articles.select(
-                        fn=navigate_to_article,
-                        inputs=[],
-                        outputs=[selected_article_id]
+                        fn=load_article_view_full,
+                        outputs=[
+                            article_view_id, article_view_title, article_view_tags, article_view_summary, article_view_content,
+                            article_linked_cases, selected_article_id
+                        ]
+                    ).then(
+                        fn=reload_article_results,
+                        outputs=[article_results_table]
                     )
 
                     article_linked_cases.select(
-                        fn=navigate_to_case,
-                        inputs=[],
-                        outputs=[selected_case_id]
+                        fn=load_case_view_full,
+                        outputs=[
+                            case_view_id, case_view_title, case_view_tags, case_view_summary, case_view_content,
+                            case_linked_articles, selected_case_id
+                        ]
+                    ).then(
+                        fn=reload_case_results,
+                        outputs=[case_results_table]
                     )
 
                     # Delete buttons
