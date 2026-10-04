@@ -1,9 +1,9 @@
+from __future__ import annotations
+
 import os
 import pytest
 if os.getenv("LIGHT_EDITION"):
     pytest.skip("Full edition only", allow_module_level=True)
-
-from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
