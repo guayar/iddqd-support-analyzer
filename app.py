@@ -329,20 +329,34 @@ CSS = """
 .psa-context-on {
     background: #16a34a !important;
 }
+/* KB Dataframe - full row selection highlight */
 .kb-dataframe {
     width: 100% !important;
 }
-.kb-dataframe tbody tr {
-    transition: all 0.15s ease !important;
+
+/* Highlight entire row on hover */
+.kb-dataframe table tr:hover {
+    background-color: rgba(59, 130, 246, 0.3) !important;
 }
-.kb-dataframe tbody tr:hover,
-.kb-dataframe tbody tr:focus-within {
-    background-color: rgba(59, 130, 246, 0.25) !important;
+
+.kb-dataframe tr:hover {
+    background-color: rgba(59, 130, 246, 0.3) !important;
     cursor: pointer !important;
-    outline: 2px solid rgba(59, 130, 246, 0.5) !important;
-    outline-offset: -1px !important;
 }
-.kb-dataframe tbody tr td {
+
+.kb-dataframe tr:hover td {
+    background-color: rgba(59, 130, 246, 0.3) !important;
+}
+
+/* Focus state for keyboard selection */
+.kb-dataframe tr:focus,
+.kb-dataframe tr:focus-visible {
+    background-color: rgba(59, 130, 246, 0.4) !important;
+    outline: 2px solid rgba(59, 130, 246, 0.8) !important;
+}
+
+/* Ensure all cells inherit row background */
+.kb-dataframe td {
     background-color: inherit !important;
 }
 """ + f"""
