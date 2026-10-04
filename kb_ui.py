@@ -642,25 +642,34 @@ def build_kb_tab():
                     # ========================
 
                     def search_articles_for_case(query: str):
-                        """Search articles to link to case - with marker column."""
+                        """Search articles to link to case - with marker column (read-only)."""
                         if not query or not query.strip():
                             return None
                         results = kb.search(query.strip(), limit=100)
                         articles = results.get("articles", [])
-                        # Include marker column (empty for now, will be filled on selection)
+                        # Store results in state for later use
+                        case_edit_link_results_data = [articles]  # Store article objects
+                        # Include marker column (empty initially)
                         data = [["", a.display_id, a.title] for a in articles]
-                        return pd.DataFrame(data, columns=["▶", "ID", "Title"]) if data else None
+                        df = pd.DataFrame(data, columns=["▶", "ID", "Title"]) if data else None
+                        return df
 
                     def add_article_to_case(case_id, article_display_id):
-                        """Link article to case."""
+                        """Link article to case - with duplicate prevention."""
                         if not case_id or not article_display_id:
                             return "❌ Select case and article"
                         try:
                             article = kb.get_article_by_display_id(article_display_id)
                             if not article:
                                 return "❌ Article not found"
+
+                            # Check if already linked
+                            existing_links = kb.get_articles_for_case(case_id)
+                            if any(a.id == article.id for a in existing_links):
+                                return f"ℹ️ Article {article_display_id} is already linked"
+
                             kb.link_case_to_article(case_id, article.id)
-                            return f"✅ Linked {article_display_id}"
+                            return f"✅ Successfully linked article {article_display_id}"
                         except Exception as e:
                             return f"❌ Error: {str(e)}"
 
@@ -678,25 +687,34 @@ def build_kb_tab():
                             return f"❌ Error: {str(e)}"
 
                     def search_cases_for_article(query: str):
-                        """Search cases to link to article - with marker column."""
+                        """Search cases to link to article - with marker column (read-only)."""
                         if not query or not query.strip():
                             return None
                         results = kb.search(query.strip(), limit=100)
                         cases = results.get("cases", [])
-                        # Include marker column (empty for now, will be filled on selection)
+                        # Store results for later use
+                        article_edit_link_results_data = [cases]  # Store case objects
+                        # Include marker column (empty initially)
                         data = [["", c.display_id, c.title] for c in cases]
-                        return pd.DataFrame(data, columns=["▶", "ID", "Title"]) if data else None
+                        df = pd.DataFrame(data, columns=["▶", "ID", "Title"]) if data else None
+                        return df
 
                     def add_case_to_article(article_id, case_display_id):
-                        """Link case to article."""
+                        """Link case to article - with duplicate prevention."""
                         if not article_id or not case_display_id:
                             return "❌ Select article and case"
                         try:
                             case = kb.get_case_by_display_id(case_display_id)
                             if not case:
                                 return "❌ Case not found"
+
+                            # Check if already linked
+                            existing_links = kb.get_cases_for_article(article_id)
+                            if any(c.id == case.id for c in existing_links):
+                                return f"ℹ️ Case {case_display_id} is already linked"
+
                             kb.link_case_to_article(case.id, article_id)
-                            return f"✅ Linked {case_display_id}"
+                            return f"✅ Successfully linked case {case_display_id}"
                         except Exception as e:
                             return f"❌ Error: {str(e)}"
 
@@ -814,7 +832,7 @@ def build_kb_tab():
                         return pd.DataFrame(data, columns=["▶", "ID", "Title"])
 
                     case_edit_link_results.select(
-                        fn=lambda evt: evt.row_value[1] if evt and evt.row_value else None,
+                        fn=lambda evt: evt.row_value[1] if evt and evt.row_value and len(evt.row_value) > 1 else None,
                         outputs=[case_edit_selected_link_id]
                     ).then(
                         fn=mark_selected_article,
@@ -868,7 +886,7 @@ def build_kb_tab():
                     )
 
                     article_edit_link_results.select(
-                        fn=lambda evt: evt.row_value[1] if evt and evt.row_value else None,
+                        fn=lambda evt: evt.row_value[1] if evt and evt.row_value and len(evt.row_value) > 1 else None,
                         outputs=[article_edit_selected_link_id]
                     )
 
