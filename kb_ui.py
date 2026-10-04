@@ -235,10 +235,26 @@ def build_kb_tab() -> Tuple:
                         interactive=True,
                     )
 
+                    gr.Markdown("### Link Articles to This Case")
+                    with gr.Row():
+                        link_article_dropdown = gr.Dropdown(
+                            label="Select Article to Link",
+                            choices=[],
+                            scale=3,
+                        )
+                        link_article_btn = gr.Button("🔗 Link", scale=1, variant="secondary")
+
+                    link_status = gr.Textbox(
+                        label="Status",
+                        interactive=False,
+                        value="Ready to link articles",
+                    )
+
                     case_related_articles = gr.Dataframe(
                         headers=["Article ID", "Title"],
                         interactive=False,
                         label="Related Articles",
+                        wrap=False,
                     )
 
                     with gr.Row():
@@ -576,12 +592,12 @@ Conflicts detected: {len(result['conflicts'])}"""
 
         print(f"[CASE SELECT] display_id={display_id}, canonical_uuid={case.id}")
 
-        # Get related articles
+        # Get related articles (show display_id, not UUID)
         related_data = []
         for article_id in case.related_article_ids:
             article = kb.get_article(article_id)
             if article:
-                related_data.append([article.id, article.title])
+                related_data.append([article.display_id, article.title])
 
         tags_str = ", ".join(case.tags) if case.tags else ""
 
@@ -632,6 +648,42 @@ Conflicts detected: {len(result['conflicts'])}"""
                 return "❌ Failed to delete case"
         except Exception as e:
             return f"❌ Error: {str(e)}"
+
+    def populate_article_dropdown():
+        """Populate dropdown with available articles."""
+        articles = kb.list_articles()
+        choices = [f"{a.display_id} — {a.title}" for a in articles]
+        return gr.Dropdown(choices=choices, value=None)
+
+    def link_article_to_case(selected_case_uuid, article_choice):
+        """Link selected article to case."""
+        if not selected_case_uuid:
+            return "⚠️ No case selected", []
+        if not article_choice:
+            return "⚠️ No article selected", []
+
+        try:
+            # Extract display_id from choice (format: "AN00000001 — title")
+            display_id = article_choice.split(" — ")[0]
+            article = kb.get_article_by_display_id(display_id)
+            if not article:
+                return "❌ Article not found", []
+
+            # Link article to case
+            success = kb.link_case_to_article(selected_case_uuid, article.id)
+            if success:
+                # Reload case to show updated related articles
+                case = kb.get_case(selected_case_uuid)
+                related_data = []
+                for article_id in case.related_article_ids:
+                    art = kb.get_article(article_id)
+                    if art:
+                        related_data.append([art.display_id, art.title])
+                return f"✅ Linked: {article.display_id}", related_data
+            else:
+                return "❌ Failed to link article", []
+        except Exception as e:
+            return f"❌ Error: {str(e)}", []
 
     def refresh_articles_display_only(selected_article_uuid=None):
         """Refresh Articles table to show current selection highlighting.
@@ -766,6 +818,9 @@ Conflicts detected: {len(result['conflicts'])}"""
         fn=refresh_cases_display_only,
         inputs=[selected_case_id],
         outputs=[cases_list],
+    ).then(
+        fn=populate_article_dropdown,
+        outputs=[link_article_dropdown],
     )
 
     # Search results cases - load into editor AND re-render search results with selection
@@ -781,6 +836,9 @@ Conflicts detected: {len(result['conflicts'])}"""
         fn=refresh_cases_display_only,
         inputs=[selected_case_id],
         outputs=[cases_list],
+    ).then(
+        fn=populate_article_dropdown,
+        outputs=[link_article_dropdown],
     )
 
     # Save and delete case
@@ -817,6 +875,13 @@ Conflicts detected: {len(result['conflicts'])}"""
         fn=refresh_all_knowledge,
         inputs=[selected_article_id, selected_case_id],
         outputs=[articles_count, cases_count, articles_list, cases_list],
+    )
+
+    # Link article to case
+    link_article_btn.click(
+        fn=link_article_to_case,
+        inputs=[selected_case_id, link_article_dropdown],
+        outputs=[link_status, case_related_articles],
     )
 
     # Export handlers
