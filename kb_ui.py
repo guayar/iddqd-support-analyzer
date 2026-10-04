@@ -10,6 +10,7 @@ from kb_rendering import render_search_articles_table
 
 kb = KnowledgeBaseActions()
 PAGE_SIZE = 10
+KB_TAB_HEIGHT = "clamp(720px, calc(100vh - 240px), 1000px)"
 
 
 def build_kb_tab():
@@ -21,7 +22,7 @@ def build_kb_tab():
         with gr.Column(scale=2, elem_classes=["psa-shell"]):
             gr.Markdown("# Knowledge Base\nCreate, find and edit Articles.")
             with gr.Tabs():
-                with gr.Tab("Create"):
+                with gr.Tab("Create", height=KB_TAB_HEIGHT):
                     create_title = gr.Textbox(label="Title")
                     create_tags = gr.Textbox(label="Tags (comma-separated)")
                     create_summary = gr.Textbox(label="Summary", lines=3)
@@ -29,7 +30,7 @@ def build_kb_tab():
                     create_btn = gr.Button("Create Article", variant="primary")
                     create_status = gr.Textbox(label="Status", interactive=False)
 
-                with gr.Tab("Search / View"):
+                with gr.Tab("Search / View", height=KB_TAB_HEIGHT):
                     with gr.Row():
                         search_box = gr.Textbox(label="Search", placeholder="AN00000001 or keyword", scale=3)
                         search_btn = gr.Button("Search", variant="primary", scale=1)
@@ -64,11 +65,11 @@ def build_kb_tab():
                             cancel_btn = gr.Button("Cancel")
                     status = gr.Textbox(label="Status", interactive=False)
 
-                with gr.Tab("Export / Import"):
+                with gr.Tab("Export / Import", height=KB_TAB_HEIGHT):
                     export_btn = gr.Button("Export as JSON", variant="primary")
-                    export_file = gr.File(label="Download Articles", interactive=False)
+                    export_file = gr.File(label="Download Articles", interactive=False, height=220)
                     export_status = gr.Textbox(label="Status", interactive=False)
-                    import_file = gr.File(label="Select JSON file", file_types=[".json"], type="filepath")
+                    import_file = gr.File(label="Select JSON file", file_types=[".json"], type="filepath", height=220)
                     import_btn = gr.Button("Import", variant="primary")
                     import_status = gr.Textbox(label="Status", interactive=False)
 
