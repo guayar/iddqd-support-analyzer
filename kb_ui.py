@@ -822,6 +822,29 @@ def build_kb_tab():
                         outputs=[case_edit_link_results]
                     )
 
+                    def remove_article_link_handler(evt):
+                        """Remove article link when clicking current links table."""
+                        if not evt or not evt.row_value or len(evt.row_value) < 2:
+                            return "❌ Select link to remove"
+                        display_id = evt.row_value[0]
+                        case_id = selected_case_id.value
+                        try:
+                            result = remove_article_from_case(case_id, display_id)
+                            return result
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+
+                    case_edit_linked.select(
+                        fn=remove_article_link_handler,
+                        outputs=[case_edit_status]
+                    ).then(
+                        fn=populate_case_edit,
+                        inputs=[selected_case_id],
+                        outputs=[case_edit_id, case_edit_title, case_edit_tags,
+                                case_edit_summary, case_edit_content, case_edit_linked,
+                                case_edit_link_search, case_edit_status]
+                    )
+
                     case_edit_link_btn.click(
                         fn=add_article_to_case,
                         inputs=[case_edit_id, case_edit_selected_link_id],
@@ -843,6 +866,29 @@ def build_kb_tab():
                     article_edit_link_results.select(
                         fn=lambda evt: evt.row_value[1] if evt and evt.row_value else None,
                         outputs=[article_edit_selected_link_id]
+                    )
+
+                    def remove_case_link_handler(evt):
+                        """Remove case link when clicking current links table."""
+                        if not evt or not evt.row_value or len(evt.row_value) < 2:
+                            return "❌ Select link to remove"
+                        display_id = evt.row_value[0]
+                        article_id = selected_article_id.value
+                        try:
+                            result = remove_case_from_article(article_id, display_id)
+                            return result
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+
+                    article_edit_linked.select(
+                        fn=remove_case_link_handler,
+                        outputs=[article_edit_status]
+                    ).then(
+                        fn=populate_article_edit,
+                        inputs=[selected_article_id],
+                        outputs=[article_edit_id, article_edit_title, article_edit_tags,
+                                article_edit_summary, article_edit_content, article_edit_linked,
+                                article_edit_link_search, article_edit_status]
                     )
 
                     article_edit_link_btn.click(
