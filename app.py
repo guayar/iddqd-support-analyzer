@@ -359,6 +359,43 @@ CSS = """
 .kb-dataframe td {
     background-color: inherit !important;
 }
+
+/* Selected row highlight - persistent and table-scoped */
+#kb-articles-list .kb-article-row-selected,
+#kb-articles-list .kb-article-row-selected td {
+    background-color: rgba(59, 130, 246, 0.4) !important;
+}
+
+#kb-articles-list .kb-article-row-selected {
+    border-left: 3px solid rgb(59, 130, 246) !important;
+}
+
+#kb-cases-list .kb-case-row-selected,
+#kb-cases-list .kb-case-row-selected td {
+    background-color: rgba(59, 130, 246, 0.4) !important;
+}
+
+#kb-cases-list .kb-case-row-selected {
+    border-left: 3px solid rgb(59, 130, 246) !important;
+}
+
+#kb-search-articles .kb-article-row-selected,
+#kb-search-articles .kb-article-row-selected td {
+    background-color: rgba(59, 130, 246, 0.4) !important;
+}
+
+#kb-search-articles .kb-article-row-selected {
+    border-left: 3px solid rgb(59, 130, 246) !important;
+}
+
+#kb-search-cases .kb-case-row-selected,
+#kb-search-cases .kb-case-row-selected td {
+    background-color: rgba(59, 130, 246, 0.4) !important;
+}
+
+#kb-search-cases .kb-case-row-selected {
+    border-left: 3px solid rgb(59, 130, 246) !important;
+}
 """ + f"""
 footer button.settings::before {{
     content: "v{APP_VERSION} · ";
@@ -367,6 +404,50 @@ footer button.settings::before {{
 }}
 """
 
+
+KB_ROW_SELECTION_JS = """
+() => {
+  // Handle KB table row selection highlighting
+  const setupTableHighlighting = () => {
+    const tables = {
+      'kb-articles-list': 'kb-article-row-selected',
+      'kb-cases-list': 'kb-case-row-selected',
+      'kb-search-articles': 'kb-article-row-selected',
+      'kb-search-cases': 'kb-case-row-selected',
+    };
+
+    for (const [tableId, className] of Object.entries(tables)) {
+      const tableEl = document.getElementById(tableId);
+      if (!tableEl) continue;
+
+      // Get table rows
+      const rows = tableEl.querySelectorAll('table tbody tr');
+      rows.forEach(row => {
+        row.addEventListener('click', (e) => {
+          // Remove highlight from other rows in this table
+          rows.forEach(r => r.classList.remove(className));
+          // Add highlight to clicked row
+          row.classList.add(className);
+        });
+      });
+    }
+  };
+
+  // Setup on load and watch for DOM changes
+  setupTableHighlighting();
+
+  // Re-setup when DOM mutates (new search results, etc)
+  const observer = new MutationObserver(() => {
+    setupTableHighlighting();
+  });
+
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+    characterData: false,
+  });
+}
+"""
 
 COPY_REPORT_JS = """
 () => {
@@ -935,10 +1016,20 @@ with gr.Blocks(title=APP_TITLE, delete_cache=(3600, 3600)) as demo:
                     outputs=[files, pasted, signing_cert, idp_metadata, sp_metadata, report, raw, analysis_state, decoded_download],
                 )
 
+            # Combine JS for KB row selection + report copy
+            combined_js = f"""
+() => {{
+  // Run KB row highlighting setup
+  ({KB_ROW_SELECTION_JS}());
+  // Run report copy setup
+  ({COPY_REPORT_JS}());
+}}
+"""
+
             demo.load(
                 fn=kb_refresh_fn,
                 outputs=[kb_articles_count, kb_cases_count, kb_articles_list, kb_cases_list],
-                js=COPY_REPORT_JS
+                js=combined_js
             )
 
 

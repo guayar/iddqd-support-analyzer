@@ -78,6 +78,29 @@ class KnowledgeBaseActions:
         """List all active Articles."""
         return self.storage.list_articles()
 
+    def get_article_by_display_id(self, display_id: str) -> Optional[Article]:
+        """Get Article by display ID (e.g., AN00000001).
+
+        Args:
+            display_id: Display ID like AN00000001
+
+        Returns:
+            Article object or None if not found
+        """
+        if not display_id or not display_id.startswith('AN'):
+            return None
+
+        try:
+            seq_num = int(display_id[2:])
+            all_articles = self.list_articles()
+            for article in all_articles:
+                if article.display_id == display_id:
+                    return article
+        except (ValueError, IndexError):
+            pass
+
+        return None
+
     # ========================
     # CASES
     # ========================
@@ -136,6 +159,29 @@ class KnowledgeBaseActions:
     def list_cases(self) -> List[Case]:
         """List all Cases."""
         return self.storage.list_cases()
+
+    def get_case_by_display_id(self, display_id: str) -> Optional[Case]:
+        """Get Case by display ID (e.g., CN00000001).
+
+        Args:
+            display_id: Display ID like CN00000001
+
+        Returns:
+            Case object or None if not found
+        """
+        if not display_id or not display_id.startswith('CN'):
+            return None
+
+        try:
+            seq_num = int(display_id[2:])
+            all_cases = self.list_cases()
+            for case in all_cases:
+                if case.display_id == display_id:
+                    return case
+        except (ValueError, IndexError):
+            pass
+
+        return None
 
     # ========================
     # SEARCH

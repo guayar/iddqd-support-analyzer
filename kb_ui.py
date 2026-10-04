@@ -21,6 +21,13 @@ def build_kb_tab() -> Tuple:
         Tuple of Gradio components for state management
     """
 
+    # ========================
+    # SELECTION STATE
+    # ========================
+    # Keep Article and Case selection completely independent
+    selected_article_id = gr.State(None)
+    selected_case_id = gr.State(None)
+
     with gr.Tab("Knowledge Base"):
         with gr.Column(elem_classes=["psa-shell"], scale=1):
             # Header
@@ -32,6 +39,25 @@ def build_kb_tab() -> Tuple:
 
             Create Articles and Cases, then use the Search tab to find them.
             """)
+
+            # ========================
+            # SELECTION STATUS
+            # ========================
+            with gr.Row():
+                selected_article_label = gr.Textbox(
+                    label="Selected Article",
+                    value="None",
+                    interactive=False,
+                    scale=1,
+                    min_width=200,
+                )
+                selected_case_label = gr.Textbox(
+                    label="Selected Case",
+                    value="None",
+                    interactive=False,
+                    scale=1,
+                    min_width=200,
+                )
 
             # Filter tabs
             with gr.Tabs():
@@ -58,6 +84,7 @@ def build_kb_tab() -> Tuple:
                                 interactive=False,
                                 label="Articles",
                                 elem_classes=["kb-dataframe"],
+                                elem_id="kb-articles-list",
                             )
 
                             gr.Markdown("### Create New Article")
@@ -93,6 +120,7 @@ def build_kb_tab() -> Tuple:
                                 interactive=False,
                                 label="Cases",
                                 elem_classes=["kb-dataframe"],
+                                elem_id="kb-cases-list",
                             )
 
                             gr.Markdown("### Create New Case")
@@ -242,6 +270,7 @@ def build_kb_tab() -> Tuple:
                         interactive=False,
                         label="Articles Found",
                         elem_classes=["kb-dataframe"],
+                        elem_id="kb-search-articles",
                     )
 
                     search_results_cases = gr.Dataframe(
@@ -249,6 +278,7 @@ def build_kb_tab() -> Tuple:
                         interactive=False,
                         label="Cases Found",
                         elem_classes=["kb-dataframe"],
+                        elem_id="kb-search-cases",
                     )
 
                 # ========================
@@ -472,18 +502,21 @@ Conflicts detected: {len(result['conflicts'])}"""
             return f"❌ Error: {str(e)}"
 
     def load_article_for_edit(evt: gr.SelectData):
-        """Load selected article into editor."""
-        if evt is None or evt.index is None:
-            return None, "", "", "", "", ""
+        """Load selected article into editor.
 
-        # Get article ID from row
-        articles = kb.list_articles()
-        if evt.index[0] >= len(articles):
-            return None, "", "", "", "", ""
+        Uses evt.row_value[0] (display ID) instead of row index
+        to correctly handle search results.
+        """
+        if evt is None or evt.row_value is None or len(evt.row_value) == 0:
+            return None, "", "", "", "", "", "", None
 
-        article = articles[evt.index[0]]
+        # Extract display ID from first column
+        display_id = evt.row_value[0]
+
+        # Resolve display ID to actual article
+        article = kb.get_article_by_display_id(display_id)
         if not article:
-            return None, "", "", "", "", ""
+            return None, "", "", "", "", "", "", None
 
         # Format revision history
         revisions = kb.get_revisions(article.id)
@@ -499,6 +532,7 @@ Conflicts detected: {len(result['conflicts'])}"""
         finding_codes = ", ".join(article.finding_codes) if article.finding_codes else ""
         tags_str = ", ".join(article.tags) if article.tags else ""
 
+        # Return editor fields + state update
         return (
             article.display_id,
             article.title,
@@ -507,6 +541,7 @@ Conflicts detected: {len(result['conflicts'])}"""
             tags_str,
             finding_codes,
             rev_text if len(revisions) > 0 else "No revisions yet",
+            article.id,  # Update selected_article_id state
         )
 
     def save_article_handler(article_id, title, summary, content, tags_str, findings_str):
@@ -550,17 +585,21 @@ Conflicts detected: {len(result['conflicts'])}"""
             return f"❌ Error: {str(e)}"
 
     def load_case_for_edit(evt: gr.SelectData):
-        """Load selected case into editor."""
-        if evt is None or evt.index is None:
-            return None, "", "", "", ""
+        """Load selected case into editor.
 
-        cases = kb.list_cases()
-        if evt.index[0] >= len(cases):
-            return None, "", "", "", ""
+        Uses evt.row_value[0] (display ID) instead of row index
+        to correctly handle search results.
+        """
+        if evt is None or evt.row_value is None or len(evt.row_value) == 0:
+            return None, "", "", "", "", [], None
 
-        case = cases[evt.index[0]]
+        # Extract display ID from first column
+        display_id = evt.row_value[0]
+
+        # Resolve display ID to actual case
+        case = kb.get_case_by_display_id(display_id)
         if not case:
-            return None, "", "", "", ""
+            return None, "", "", "", "", [], None
 
         # Get related articles
         related_data = []
@@ -578,6 +617,7 @@ Conflicts detected: {len(result['conflicts'])}"""
             case.content,
             tags_str,
             related_data if related_data else [],
+            case.id,  # Update selected_case_id state
         )
 
     def save_case_handler(case_id, title, summary, content, tags_str):
@@ -618,6 +658,32 @@ Conflicts detected: {len(result['conflicts'])}"""
         except Exception as e:
             return f"❌ Error: {str(e)}"
 
+    def update_article_selection(selected_id):
+        """Update Article selection label."""
+        if selected_id is None:
+            return "None"
+        article = kb.get_article(selected_id)
+        if article:
+            return f"{article.display_id} — {article.title}"
+        return "None"
+
+    def update_case_selection(selected_id):
+        """Update Case selection label."""
+        if selected_id is None:
+            return "None"
+        case = kb.get_case(selected_id)
+        if case:
+            return f"{case.display_id} — {case.title}"
+        return "None"
+
+    def clear_article_editor():
+        """Clear Article editor when Article is deleted."""
+        return "", "", "", "", "", "", ""
+
+    def clear_case_editor():
+        """Clear Case editor when Case is deleted."""
+        return "", "", "", "", []
+
     # Wire handlers
     search_btn.click(
         fn=perform_search,
@@ -629,14 +695,24 @@ Conflicts detected: {len(result['conflicts'])}"""
     articles_list.select(
         fn=load_article_for_edit,
         outputs=[article_id_edit, article_title_edit, article_summary_edit,
-                 article_content_edit, article_tags_edit, article_findings_edit, article_history],
+                 article_content_edit, article_tags_edit, article_findings_edit, article_history,
+                 selected_article_id],
+    ).then(
+        fn=update_article_selection,
+        inputs=[selected_article_id],
+        outputs=[selected_article_label],
     )
 
     # Search results - load into editor (from Search Results tab)
     search_results_articles.select(
         fn=load_article_for_edit,
         outputs=[article_id_edit, article_title_edit, article_summary_edit,
-                 article_content_edit, article_tags_edit, article_findings_edit, article_history],
+                 article_content_edit, article_tags_edit, article_findings_edit, article_history,
+                 selected_article_id],
+    ).then(
+        fn=update_article_selection,
+        inputs=[selected_article_id],
+        outputs=[selected_article_label],
     )
 
     # Save and delete article
@@ -657,6 +733,10 @@ Conflicts detected: {len(result['conflicts'])}"""
     ).then(
         fn=refresh_all_knowledge,
         outputs=[articles_count, cases_count, articles_list, cases_list],
+    ).then(
+        fn=lambda: (None, "None", "", "", "", "", "", ""),
+        outputs=[selected_article_id, selected_article_label, article_id_edit, article_title_edit,
+                article_summary_edit, article_content_edit, article_tags_edit, article_findings_edit],
     )
 
     create_article_btn.click(
@@ -672,14 +752,22 @@ Conflicts detected: {len(result['conflicts'])}"""
     cases_list.select(
         fn=load_case_for_edit,
         outputs=[case_id_edit, case_title_edit, case_summary_edit,
-                 case_content_edit, case_tags_edit, case_related_articles],
+                 case_content_edit, case_tags_edit, case_related_articles, selected_case_id],
+    ).then(
+        fn=update_case_selection,
+        inputs=[selected_case_id],
+        outputs=[selected_case_label],
     )
 
     # Search results cases - load into editor (from Search Results tab)
     search_results_cases.select(
         fn=load_case_for_edit,
         outputs=[case_id_edit, case_title_edit, case_summary_edit,
-                 case_content_edit, case_tags_edit, case_related_articles],
+                 case_content_edit, case_tags_edit, case_related_articles, selected_case_id],
+    ).then(
+        fn=update_case_selection,
+        inputs=[selected_case_id],
+        outputs=[selected_case_label],
     )
 
     # Save and delete case
@@ -700,6 +788,10 @@ Conflicts detected: {len(result['conflicts'])}"""
     ).then(
         fn=refresh_all_knowledge,
         outputs=[articles_count, cases_count, articles_list, cases_list],
+    ).then(
+        fn=lambda: (None, "None", "", "", "", ""),
+        outputs=[selected_case_id, selected_case_label, case_id_edit, case_title_edit,
+                case_summary_edit, case_content_edit, case_tags_edit],
     )
 
     create_case_btn.click(
@@ -739,6 +831,10 @@ Conflicts detected: {len(result['conflicts'])}"""
         cases_list,
         search_results_articles,
         search_results_cases,
+        selected_article_id,
+        selected_case_id,
+        selected_article_label,
+        selected_case_label,
     )
 
 
