@@ -109,7 +109,7 @@ class KnowledgeBaseSearch:
         return self.storage.find_articles_for_finding(finding_code)
 
     def _search_articles_simple(self, query: str, limit: int = 20) -> List[Article]:
-        """Fallback: simple substring search in Articles."""
+        """Fallback: simple substring search in Articles (title, summary, content, tags)."""
         query_lower = query.lower()
         all_articles = self.storage.list_articles()
 
@@ -119,6 +119,7 @@ class KnowledgeBaseSearch:
                 query_lower in article.title.lower()
                 or query_lower in (article.summary or "").lower()
                 or query_lower in article.content.lower()
+                or any(query_lower in tag.lower() for tag in article.tags)
             ):
                 results.append(article)
                 if len(results) >= limit:
@@ -127,7 +128,7 @@ class KnowledgeBaseSearch:
         return results
 
     def _search_cases_simple(self, query: str, limit: int = 20) -> List[Case]:
-        """Fallback: simple substring search in Cases."""
+        """Fallback: simple substring search in Cases (title, summary, content, tags)."""
         query_lower = query.lower()
         all_cases = self.storage.list_cases()
 
@@ -137,6 +138,7 @@ class KnowledgeBaseSearch:
                 query_lower in case.title.lower()
                 or query_lower in (case.summary or "").lower()
                 or query_lower in case.content.lower()
+                or any(query_lower in tag.lower() for tag in case.tags)
             ):
                 results.append(case)
                 if len(results) >= limit:
