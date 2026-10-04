@@ -323,12 +323,13 @@ def build_kb_tab() -> Tuple:
                             "", "", "", "", ""
                         )
 
-                    def load_case_view_full(evt):
-                        if not evt or not hasattr(evt, 'row_value') or not evt.row_value:
+                    def load_case_view_full(evt: gr.SelectData):
+                        """Load case into view when selected in dataframe."""
+                        if not evt or not evt.row_value or len(evt.row_value) < 2:
                             return "", "", "", "", "", None, None
 
                         try:
-                            display_id = evt.row_value[1]
+                            display_id = evt.row_value[1]  # Column 1 = ID
                             case = kb.get_case_by_display_id(display_id)
                             if not case:
                                 return "", "", "", "", "", None, None
@@ -347,14 +348,17 @@ def build_kb_tab() -> Tuple:
                                 case.id
                             )
                         except Exception as e:
+                            import traceback
+                            traceback.print_exc()
                             return "", "", "", "", "", None, None
 
-                    def load_article_view_full(evt):
-                        if not evt or not hasattr(evt, 'row_value') or not evt.row_value:
+                    def load_article_view_full(evt: gr.SelectData):
+                        """Load article into view when selected in dataframe."""
+                        if not evt or not evt.row_value or len(evt.row_value) < 2:
                             return "", "", "", "", "", None, None
 
                         try:
-                            display_id = evt.row_value[1]
+                            display_id = evt.row_value[1]  # Column 1 = ID
                             article = kb.get_article_by_display_id(display_id)
                             if not article:
                                 return "", "", "", "", "", None, None
@@ -373,6 +377,8 @@ def build_kb_tab() -> Tuple:
                                 article.id
                             )
                         except Exception as e:
+                            import traceback
+                            traceback.print_exc()
                             return "", "", "", "", "", None, None
 
                     def delete_case(case_uuid):
@@ -402,6 +408,7 @@ def build_kb_tab() -> Tuple:
 
                     case_results_table.select(
                         fn=load_case_view_full,
+                        inputs=[],  # SelectData comes from the component itself
                         outputs=[
                             case_view_id, case_view_title, case_view_tags, case_view_summary, case_view_content,
                             case_linked_articles, selected_case_id
@@ -410,6 +417,7 @@ def build_kb_tab() -> Tuple:
 
                     article_results_table.select(
                         fn=load_article_view_full,
+                        inputs=[],  # SelectData comes from the component itself
                         outputs=[
                             article_view_id, article_view_title, article_view_tags, article_view_summary, article_view_content,
                             article_linked_cases, selected_article_id
