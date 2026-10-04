@@ -40,7 +40,7 @@ def build_kb_tab() -> Tuple:
         article_search_results = gr.State([])  # List of Article objects
         case_search_results = gr.State([])    # List of Case objects
 
-        with gr.Column(elem_classes=["psa-shell"], scale=1):
+        with gr.Column(elem_classes=["psa-shell"], scale=1.75):
             # Header
             gr.Markdown("""
             # Knowledge Base
@@ -187,11 +187,11 @@ def build_kb_tab() -> Tuple:
                             scale=3,
                         )
 
-                    article_history = gr.Textbox(
-                        label="Revision History",
-                        interactive=False,
-                        lines=6,
-                    )
+                    # article_history = gr.Textbox(
+                    #     label="Revision History",
+                    #     interactive=False,
+                    #     lines=6,
+                    # )
 
                     with gr.Row():
                         save_article_btn = gr.Button("💾 Save", variant="primary")
@@ -503,21 +503,10 @@ Conflicts detected: {len(result['conflicts'])}"""
 
         print(f"[ARTICLE SELECT] display_id={display_id}, canonical_uuid={article.id}")
 
-        # Format revision history
-        revisions = kb.get_revisions(article.id)
-        rev_text = "Version history:\n"
-        for rev in revisions:
-            date_str = rev.get('created_at', 'N/A')
-            author = rev.get('created_by', 'unknown')
-            note = rev.get('change_note', '')
-            rev_text += f"- v{rev.get('version')}: {date_str} by {author}\n"
-            if note:
-                rev_text += f"  Note: {note}\n"
-
         finding_codes = ", ".join(article.finding_codes) if article.finding_codes else ""
         tags_str = ", ".join(article.tags) if article.tags else ""
 
-        # Return editor fields + state update
+        # Return editor fields + state update (without revision history)
         return (
             article.display_id,
             article.title,
@@ -525,7 +514,6 @@ Conflicts detected: {len(result['conflicts'])}"""
             article.content,
             tags_str,
             finding_codes,
-            rev_text if len(revisions) > 0 else "No revisions yet",
             article.id,  # Update selected_article_id state
         )
 
@@ -709,7 +697,7 @@ Conflicts detected: {len(result['conflicts'])}"""
     articles_list.select(
         fn=load_article_for_edit,
         outputs=[article_id_edit, article_title_edit, article_summary_edit,
-                 article_content_edit, article_tags_edit, article_findings_edit, article_history,
+                 article_content_edit, article_tags_edit, article_findings_edit,
                  selected_article_id],
     ).then(
         fn=refresh_articles_display_only,
@@ -721,7 +709,7 @@ Conflicts detected: {len(result['conflicts'])}"""
     search_results_articles.select(
         fn=load_article_for_edit,
         outputs=[article_id_edit, article_title_edit, article_summary_edit,
-                 article_content_edit, article_tags_edit, article_findings_edit, article_history,
+                 article_content_edit, article_tags_edit, article_findings_edit,
                  selected_article_id],
     ).then(
         fn=refresh_search_articles_display,
@@ -754,9 +742,9 @@ Conflicts detected: {len(result['conflicts'])}"""
         inputs=[selected_case_id],  # Pass None for selected_article (will be cleared)
         outputs=[articles_count, cases_count, articles_list, cases_list],
     ).then(
-        fn=lambda: (None, "", "", "", "", "", "", ""),
+        fn=lambda: (None, "", "", "", "", "", ""),
         outputs=[selected_article_id, article_id_edit, article_title_edit,
-                article_summary_edit, article_content_edit, article_tags_edit, article_findings_edit, article_history],
+                article_summary_edit, article_content_edit, article_tags_edit, article_findings_edit],
     )
 
     create_article_btn.click(
