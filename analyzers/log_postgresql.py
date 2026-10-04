@@ -157,12 +157,12 @@ class PostgreSQLCorrelator:
 
         # Connection exhaustion (ERROR)
         if any(kw in line.lower() for kw in CONNECTION_KEYWORDS):
-            self.findings['connection_exhaustion'] += 1
+            self.findings['connection_exhausted'] += 1
             self.connection_errors.append({
                 'line_idx': idx,
                 'database': database,
             })
-            self.finding_details['connection_exhaustion'].append({
+            self.finding_details['connection_exhausted'].append({
                 'line_idx': idx,
                 'database': database,
             })
@@ -233,12 +233,12 @@ class PostgreSQLCorrelator:
             })
 
         # Connection exhaustion (ERROR)
-        if self.findings['connection_exhaustion'] > 0:
+        if self.findings['connection_exhausted'] > 0:
             findings.append({
                 'level': 'ERROR',
                 'category': 'connection',
-                'kind': 'connection_exhaustion',
-                'count': self.findings['connection_exhaustion'],
+                'kind': 'connection_exhausted',
+                'count': self.findings['connection_exhausted'],
                 'affected_databases': list(set(c['database'] for c in self.connection_errors if c.get('database'))),
                 'remediation': 'Increase max_connections; check for connection leaks',
             })
