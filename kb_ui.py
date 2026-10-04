@@ -354,6 +354,9 @@ def build_kb_tab() -> Tuple:
             articles = result["articles"]
             cases = result["cases"]
 
+            print(f"Search query: '{query}'")
+            print(f"Found {len(articles)} articles, {len(cases)} cases")
+
             articles_data = [
                 [
                     a.display_id,
