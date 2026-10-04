@@ -250,6 +250,16 @@ class KnowledgeBaseStorage:
             )
             next_case_seq = cursor.fetchone()[0]
 
+            # Preserve the high-water marks, including deleted trailing records.
+            for key, minimum in (("next_article_seq", next_article_seq), ("next_case_seq", next_case_seq)):
+                cursor.execute("SELECT value FROM kb_metadata WHERE key = ?", (key,))
+                row = cursor.fetchone()
+                saved = int(row[0]) if row else 0
+                if key == "next_article_seq":
+                    next_article_seq = max(minimum, saved)
+                else:
+                    next_case_seq = max(minimum, saved)
+
             cursor.execute(
                 "INSERT OR REPLACE INTO kb_metadata VALUES (?, ?)",
                 ("next_article_seq", str(next_article_seq)),
@@ -393,6 +403,24 @@ class KnowledgeBaseStorage:
             conn.commit()
 
         return article_id
+
+    def import_articles(self, articles: List[Dict[str, Any]]) -> None:
+        """Insert an import batch atomically, rolling back on any failure."""
+        with self._get_connection() as conn:
+            with conn:
+                conn.execute("BEGIN IMMEDIATE")
+                cursor = conn.cursor()
+                for article in articles:
+                    article_id = str(uuid.uuid4())
+                    seq = self._get_next_article_seq(cursor)
+                    now = datetime.now()
+                    cursor.execute(
+                        "INSERT INTO kb_articles (id, display_id_seq, title, summary, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (article_id, seq, article["title"], article.get("summary") or "", article["content"], now, now),
+                    )
+                    for tag in dict.fromkeys(article.get("tags", [])):
+                        tag_id = self._ensure_tag(cursor, tag)
+                        cursor.execute("INSERT INTO kb_article_tags (article_id, tag_id) VALUES (?, ?)", (article_id, tag_id))
 
     def get_article(self, article_id: str) -> Optional[Article]:
         """Get Article by ID."""

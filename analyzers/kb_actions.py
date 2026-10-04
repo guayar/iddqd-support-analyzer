@@ -5,6 +5,7 @@ High-level functions for KB operations used by UI and Assistant.
 
 from typing import Optional, List, Dict, Any
 from datetime import datetime
+import re
 
 from .kb_storage import KnowledgeBaseStorage
 from .kb_search import KnowledgeBaseSearch
@@ -230,12 +231,12 @@ class KnowledgeBaseActions:
         query_upper = query.upper()
 
         # Check if query matches AN######## pattern (case-insensitive)
-        if query_upper.startswith("AN") and len(query_upper) >= 10:
+        if re.fullmatch(r"AN\d{8}", query_upper):
             # Try exact display ID match (normalized to uppercase)
             article = self.get_article_by_display_id(query_upper)
             if article:
                 return [article]
-            # If not found, fall through to text search
+            return []
 
         # Normal text search
         articles, _ = self._search_engine.search(query, limit)

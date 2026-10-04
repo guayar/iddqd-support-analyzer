@@ -29,7 +29,7 @@ def build_kb_tab():
                     create_btn = gr.Button("Create Article", variant="primary")
                     create_status = gr.Textbox(label="Status", interactive=False)
 
-                with gr.Tab("Search / View"):
+                with gr.Tab("Search / View") as search_tab:
                     with gr.Row():
                         search_box = gr.Textbox(label="Search", placeholder="AN00000001 or keyword", scale=3)
                         search_btn = gr.Button("Search", variant="primary", scale=1)
@@ -166,25 +166,27 @@ def build_kb_tab():
                     return "❌ Select a JSON file"
                 try:
                     data = json.loads(Path(file_path).read_text(encoding="utf-8-sig"))
-                    articles = data.get("articles", [])
+                    if not isinstance(data, dict) or "articles" not in data:
+                        return "❌ Invalid Articles file"
+                    articles = data["articles"]
                     if not isinstance(articles, list) or any(
                         not isinstance(a, dict) or not isinstance(a.get("title"), str)
                         or not a["title"].strip() or not isinstance(a.get("content"), str)
                         or not a["content"].strip() or not isinstance(a.get("tags", []), list)
+                        or (a.get("summary") is not None and not isinstance(a["summary"], str))
                         or any(not isinstance(tag, str) for tag in a.get("tags", [])) for a in articles
                     ):
                         return "❌ Invalid Articles file"
-                    for article in articles:
-                        kb.create_article(title=article["title"], content=article["content"],
-                                          summary=article.get("summary") or "",
-                                          tags=list(dict.fromkeys(article.get("tags", []))))
+                    kb.storage.import_articles(articles)
                     return f"✅ Imported {len(articles)} Articles"
                 except Exception as exc:
                     return f"❌ Error: {exc}"
 
             list_inputs = [query_state, page_state, selected_article_id]
             list_outputs = [article_results_table, count, page_label, page_state]
-            create_btn.click(create_article, [create_title, create_tags, create_summary, create_content], create_status)
+            search_tab.select(reload_article_results, list_inputs, list_outputs)
+            create_btn.click(create_article, [create_title, create_tags, create_summary, create_content], create_status).then(
+                reload_article_results, list_inputs, list_outputs)
             search_btn.click(perform_search, search_box,
                              list_outputs + [query_state, selected_article_id] + view_fields + mode_outputs + [status])
             prev_btn.click(previous_page, list_inputs, list_outputs)
