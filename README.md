@@ -94,6 +94,25 @@ UI: `http://127.0.0.1:7860`. Desktop: `./start-analyzer.sh` (respects `IDDQD_EDI
 
 Analyze needs Python 3.12+. Full install: `./run.sh`. Light (no LLM): `./run-light.sh`. Assistant / General Chat (full edition only) also need [Ollama](https://ollama.com) and `OLLAMA_MODEL`. OCR is optional Tesseract. Details: [docs/USER.md](docs/USER.md#requirements).
 
+## Docker (Light Edition)
+
+Run **Light Edition** in a container on Windows, Mac, or Linux without installing Python:
+
+```bash
+git clone https://github.com/guayar/iddqd-support-analyzer.git
+cd iddqd-support-analyzer
+git checkout docker-light-edition
+docker-compose up
+```
+
+Open `http://localhost:7860`.
+
+Add log files to `./inputs/` — results appear in `./outputs/`.
+
+For details, see [DOCKER.md](DOCKER.md).
+
+**Note:** Every `git pull` updates Light Edition; rebuild with `docker-compose build --no-cache`.
+
 ## Docs
 
 - [User guide](docs/USER.md) — modules, prerequisites, config, limitations, tests
