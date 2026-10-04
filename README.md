@@ -94,9 +94,47 @@ UI: `http://127.0.0.1:7860`. Desktop: `./start-analyzer.sh` (respects `IDDQD_EDI
 
 Analyze needs Python 3.12+. Full install: `./run.sh`. Light (no LLM): `./run-light.sh`. Assistant / General Chat (full edition only) also need [Ollama](https://ollama.com) and `OLLAMA_MODEL`. OCR is optional Tesseract. Details: [docs/USER.md](docs/USER.md#requirements).
 
-## Docs
+## Docker (Light Edition)
 
-- [User guide](docs/USER.md) — modules, prerequisites, config, limitations, tests
-- [Architecture](docs/ARCHITECTURE.md)
-- [Third-party test data](docs/THIRD_PARTY_TEST_DATA.md)
-- [Changelog](CHANGELOG.md)
+Run **Light Edition** in a container on Windows, Mac, or Linux:
+
+```bash
+git clone https://github.com/guayar/iddqd-support-analyzer.git
+cd iddqd-support-analyzer
+git checkout docker-light-edition
+docker-compose up
+```
+
+Open `http://localhost:7860`. Add logs to `./inputs/` — results appear in `./outputs/`.
+
+See [DOCKER.md](DOCKER.md) for detailed setup (Windows PowerShell quickstart included).
+
+## Documentation
+
+**Getting started:**
+- [User Guide](docs/USER.md) — Tab-by-tab feature walkthrough, prerequisites, config, known limitations, troubleshooting
+- [Architecture](docs/ARCHITECTURE.md) — System design, component overview, analyzer pipeline, data flow
+
+**For developers:**
+- [API Reference](docs/API.md) — LogFamily protocol, analyzer interface, result schema
+- [Extending](docs/EXTENDING.md) — Add a new log analyzer in 5 minutes (example included)
+- [Examples](docs/EXAMPLES.md) — Real-world SAML and log scenarios with analysis breakdown
+
+**Project information:**
+- [Experimental Features](EXPERIMENTAL_FEATURES.md) — RCA hints and MultiFile limitations; terminology and confidence scoring
+- [Third-party Test Data](docs/THIRD_PARTY_TEST_DATA.md) — Licenses for sample logs
+- [Changelog](CHANGELOG.md) — Version history (v0.19 → v0.22), releases and features
+
+---
+
+## Development Model
+
+- **Requirements, tests, validation rules**: Defined by project owner
+- **Implementation**: AI-assisted
+- **Contributions**: Licensed under [Apache 2.0](LICENSE) unless otherwise stated in PR
+
+Run tests locally: `python -m pytest tests/ -v` (Full) or `python tests/test_analyzers.py` (Light)
+
+---
+
+**Questions?** See [docs/USER.md](docs/USER.md) for detailed answers and troubleshooting.
