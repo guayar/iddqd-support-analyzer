@@ -55,7 +55,7 @@ def build_kb_tab() -> Tuple:
                         with gr.Tab("Articles"):
                             articles_list = gr.Dataframe(
                                 headers=["ID", "Title", "Updated", "Tags"],
-                                interactive=True,
+                                interactive=False,
                                 label="Articles",
                                 elem_classes=["kb-dataframe"],
                             )
@@ -239,14 +239,14 @@ def build_kb_tab() -> Tuple:
 
                     search_results_articles = gr.Dataframe(
                         headers=["ID", "Title", "Summary"],
-                        interactive=True,
+                        interactive=False,
                         label="Articles Found",
                         elem_classes=["kb-dataframe"],
                     )
 
                     search_results_cases = gr.Dataframe(
                         headers=["ID", "Title", "Summary"],
-                        interactive=True,
+                        interactive=False,
                         label="Cases Found",
                         elem_classes=["kb-dataframe"],
                     )
