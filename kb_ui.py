@@ -824,12 +824,16 @@ def build_kb_tab():
 
                     def remove_article_link_handler(evt):
                         """Remove article link when clicking current links table."""
-                        if not evt or not evt.row_value or len(evt.row_value) < 2:
+                        if not evt or not evt.row_value or len(evt.row_value) < 1:
                             return "❌ Select link to remove"
-                        display_id = evt.row_value[0]
-                        case_id = selected_case_id.value
+                        # evt.row_value[0] = ID (display_id)
+                        article_display_id = evt.row_value[0]
+                        case_id = case_edit_id.value  # Get from edit form, not state
+                        if not case_id:
+                            return "❌ Case ID not available"
                         try:
-                            result = remove_article_from_case(case_id, display_id)
+                            # Call backend remove function
+                            result = remove_article_from_case(case_id, article_display_id)
                             return result
                         except Exception as e:
                             return f"❌ Error: {str(e)}"
@@ -870,12 +874,16 @@ def build_kb_tab():
 
                     def remove_case_link_handler(evt):
                         """Remove case link when clicking current links table."""
-                        if not evt or not evt.row_value or len(evt.row_value) < 2:
+                        if not evt or not evt.row_value or len(evt.row_value) < 1:
                             return "❌ Select link to remove"
-                        display_id = evt.row_value[0]
-                        article_id = selected_article_id.value
+                        # evt.row_value[0] = ID (display_id)
+                        case_display_id = evt.row_value[0]
+                        article_id = article_edit_id.value  # Get from edit form, not state
+                        if not article_id:
+                            return "❌ Article ID not available"
                         try:
-                            result = remove_case_from_article(article_id, display_id)
+                            # Call backend remove function
+                            result = remove_case_from_article(article_id, case_display_id)
                             return result
                         except Exception as e:
                             return f"❌ Error: {str(e)}"
