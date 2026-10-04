@@ -217,7 +217,7 @@ def build_kb_tab():
                         case_next_btn = gr.Button("Next >", scale=1)
 
                     # Case view (PHASES 1-3, 6-8)
-                    with gr.Group():
+                    with gr.Group() as case_view_group:
                         gr.Markdown("### Case View")
                         case_view_id = gr.Textbox(label="ID", interactive=False)
                         case_view_title = gr.Textbox(label="Title", interactive=False)
@@ -301,7 +301,7 @@ def build_kb_tab():
                         article_next_btn = gr.Button("Next >", scale=1)
 
                     # Article view (PHASES 1-3, 6-8)
-                    with gr.Group():
+                    with gr.Group() as article_view_group:
                         gr.Markdown("### Article View")
                         article_view_id = gr.Textbox(label="ID", interactive=False)
                         article_view_title = gr.Textbox(label="Title", interactive=False)
