@@ -124,3 +124,27 @@ if __name__ == "__main__":
     test_variations_included_in_deduped()
     test_make_test_finding()
     print("✓ All deduplication tests passed!")
+
+
+def test_cross_file_same_line_not_clustered():
+    """REGRESSION: Two different files at same line should NOT cluster together.
+    
+    Bug: sequence clustering ignored _source_file, causing
+    app.log line 50 + database.log line 50 to be grouped together.
+    
+    They should be kept as separate findings.
+    """
+    findings = [
+        make_test_finding(kind="timeout", count=10, level="ERROR", first_line=50),
+        make_test_finding(kind="timeout", count=10, level="ERROR", first_line=50),
+    ]
+    # Mark them from different files
+    findings[0]["_source_file"] = "app.log"
+    findings[1]["_source_file"] = "database.log"
+    
+    result = deduplicate_findings(findings)
+    
+    # Should remain as 2 separate findings, NOT merged
+    assert len(result) == 2, f"Expected 2 findings, got {len(result)} - bug: cross-file clustering!"
+    assert all(f.get("_source_file") for f in result), "Source file should be preserved"
+    assert result[0]["_source_file"] != result[1]["_source_file"], "Different files should not merge"

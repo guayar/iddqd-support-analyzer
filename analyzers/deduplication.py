@@ -47,9 +47,11 @@ def cluster_findings_by_sequence(
     for finding in findings:
         analyzer = finding.get("category", "unknown")
         first_line = finding.get("first_line", 0)
-        # Cluster key: category + line-number proximity
+        source_file = finding.get("_source_file", "unknown")
+        # Cluster key: source_file + category + line-number proximity
+        # CRITICAL: sequence clustering must be per-file, not cross-file
         bucket = first_line // max(1, sequence_distance)
-        key = f"{analyzer}_{bucket}"
+        key = f"{source_file}_{analyzer}_{bucket}"
         grouped[key].append(finding)
 
     # Assemble deduplicated output
