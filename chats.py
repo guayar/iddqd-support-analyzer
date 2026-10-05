@@ -133,7 +133,7 @@ def _extract_kb_query(user_text: str) -> str:
 
     # Try to extract topic (very simple heuristic)
     # Remove common prefixes
-    for prefix in ["pokaż mi artykuły o", "show me articles about",
+    for prefix in ["pokaż mi artykuły o", "pokaż artykuły o", "show me articles about",
                    "czy mam coś o", "do I have anything about",
                    "wyszukaj", "search for", "znajdź"]:
         if text.lower().startswith(prefix):
