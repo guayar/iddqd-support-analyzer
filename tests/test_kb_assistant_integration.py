@@ -143,11 +143,16 @@ def test_kb_context_limited_to_small_set():
         assert article_count <= 5, f"Too many articles: {article_count}"
 
 
-def test_kb_labeled_as_guidance_not_evidence():
+def test_kb_labeled_as_guidance_not_evidence(monkeypatch):
     """Test that KB context clearly distinguishes guidance from evidence."""
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = Path(tmpdir) / "test.db"
         kb = KnowledgeBaseActions(str(db_path))
+
+        monkeypatch.setattr(
+            "analyzers.kb_assistant.KBAssistantContext",
+            lambda: KBAssistantContext(str(db_path)),
+        )
 
         # Create article
         kb.create_article(

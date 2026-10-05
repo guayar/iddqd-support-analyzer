@@ -5,7 +5,7 @@ Generates KB context for Ollama Assistant to use in system prompt.
 
 from typing import Dict, List, Any, Optional
 from .kb_actions import KnowledgeBaseActions
-from .kb_models import Article, Case
+from .kb_models import Article
 
 
 class KBAssistantContext:
@@ -38,7 +38,6 @@ class KBAssistantContext:
 
         # Find related Articles based on findings
         related_articles = set()
-        related_cases_ids = set()
 
         for finding in findings:
             # By finding code
@@ -52,13 +51,12 @@ class KBAssistantContext:
             if kind:
                 results = self.kb.search(kind, limit=3)
                 related_articles.update([a.id for a in results["articles"]])
-                related_cases_ids.update([c.id for c in results["cases"]])
 
         # Format output
         context_lines = ["## Relevant Knowledge Base\n"]
 
-        if not related_articles and not related_cases_ids:
-            context_lines.append("No directly matching Articles or Cases found.\n")
+        if not related_articles:
+            context_lines.append("No directly matching Articles found.\n")
             return "".join(context_lines)
 
         # Format Articles
@@ -72,27 +70,15 @@ class KBAssistantContext:
                         context_lines.append(f"{article.summary}\n")
                     context_lines.append("\n")
 
-        # Format Cases
-        if related_cases_ids:
-            context_lines.append("### Related Cases\n")
-            for case_id in sorted(related_cases_ids)[:3]:  # Limit to 3
-                case = self.kb.get_case(case_id)
-                if case:
-                    context_lines.append(f"**{case.title}**\n")
-                    if case.summary:
-                        context_lines.append(f"{case.summary}\n")
-                    context_lines.append("\n")
-
         return "".join(context_lines)
 
     def _get_general_kb_summary(self) -> str:
         """Get summary of entire KB."""
         articles = self.kb.list_articles()
-        cases = self.kb.list_cases()
 
         lines = [
             "## Knowledge Base Available\n",
-            f"**{len(articles)} Articles** | **{len(cases)} Cases**\n\n",
+            f"**{len(articles)} Articles**\n\n",
         ]
 
         # Top articles
@@ -102,15 +88,8 @@ class KBAssistantContext:
                 lines.append(f"- {article.title}\n")
             lines.append("\n")
 
-        # Recent cases
-        if cases:
-            lines.append("### Recent Cases\n")
-            for case in cases[:5]:
-                lines.append(f"- {case.title}\n")
-            lines.append("\n")
-
         lines.append(
-            "Use these Articles and Cases to inform your analysis and suggestions.\n"
+            "Use these Articles to inform your analysis and suggestions.\n"
         )
 
         return "".join(lines)
@@ -131,22 +110,21 @@ class KBAssistantContext:
         return f"""
 ## Knowledge Base Access
 
-You have access to a local Knowledge Base with Articles and Cases from previous investigations.
+You have access to a local Knowledge Base with Articles from previous investigations.
 
 {kb_context}
 
 ### How to Use KB
 
 - **Articles** are reusable troubleshooting knowledge about specific problems or patterns
-- **Cases** are records of previous incidents and how they were resolved
 - Use KB content to inform your analysis and provide context
 - Always distinguish between:
   - **Observed evidence** (from the Analyze findings)
-  - **KB suggestions** (from relevant Articles/Cases)
+  - **KB suggestions** (from relevant Articles)
   - **Your interpretation** (your analysis combining both)
-- If findings match a KB Article or Case, explain how and what that Article/Case recommends
+- If findings match a KB Article, explain how and what that Article recommends
 - Never present KB content as proven facts if Analyze findings contradict them
-- Suggest creating new Articles or Cases if you identify useful patterns
+- Suggest creating new Articles if you identify useful patterns
 
 ### Important
 
@@ -155,7 +133,7 @@ You have access to a local Knowledge Base with Articles and Cases from previous 
 - When KB suggests something, verify it against the actual evidence
 """
 
-    def save_case_from_analysis(
+    def save_article_from_analysis(
         self,
         title: str,
         findings: List[Dict[str, Any]],
@@ -163,17 +141,17 @@ You have access to a local Knowledge Base with Articles and Cases from previous 
         content: Optional[str] = None,
         tags: Optional[List[str]] = None,
     ) -> str:
-        """Save current analysis as KB Case.
+        """Save current analysis as a KB Article.
 
         Args:
-            title: Case title
+            title: Article title
             findings: List of Analyze findings
             summary: Optional summary
             content: Optional Markdown content
             tags: Optional tags
 
         Returns:
-            Case ID
+            Article ID
         """
         if not content:
             # Auto-generate from findings
@@ -195,9 +173,7 @@ You have access to a local Knowledge Base with Articles and Cases from previous 
 
             content = "".join(lines)
 
-        return self.kb.create_case_from_analysis(
-            findings=findings,
-            title=title,
-            summary=summary,
-            content=content,
-        )
+        return self.kb.create_article(title=title, content=content, summary=summary, tags=tags)
+
+    # Legacy callers also save an Article; no Case records are recreated.
+    save_case_from_analysis = save_article_from_analysis

@@ -8,11 +8,11 @@ from typing import Dict, Any, List
 from datetime import datetime
 
 from .kb_storage import KnowledgeBaseStorage
-from .kb_models import Article, Case
+from .kb_models import Article
 
 
 class KnowledgeBasePortability:
-    """Export and import KB Articles and Cases."""
+    """Export and import KB Articles."""
 
     def __init__(self, storage: KnowledgeBaseStorage):
         """Initialize portability handler.
@@ -23,11 +23,11 @@ class KnowledgeBasePortability:
         self.storage = storage
 
     def export_selected(self, article_ids: List[str], case_ids: List[str]) -> bytes:
-        """Export selected Articles and Cases as ZIP.
+        """Export selected Articles as ZIP.
 
         Args:
             article_ids: List of Article IDs to export
-            case_ids: List of Case IDs to export
+            case_ids: Ignored legacy argument; Cases are no longer exported.
 
         Returns:
             ZIP file as bytes
@@ -37,20 +37,16 @@ class KnowledgeBasePortability:
             "exported_at": datetime.now().isoformat(),
             "schema_version": "1.0",
             "articles_count": len(article_ids),
-            "cases_count": len(case_ids),
+            "cases_count": 0,
         }
 
         articles_data = []
         for article_id in article_ids:
             article = self.storage.get_article(article_id)
             if article:
-                articles_data.append(article.to_dict())
-
-        cases_data = []
-        for case_id in case_ids:
-            case = self.storage.get_case(case_id)
-            if case:
-                cases_data.append(case.to_dict())
+                record = article.to_dict()
+                record.pop("related_article_ids", None)
+                articles_data.append(record)
 
         # Create ZIP
         with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
@@ -69,11 +65,6 @@ class KnowledgeBasePortability:
                     article_path = f"articles/{article['id']}.json"
                     zf.writestr(article_path, json.dumps(article, indent=2))
 
-                # Cases
-                for case in cases_data:
-                    case_path = f"cases/{case['id']}.json"
-                    zf.writestr(case_path, json.dumps(case, indent=2))
-
             # Read ZIP and return bytes
             return tmp_path.read_bytes()
 
@@ -87,12 +78,10 @@ class KnowledgeBasePortability:
             ZIP file as bytes
         """
         all_articles = self.storage.list_articles()
-        all_cases = self.storage.list_cases()
 
         article_ids = [a.id for a in all_articles]
-        case_ids = [c.id for c in all_cases]
 
-        return self.export_selected(article_ids, case_ids)
+        return self.export_selected(article_ids, [])
 
     def import_kb(
         self, zip_bytes: bytes, merge_mode: str = "new"
@@ -174,45 +163,6 @@ class KnowledgeBasePortability:
                         except Exception as e:
                             result["errors"].append(
                                 f"Error importing article {name}: {str(e)}"
-                            )
-
-                # Import cases
-                for name in zf.namelist():
-                    if name.startswith("cases/") and name.endswith(".json"):
-                        try:
-                            case_data = json.loads(zf.read(name))
-                            case = Case.from_dict(case_data)
-
-                            # Check for conflicts
-                            existing = self.storage.get_case(case.id)
-                            if existing:
-                                result["conflicts"].append(
-                                    {
-                                        "type": "case",
-                                        "id": case.id,
-                                        "title": case.title,
-                                    }
-                                )
-                                if merge_mode == "skip":
-                                    continue
-                                elif merge_mode == "new":
-                                    import uuid
-
-                                    case.id = str(uuid.uuid4())
-
-                            # Create case
-                            self.storage.create_case(
-                                title=case.title,
-                                content=case.content,
-                                summary=case.summary,
-                                analyze_snapshot=case.analyze_snapshot,
-                                tags=case.tags,
-                            )
-                            result["imported_cases"].append(case.id)
-
-                        except Exception as e:
-                            result["errors"].append(
-                                f"Error importing case {name}: {str(e)}"
                             )
 
         finally:

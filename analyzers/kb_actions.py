@@ -5,6 +5,7 @@ High-level functions for KB operations used by UI and Assistant.
 
 from typing import Optional, List, Dict, Any
 from datetime import datetime
+import re
 
 from .kb_storage import KnowledgeBaseStorage
 from .kb_search import KnowledgeBaseSearch
@@ -59,6 +60,7 @@ class KnowledgeBaseActions:
         summary: Optional[str] = None,
         change_note: Optional[str] = None,
         author: Optional[str] = None,
+        tags: Optional[List[str]] = None,
     ) -> bool:
         """Update Article."""
         return self.storage.update_article(
@@ -68,6 +70,7 @@ class KnowledgeBaseActions:
             summary=summary,
             change_note=change_note,
             created_by=author,
+            tags=tags,
         )
 
     def delete_article(self, article_id: str) -> bool:
@@ -228,12 +231,12 @@ class KnowledgeBaseActions:
         query_upper = query.upper()
 
         # Check if query matches AN######## pattern (case-insensitive)
-        if query_upper.startswith("AN") and len(query_upper) >= 10:
+        if re.fullmatch(r"AN\d{8}", query_upper):
             # Try exact display ID match (normalized to uppercase)
             article = self.get_article_by_display_id(query_upper)
             if article:
                 return [article]
-            # If not found, fall through to text search
+            return []
 
         # Normal text search
         articles, _ = self._search_engine.search(query, limit)
