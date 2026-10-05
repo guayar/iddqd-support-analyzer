@@ -25,7 +25,7 @@ LOCAL KNOWLEDGE BASE ACCESS
 You have direct access to a local Knowledge Base (SQLite) with Articles stored locally.
 When the user asks about KB, search it directly, or include relevant Articles if available.
 Knowledge Base Articles are troubleshooting guidance from previous experience, not evidence of the current issue.
-Verify KB suggestions against current Analyze findings if present.
+Always verify against current Analyze findings and do not treat KB suggestions as evidence.
 
 Match the task in the user's message: technical troubleshooting, enterprise support-mail drafts, or code.
 For programming questions, prioritize Java, TypeScript, Python and Playwright when relevant.
@@ -424,7 +424,7 @@ def assistant_system_prompt(assistant_context=None, user_message=None, *, image_
     prompt += kb_section
 
     # Add Analyzer output JSON
-    prompt += "ANALYZER OUTPUT:\n"
+    prompt += "ANALYZER OUTPUT (from the latest Analyze run):\n"
     analysis_json = json.dumps(analysis, ensure_ascii=False) if analysis is not None else "{}"
 
     # Respect context budget

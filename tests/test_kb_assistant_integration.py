@@ -193,10 +193,10 @@ def test_kb_context_hierarchy_preserved():
 
         # Check that both sections are present
         assert "ANALYZE SOURCE INPUTS" in prompt
-        assert "ANALYZER OUTPUT:" in prompt
+        assert "ANALYZER OUTPUT" in prompt
 
         # Check ordering: sources should come before ANALYZER OUTPUT
         sources_pos = prompt.find("ANALYZE SOURCE INPUTS")
-        analyzer_pos = prompt.find("ANALYZER OUTPUT:")
+        analyzer_pos = prompt.find("ANALYZER OUTPUT")
 
         assert sources_pos < analyzer_pos, "Sources should come before analyzer output"
