@@ -249,15 +249,15 @@ def assistant_system_prompt(assistant_context=None, *, image_turn: bool = False)
         from analyzers.kb_assistant import KBAssistantContext
         kb_ctx = KBAssistantContext()
         findings = analysis.get("findings", []) if isinstance(analysis, dict) else []
-        if findings:
-            kb_content = kb_ctx.get_kb_context(findings, findings_by_code=True)
-            if kb_content and "No directly matching" not in kb_content:
-                kb_section = (
-                    "RELEVANT KNOWLEDGE BASE GUIDANCE (previous troubleshooting notes; "
-                    "verify against current evidence, these are suggestions not facts):\n"
-                    + kb_content
-                    + "\n\n"
-                )
+        # Always try to get KB context - even with empty findings, KB provides general reference
+        kb_content = kb_ctx.get_kb_context(findings or None, findings_by_code=True)
+        if kb_content and "No directly matching" not in kb_content:
+            kb_section = (
+                "RELEVANT KNOWLEDGE BASE GUIDANCE (previous troubleshooting notes; "
+                "verify against current evidence, these are suggestions not facts):\n"
+                + kb_content
+                + "\n\n"
+            )
     except Exception:
         # Graceful fallback: KB unavailable should not break Assistant
         pass
