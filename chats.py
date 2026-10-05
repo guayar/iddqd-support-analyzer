@@ -21,7 +21,12 @@ ASSISTANT_SYSTEM = """You are a private local technical assistant running on the
 You have no web-search tool and must never claim to have checked the internet or current external documentation.
 Be concise, technically precise, and practical. If uncertain, say what is uncertain.
 
-IMPORTANT: When you see "RELEVANT KNOWLEDGE BASE GUIDANCE" section below, this contains real local Articles in the Knowledge Base. Use this information when relevant to answer questions. These are previous troubleshooting notes and guidelines for your local system.
+LOCAL KNOWLEDGE BASE ACCESS
+You have direct access to a local Knowledge Base (SQLite) with Articles stored locally.
+When the user asks about KB, search it directly, or include relevant Articles if available.
+Knowledge Base Articles are troubleshooting guidance from previous experience, not evidence of the current issue.
+Verify KB suggestions against current Analyze findings if present.
+
 Match the task in the user's message: technical troubleshooting, enterprise support-mail drafts, or code.
 For programming questions, prioritize Java, TypeScript, Python and Playwright when relevant.
 Do not invent APIs, command results, files, logs, or execution results.
@@ -46,6 +51,133 @@ OCR is imperfect and often garbage on photos. Prefer the image when OCR and pixe
 Image bytes stay on this machine. Only application-generated text search queries are sent to public search providers. Never claim the image file was uploaded to the web.
 Never treat this image as Analyzer output or an Assistant screenshot.
 """
+
+
+# ========================
+# KNOWLEDGE BASE HELPERS
+# ========================
+
+def _get_kb_metadata() -> str:
+    """Get lightweight KB metadata - always available.
+
+    Returns formatted KB availability info.
+    Does NOT include full Article bodies.
+    """
+    try:
+        from analyzers.kb_actions import KnowledgeBaseActions
+        kb = KnowledgeBaseActions()
+        articles = kb.list_articles()
+
+        if not articles:
+            return "LOCAL KNOWLEDGE BASE\n- Available Articles: 0\n"
+
+        # Show count and recent/top articles (max 3)
+        recent = sorted(articles, key=lambda a: a.created_at, reverse=True)[:3]
+
+        lines = [
+            "LOCAL KNOWLEDGE BASE\n",
+            f"- Available Articles: {len(articles)}\n",
+            "- Recent Articles:\n",
+        ]
+
+        for article in recent:
+            lines.append(f"  {article.display_id} — {article.title}\n")
+
+        return "".join(lines)
+    except Exception:
+        # Graceful fallback if KB unavailable
+        return "LOCAL KNOWLEDGE BASE\n- Status: unavailable\n"
+
+
+def _should_search_kb(user_text: str) -> bool:
+    """Detect if user query should trigger KB search.
+
+    Uses deterministic keyword detection.
+    """
+    if not user_text:
+        return False
+
+    text_lower = user_text.lower()
+
+    # Keywords that trigger KB search
+    kb_keywords = [
+        "kb", "knowledge base", "article", "artykuł", "artykuły",
+        "find", "show", "search", "wyszukaj", "znajdź",
+        "do i have", "czy mam", "czy jest", "w bazie", "w knowledge base",
+        "ile artykułów", "how many articles", "count", "list articles",
+    ]
+
+    if any(keyword in text_lower for keyword in kb_keywords):
+        return True
+
+    # Count questions
+    if any(phrase in text_lower for phrase in ["how many", "ile", "count"]):
+        return True
+
+    return False
+
+
+def _extract_kb_query(user_text: str) -> str:
+    """Extract clean search query from user message.
+
+    Removes noise, keeps meaningful terms.
+    """
+    if not user_text:
+        return ""
+
+    text = user_text.strip()
+
+    # If asking "how many articles" - return empty (will trigger metadata response)
+    if any(phrase in text.lower() for phrase in ["how many", "ile artykułów", "count"]):
+        return ""
+
+    # Try to extract topic (very simple heuristic)
+    # Remove common prefixes
+    for prefix in ["pokaż mi artykuły o", "show me articles about",
+                   "czy mam coś o", "do I have anything about",
+                   "wyszukaj", "search for", "znajdź"]:
+        if text.lower().startswith(prefix):
+            text = text[len(prefix):].strip()
+            break
+
+    # Remove trailing question marks and punctuation
+    text = text.rstrip("?!.,;:")
+
+    return text.strip()
+
+
+def _search_kb_for_query(query: str) -> str:
+    """Search KB for user query and return formatted results.
+
+    Returns empty string if no results or empty query.
+    Max 3 Articles returned.
+    """
+    if not query or not query.strip():
+        return ""
+
+    try:
+        from analyzers.kb_actions import KnowledgeBaseActions
+        kb = KnowledgeBaseActions()
+
+        # Use the public search_articles method
+        results = kb.search_articles(query.strip(), limit=3)
+
+        if not results:
+            return ""
+
+        lines = ["LOCAL KB SEARCH RESULTS\n"]
+        for article in results:
+            lines.append(f"\n{article.display_id} — {article.title}\n")
+            if article.summary:
+                lines.append(f"Summary: {article.summary}\n")
+            if article.tags:
+                lines.append(f"Tags: {', '.join(article.tags)}\n")
+
+        lines.append("\nThese are local troubleshooting notes, not current incident evidence.\n")
+
+        return "".join(lines)
+    except Exception:
+        return ""
 
 
 def _content_text(content) -> str:
@@ -206,13 +338,38 @@ def pack_assistant_context(analysis, sources: list[tuple[str, str]] | None = Non
     return {"analysis": analysis, "sources": packed}
 
 
-def assistant_system_prompt(assistant_context=None, *, image_turn: bool = False) -> str:
+def assistant_system_prompt(assistant_context=None, user_message=None, *, image_turn: bool = False) -> str:
+    """Build Assistant system prompt with persistent KB and optional Analyze context.
+
+    KB is always available, Analyze context is optional.
+    """
+    # ALWAYS start with base system prompt
+    prompt = ASSISTANT_SYSTEM + "\n\n"
+
+    # ALWAYS include lightweight KB metadata
+    prompt += _get_kb_metadata() + "\n"
+
+    # Optional: KB search based on user question
+    if user_message and _should_search_kb(user_message):
+        query = _extract_kb_query(user_message)
+        kb_search = _search_kb_for_query(query)
+        if kb_search:
+            prompt += kb_search + "\n"
+        elif not query:
+            # User asked "how many articles" type question - metadata already shown above
+            pass
+
+    # Optional: Analyze context (only if provided)
     if not assistant_context:
-        return ASSISTANT_SYSTEM
+        return prompt
+
     analysis, sources = unwrap_assistant_context(assistant_context)
     if analysis is None and not sources:
-        return ASSISTANT_SYSTEM
+        return prompt
 
+    prompt += "\n"
+
+    # Add Analyze sources section
     context_max = ASSISTANT_CONTEXT_MAX_WITH_IMAGE if image_turn else ASSISTANT_CONTEXT_MAX
     sources_budget = ASSISTANT_SOURCES_BUDGET_WITH_IMAGE if image_turn else ASSISTANT_SOURCES_BUDGET
     min_share = ASSISTANT_SOURCE_MIN_SHARE_WITH_IMAGE if image_turn else ASSISTANT_SOURCE_MIN_SHARE
@@ -245,40 +402,37 @@ def assistant_system_prompt(assistant_context=None, *, image_turn: bool = False)
             + "\n\n"
         )
 
-    # Get KB context if available (findings-based article suggestions)
+    prompt += sources_section
+
+    # Add KB findings-based suggestions
     kb_section = ""
     try:
         from analyzers.kb_assistant import KBAssistantContext
         kb_ctx = KBAssistantContext()
         findings = analysis.get("findings", []) if isinstance(analysis, dict) else []
-        # Always try to get KB context - even with empty findings, KB provides general reference
-        kb_content = kb_ctx.get_kb_context(findings or None, findings_by_code=True)
-        if kb_content and "No directly matching" not in kb_content:
-            kb_section = (
-                "RELEVANT KNOWLEDGE BASE GUIDANCE (previous troubleshooting notes; "
-                "verify against current evidence, these are suggestions not facts):\n"
-                + kb_content
-                + "\n\n"
-            )
+        if findings:
+            kb_content = kb_ctx.get_kb_context(findings, findings_by_code=True)
+            if kb_content and "No directly matching" not in kb_content:
+                kb_section = (
+                    "FINDINGS-BASED KNOWLEDGE BASE SUGGESTIONS (from current Analyze):\n"
+                    + kb_content
+                    + "\n\n"
+                )
     except Exception:
-        # Graceful fallback: KB unavailable should not break Assistant
         pass
 
-    head = (
-        ASSISTANT_SYSTEM
-        + "\n\nAttached material from the latest Analyze run (local only; you have no web-search tool). "
-        "Use every listed source file and the analyzer JSON when the user asks about this case. "
-        "Keep Analyzer JSON, source files, screenshots and OCR extracts as separate evidence. "
-        "Do not claim you searched the internet.\n\n"
-        + sources_section
-        + kb_section
-        + "ANALYZER OUTPUT:\n"
-    )
+    prompt += kb_section
+
+    # Add Analyzer output JSON
+    prompt += "ANALYZER OUTPUT:\n"
     analysis_json = json.dumps(analysis, ensure_ascii=False) if analysis is not None else "{}"
-    room = context_max - len(head)
+
+    # Respect context budget
+    room = context_max - len(prompt)
     if room < 1_000:
         room = 1_000
-    return head + analysis_json[:room]
+
+    return prompt + analysis_json[:room]
 
 
 def empty_assistant_history():
@@ -324,7 +478,7 @@ def assistant_chat(message, history, assistant_context=None) -> str:
 
     image_turn = bool(attachments) or bool(_history_image_paths(history))
     msgs: list[dict[str, Any]] = [
-        {"role": "system", "content": assistant_system_prompt(assistant_context, image_turn=image_turn)}
+        {"role": "system", "content": assistant_system_prompt(assistant_context, user_message=user_text, image_turn=image_turn)}
     ]
     msgs.extend(_history_messages(history, 20, 20000))
     user_msg: dict[str, Any] = {"role": "user", "content": user_text}
