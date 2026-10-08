@@ -412,12 +412,12 @@ def assistant_system_prompt(assistant_context=None, user_message=None, *, image_
         findings = analysis.get("findings", []) if isinstance(analysis, dict) else []
         if findings:
             kb_content = kb_ctx.get_kb_context(findings, findings_by_code=True)
-            if kb_content and "No directly matching" not in kb_content:
-                kb_section = (
-                    "FINDINGS-BASED KNOWLEDGE BASE SUGGESTIONS (from current Analyze):\n"
-                    + kb_content
-                    + "\n\n"
-                )
+            # Always include section when findings exist, even if KB has no matches
+            kb_section = (
+                "FINDINGS-BASED KNOWLEDGE BASE SUGGESTIONS (from current Analyze):\n"
+                + kb_content
+                + "\n\n"
+            )
     except Exception:
         pass
 
